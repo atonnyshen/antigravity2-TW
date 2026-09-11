@@ -41,7 +41,7 @@
     "Search Notion pages, read databases, and create or update documentation.": "搜尋 Notion 頁面、查詢資料庫，並建立或更新文件內容。",
     "Search Jira issues, create tickets, and manage agile sprints and workflows.": "搜尋 Jira 問題單、建立工單，並管理敏捷開發 Sprint 迭代與工作流程。",
     "Search Confluence spaces, read knowledge base pages, and publish documentation.": "搜尋 Confluence 空間、閱讀知識庫頁面並發布技術文件。",
-    "Query Stripe customers, subscriptions, invoices, and payment intents.": "查詢 Stripe 客戶列表、訂閱方案、帳單明细及支付記錄。",
+    "Query Stripe customers, subscriptions, invoices, and payment intents.": "查詢 Stripe 客戶清單、訂閱方案、帳單明細及付款意向 (PaymentIntent)。",
     "Query Datadog metrics, inspect logs, and monitor application performance and traces.": "查詢 Datadog 監控指標、分析記錄並監控應用程式效能與追蹤。",
     "Query Grafana dashboards, inspect data sources, and analyze alert rules.": "查詢 Grafana 監控儀表板、檢視資料源並分析告警規則。",
     "Connect to MongoDB clusters, inspect collections, and execute aggregation queries.": "連接至 MongoDB 叢集，檢查集合文件結構並執行聚合查詢。",

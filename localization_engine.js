@@ -36,12 +36,12 @@ const BRAND_TITLE_MODE = BRAND_TITLE_ALIASES[String(getOptionValue('--brand-titl
 
 if (USE_TW) {
     const logTranslations = {
-        "====== 正在安装 Antigravity 中文汉化 ======": "====== 正在安裝 Antigravity 繁體中文漢化 ======",
-        "====== 正在卸载中文汉化，恢复官方原版 ======": "====== 正在卸載中文漢化，恢復官方原版 ======",
+        "====== 正在安装 Antigravity 中文汉化 ======": "====== 正在套用 Antigravity 繁體中文（台灣） ======",
+        "====== 正在卸载中文汉化，恢复官方原版 ======": "====== 正在還原 Antigravity 官方原版英文 ======",
         "====== 检测到 Antigravity 1.0 架构，正在使用 HTML 注入引擎 ======": "====== 偵測到 Antigravity 1.0 架構，正在使用 HTML 注入引擎 ======",
-        "====== 正在恢复 Antigravity 1.0 官方原版 ======": "====== 正在恢復 Antigravity 1.0 官方原版 ======",
-        "[1] 检测到 Antigravity 客户端正在运行，正在关闭以解除文件锁...": "[1] 偵測到 Antigravity 用戶端正在執行，正在關閉以解除檔案鎖...",
-        "[1] 正在关闭 Antigravity 运行进程以解除文件锁...": "[1] 正在關閉 Antigravity 執行進程以解除檔案鎖...",
+        "====== 正在恢复 Antigravity 1.0 官方原版 ======": "====== 正在還原 Antigravity 1.0 官方原版英文 ======",
+        "[1] 检测到 Antigravity 客户端正在运行，正在关闭以解除文件锁...": "[1] 偵測到 Antigravity 應用程式正在執行，正在關閉以解除檔案鎖定...",
+        "[1] 正在关闭 Antigravity 运行进程以解除文件锁...": "[1] 正在關閉 Antigravity 執行行程以解除檔案鎖定...",
         "[备份] 正在创建官方原始包备份: app.asar.bak ...": "[備份] 正在建立官方原始包備份: app.asar.bak ...",
         "[备份] 检测到全新官方英文版本，正在同步创建/更新官方备份包: ": "[備份] 偵測到全新官方英文版本，正在同步建立/更新官方備份包: ",
         "[备份] 官方备份同步成功！": "[備份] 官方備份同步成功！",
@@ -49,29 +49,29 @@ if (USE_TW) {
         " 个应用缓存目录，避免新旧版本字节码冲突。": " 個應用程式快取目錄，避免新舊版本位元組碼衝突。",
         "[备份] 备份成功！": "[備份] 備份成功！",
         "[备份] 已创建旧版 HTML 备份: ": "[備份] 已建立舊版 HTML 備份: ",
-        "[解包] 正在使用 npx 提取 app.asar...": "[解包] 正在使用 npx 提取 app.asar...",
-        "[修改] 正在向 preload.js 注入汉化代码...": "[修改] 正在向 preload.js 注入漢化程式碼...",
+        "[解包] 正在使用 npx 提取 app.asar...": "[解包] 正在使用 npx 解開 app.asar...",
+        "[修改] 正在向 preload.js 注入汉化代码...": "[修改] 正在向 preload.js 注入繁體中文化程式碼...",
         "[修改] 注入成功！": "[修改] 注入成功！",
-        "[修改] 正在向 menu.js 注入菜单汉化代码...": "[修改] 正在向 menu.js 注入選單漢化程式碼...",
-        "[修改] 菜单汉化注入成功！": "[修改] 選單漢化注入成功！",
-        "[修改] 正在向 tray.js 注入任务栏菜单汉化...": "[修改] 正在向 tray.js 注入系統匣選單漢化...",
-        "[修改] 任务栏菜单汉化注入成功！": "[修改] 系統匣選單漢化注入成功！",
-        "[修改] 正在向 loadingOverlay.js 注入加载页汉化...": "[修改] 正在向 loadingOverlay.js 注入載入頁漢化...",
-        "[修改] 加载页汉化注入成功！": "[修改] 載入頁漢化注入成功！",
-        "[修改] 正在向 updater.js 注入更新弹窗汉化...": "[修改] 正在向 updater.js 注入更新彈出視窗漢化...",
-        "[修改] 更新弹窗汉化注入成功！": "[修改] 更新彈出視窗漢化注入成功！",
+        "[修改] 正在向 menu.js 注入菜单汉化代码...": "[修改] 正在向 menu.js 注入選單繁體中文化程式碼...",
+        "[修改] 菜单汉化注入成功！": "[修改] 選單繁體中文化注入成功！",
+        "[修改] 正在向 tray.js 注入任务栏菜单汉化...": "[修改] 正在向 tray.js 注入系統匣選單繁體中文化...",
+        "[修改] 任务栏菜单汉化注入成功！": "[修改] 系統匣選單繁體中文化注入成功！",
+        "[修改] 正在向 loadingOverlay.js 注入加载页汉化...": "[修改] 正在向 loadingOverlay.js 注入載入畫面繁體中文化...",
+        "[修改] 加载页汉化注入成功！": "[修改] 載入畫面繁體中文化注入成功！",
+        "[修改] 正在向 updater.js 注入更新弹窗汉化...": "[修改] 正在向 updater.js 注入更新彈出視窗繁體中文化...",
+        "[修改] 更新弹窗汉化注入成功！": "[修改] 更新彈出視窗繁體中文化注入成功！",
         "[打包] 正在将修改后的内容打包回 app.asar...": "[打包] 正在將修改後的內容打包回 app.asar...",
-        "[√] Antigravity 2.0 汉化部署完成！": "[√] Antigravity 2.0 漢化部署完成！",
-        "[√] Antigravity 1.0 汉化部署完成！": "[√] Antigravity 1.0 漢化部署完成！",
-        "[!] 未找到备份文件 app.asar.bak，可能尚未安装过汉化或备份被删除。": "[!] 未找到備份檔案 app.asar.bak，可能尚未安裝過漢化或備份已被刪除。",
-        "[还原] 正在用官方备份文件恢复...": "[還原] 正在用官方備份檔案恢復...",
-        "[还原] 已重置当前 app.asar 为官方原始备份包，以进行全新注入...": "[還原] 已重置目前 app.asar 為官方原始備份包，以進行全新注入...",
+        "[√] Antigravity 2.0 汉化部署完成！": "[√] Antigravity 2.0 繁體中文化套用完成！",
+        "[√] Antigravity 1.0 汉化部署完成！": "[√] Antigravity 1.0 繁體中文化套用完成！",
+        "[!] 未找到备份文件 app.asar.bak，可能尚未安装过汉化或备份被删除。": "[!] 未找到備份檔案 app.asar.bak，可能尚未安裝過繁中化或備份已被刪除。",
+        "[还原] 正在用官方备份文件恢复...": "[還原] 正在使用官方備份檔案還原...",
+        "[还原] 已重置当前 app.asar 为官方原始备份包，以进行全新注入...": "[還原] 已重設目前 app.asar 為官方原始備份包，以進行全新注入...",
         "[权限] 检测到当前用户对 macOS 应用目录缺少写入权限，正在尝试请求管理员权限 (sudo) 重新运行...": "[權限] 偵測到目前使用者對 macOS 應用程式目錄缺少寫入權限，正在嘗試請求管理員權限 (sudo) 重新執行...",
-        "[提示] 当前 app.asar 被锁定（可能是客户端正在运行），将使用当前包进行增量注入。": "[提示] 目前 app.asar 被鎖定（可能是用戶端正在執行），將使用目前包進行增量注入。",
-        "[还原] 已恢复 HTML: ": "[還原] 已恢復 HTML: ",
-        "[还原] 已删除汉化脚本": "[還原] 已刪除漢化指令碼",
-        "[√] 官方 app.asar 已成功恢复！": "[√] 官方 app.asar 已成功恢復！",
-        "[√] 校验值已同步，1.0 软件恢复至原始状态。": "[√] 校驗值已同步，1.0 軟體恢復至原始狀態。",
+        "[提示] 当前 app.asar 被锁定（可能是客户端正在运行），将使用当前包进行增量注入。": "[提示] 目前 app.asar 被鎖定（可能是應用程式正在執行），將使用目前包進行增量注入。",
+        "[还原] 已恢复 HTML: ": "[還原] 已還原 HTML: ",
+        "[还原] 已删除汉化脚本": "[還原] 已刪除中文化腳本",
+        "[√] 官方 app.asar 已成功恢复！": "[√] 官方 app.asar 已成功還原！",
+        "[√] 校验值已同步，1.0 软件恢复至原始状态。": "[√] 校驗值已同步，1.0 軟體已還原至原始狀態。",
         "[错误] 手动指定的路径不存在:": "[錯誤] 手動指定的路徑不存在:",
         "[错误] 未在资源目录中找到 app.asar:": "[錯誤] 未在資源目錄中找到 app.asar:",
         "[错误] 解压后未能在指定路径找到 preload.js:": "[錯誤] 解壓後未能在指定路徑找到 preload.js:",
@@ -969,7 +969,7 @@ function install20(resourcesDir) {
         
         let trayPatched = trayCleaned.replace(targetCreate, replacementCreate);
         
-        // 2. 注入托盘图标双击弹出/聚焦 Antigravity 界面事件
+        // 2. 注入系統匣圖示點兩下彈出/聚焦 Antigravity 介面事件
         const dblClickTarget = /tray\.setContextMenu\(contextMenu\);/;
         const dblClickReplacement = `tray.setContextMenu(contextMenu);
     /* --- TRAY DOUBLE CLICK START --- */
@@ -1003,12 +1003,14 @@ function install20(resourcesDir) {
         console.log(`[修改] 正在向 loadingOverlay.js 注入加载页汉化...`);
         let loadingContent = fs.readFileSync(loadingPath, 'utf-8');
         
-        const targetText = '<div class="text">Loading Antigravity</div>';
         const replacementText = USE_TW
-            ? '<div class="text">反重力引擎已啟動，正在努力擺脫地心引力...</div>'
-            : '<div class="text">反重力引擎已启动，正在努力摆脱地心引力...</div>';
+            ? '<div class="text">正在載入 Antigravity…</div>'
+            : '<div class="text">正在加载 Antigravity…</div>';
         
-        loadingContent = loadingContent.replace(targetText, replacementText);
+        loadingContent = loadingContent
+            .replace('<div class="text">Loading Antigravity</div>', replacementText)
+            .replace('<div class="text">反重力引擎已啟動，正在努力擺脫地心引力...</div>', replacementText)
+            .replace('<div class="text">反重力引擎已启动，正在努力摆脱地心引力...</div>', replacementText);
         
         fs.writeFileSync(loadingPath, loadingContent, 'utf-8');
         console.log(`[修改] 加载页汉化注入成功！`);
