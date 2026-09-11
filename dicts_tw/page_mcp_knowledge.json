@@ -147,5 +147,18 @@
     "The Apigee API hub remote MCP server lets you manage the APIs, versions, specs, operations, deployments, attributes, external APIs, and dependencies registered in...": "Apigee API hub 遠端 MCP 伺服器可讓您管理註冊在平台中的 API、版本、規格、操作、部署、屬性、外部 API 以及相依性...",
     "The Apigee API hub remote MCP server lets you manage the APIs, versions, specs, operations, deployments, attributes, external APIs, and dependencies registered in your Apigee API hub.": "Apigee API hub 遠端 MCP 伺服器可讓您管理註冊在 Apigee API hub 中的 API、版本、規格、操作、部署、屬性、外部 API 以及相依性。",
     "The Google Home Developer MCP server allows you to search through Google Home documentation, OpenThread and Matter specifications documentation.": "Google Home Developer MCP 伺服器支援檢索 Google Home 文件、OpenThread 與 Matter 規格文件。",
-    "The Cloud Quotas MCP server allows you to view quota allocations, request quota increases, and manage Quota Adjuster configurations.": "Cloud Quotas MCP 伺服器支援檢視配額分配、申請提升配額以及管理 Quota Adjuster 自動調整設定。"
+    "The Cloud Quotas MCP server allows you to view quota allocations, request quota increases, and manage Quota Adjuster configurations.": "Cloud Quotas MCP 伺服器支援檢視配額分配、申請提升配額以及管理 Quota Adjuster 自動調整設定。",
+    "Customization token budget exceeded. Large customizations will be truncated.": "個人化設定 Token 預算額度已超限。過長的大型自訂元件將被自動截斷。",
+    "Customization token budget exceeded. Large customizations will be truncated automatically.": "個人化設定 Token 預算額度已超限。過長的大型自訂元件將會被自動截斷。",
+    "Customization token budget exceeded.": "個人化設定 Token 預算額度已超限。",
+    "Customization token budget exceeded": "個人化設定 Token 預算額度已超限",
+    "Customization token budget": "個人化設定 Token 預算額度",
+    "Customization Token Budget": "個人化設定 Token 預算額度",
+    "Customization budget exceeded.": "個人化設定預算額度已超限。",
+    "Customization budget exceeded": "個人化設定預算額度已超限",
+    "Token budget exceeded.": "Token 預算額度已超限。",
+    "Token budget exceeded": "Token 預算額度已超限",
+    "Large customizations will be truncated.": "過長的大型自訂元件將被截斷。",
+    "Large customizations will be truncated automatically.": "過長的大型自訂元件將會被自動截斷。",
+    "Large customizations will be truncated": "過長的大型自訂元件將被截斷"
 }

@@ -311,5 +311,18 @@
     "Mark as read": "標記為已讀",
     "Mark as unread": "標記為未讀",
     "Send feedback as": "以此身分傳送意見回饋",
-    "Send feedback": "傳送意見回饋"
+    "Send feedback": "傳送意見回饋",
+    "Customization token budget exceeded. Large customizations will be truncated.": "個人化設定 Token 預算額度已超限。過長的大型自訂元件將被自動截斷。",
+    "Customization token budget exceeded. Large customizations will be truncated automatically.": "個人化設定 Token 預算額度已超限。過長的大型自訂元件將會被自動截斷。",
+    "Customization token budget exceeded.": "個人化設定 Token 預算額度已超限。",
+    "Customization token budget exceeded": "個人化設定 Token 預算額度已超限",
+    "Customization token budget": "個人化設定 Token 預算額度",
+    "Customization Token Budget": "個人化設定 Token 預算額度",
+    "Customization budget exceeded.": "個人化設定預算額度已超限。",
+    "Customization budget exceeded": "個人化設定預算額度已超限",
+    "Token budget exceeded.": "Token 預算額度已超限。",
+    "Token budget exceeded": "Token 預算額度已超限",
+    "Large customizations will be truncated.": "過長的大型自訂元件將被截斷。",
+    "Large customizations will be truncated automatically.": "過長的大型自訂元件將會被自動截斷。",
+    "Large customizations will be truncated": "過長的大型自訂元件將被截斷"
 }

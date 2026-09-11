@@ -147,5 +147,18 @@
     "The Apigee API hub remote MCP server lets you manage the APIs, versions, specs, operations, deployments, attributes, external APIs, and dependencies registered in...": "Apigee API hub 远程 MCP 服务器可让您管理注册在平台中的 API、版本、规范、操作、部署、属性、外部 API 以及依赖项...",
     "The Apigee API hub remote MCP server lets you manage the APIs, versions, specs, operations, deployments, attributes, external APIs, and dependencies registered in your Apigee API hub.": "Apigee API hub 远程 MCP 服务器可让您管理注册在 Apigee API hub 中的 API、版本、规范、操作、部署、属性、外部 API 以及依赖项。",
     "The Google Home Developer MCP server allows you to search through Google Home documentation, OpenThread and Matter specifications documentation.": "Google Home Developer MCP 服务器支持检索 Google Home 文档、OpenThread 与 Matter 规范文档。",
-    "The Cloud Quotas MCP server allows you to view quota allocations, request quota increases, and manage Quota Adjuster configurations.": "Cloud Quotas MCP 服务器支持查看配额分配、申请提升配额以及管理 Quota Adjuster 自动调整配置。"
+    "The Cloud Quotas MCP server allows you to view quota allocations, request quota increases, and manage Quota Adjuster configurations.": "Cloud Quotas MCP 服务器支持查看配额分配、申请提升配额以及管理 Quota Adjuster 自动调整配置。",
+    "Customization token budget exceeded. Large customizations will be truncated.": "自定义设置 Token 预算超限。过大的自定义内容将被自动截断。",
+    "Customization token budget exceeded. Large customizations will be truncated automatically.": "自定义设置 Token 预算超限。过大的自定义内容将被自动截断。",
+    "Customization token budget exceeded.": "自定义设置 Token 预算已超限。",
+    "Customization token budget exceeded": "自定义设置 Token 预算已超限",
+    "Customization token budget": "自定义设置 Token 预算",
+    "Customization Token Budget": "自定义设置 Token 预算",
+    "Customization budget exceeded.": "自定义设置预算已超限。",
+    "Customization budget exceeded": "自定义设置预算已超限",
+    "Token budget exceeded.": "Token 预算已超限。",
+    "Token budget exceeded": "Token 预算已超限",
+    "Large customizations will be truncated.": "过大的自定义内容将被截断。",
+    "Large customizations will be truncated automatically.": "过大的自定义内容将被自动截断。",
+    "Large customizations will be truncated": "过大的自定义内容将被截断"
 }

@@ -297,5 +297,18 @@
     "Mark as read": "标记为已读",
     "Mark as unread": "标记为未读",
     "Send feedback as": "以该身份发送反馈",
-    "Send feedback": "发送反馈"
+    "Send feedback": "发送反馈",
+    "Customization token budget exceeded. Large customizations will be truncated.": "自定义设置 Token 预算超限。过大的自定义内容将被自动截断。",
+    "Customization token budget exceeded. Large customizations will be truncated automatically.": "自定义设置 Token 预算超限。过大的自定义内容将被自动截断。",
+    "Customization token budget exceeded.": "自定义设置 Token 预算已超限。",
+    "Customization token budget exceeded": "自定义设置 Token 预算已超限",
+    "Customization token budget": "自定义设置 Token 预算",
+    "Customization Token Budget": "自定义设置 Token 预算",
+    "Customization budget exceeded.": "自定义设置预算已超限。",
+    "Customization budget exceeded": "自定义设置预算已超限",
+    "Token budget exceeded.": "Token 预算已超限。",
+    "Token budget exceeded": "Token 预算已超限",
+    "Large customizations will be truncated.": "过大的自定义内容将被截断。",
+    "Large customizations will be truncated automatically.": "过大的自定义内容将被自动截断。",
+    "Large customizations will be truncated": "过大的自定义内容将被截断"
 }
