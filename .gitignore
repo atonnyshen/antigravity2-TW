@@ -1,5 +1,6 @@
 scratch/
 _temp_asar/
+_staging_app/
 build_app/
 autolocalize.log
 node_modules/

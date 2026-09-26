@@ -1,0 +1,11 @@
+{
+  "name": "antigravity2-tw",
+  "version": "3.2.0",
+  "private": true,
+  "description": "Antigravity 台灣繁體中文與背景更新守護",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=22.12.0" },
+  "dependencies": { "@electron/asar": "4.3.0" }
+}

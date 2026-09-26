@@ -22,11 +22,50 @@ else
 fi
 
 PLIST_NAME="com.antigravity.autolocalize.plist"
-TARGET_PLIST="$HOME/Library/LaunchAgents/$PLIST_NAME"
+LABEL="com.antigravity.autolocalize"
 
-NODE_BIN="$(which node || echo "/usr/local/bin/node")"
+# 判斷當前使用者與執行權限
+if [ "$EUID" -eq 0 ]; then
+    IS_ROOT=1
+    ACTUAL_USER="${SUDO_USER:-$(stat -f%Su /dev/console 2>/dev/null || echo "$USER")}"
+    USER_HOME="$(eval echo "~$ACTUAL_USER")"
+    TARGET_DIR="/Library/LaunchDaemons"
+    TARGET_PLIST="$TARGET_DIR/$PLIST_NAME"
+    echo "🛡️ 偵測到管理員權限 (root)，將安裝為系統級 LaunchDaemon 守護服務。"
+    echo "   （優勢：完全免除 macOS App Management 權限阻擋，背景 100% 靜默自癒！）"
+else
+    IS_ROOT=0
+    ACTUAL_USER="$USER"
+    USER_HOME="$HOME"
+    TARGET_DIR="$HOME/Library/LaunchAgents"
+    TARGET_PLIST="$TARGET_DIR/$PLIST_NAME"
+    if [ -e "/Applications/Antigravity.app/Contents/Resources/app.asar" ] || [ -e "/Applications/Antigravity IDE.app/Contents/Resources/app.asar" ]; then
+        echo "❌ 目前的 Antigravity 安裝在 /Applications；使用者級 LaunchAgent 沒有穩定寫入權限。"
+        echo "   請執行「點兩下安裝macOS背景守護.command」，以管理員權限安裝系統級 LaunchDaemon。"
+        exit 1
+    fi
+    echo "👤 偵測為一般使用者權限，將安裝為使用者級 LaunchAgent 守護服務。"
+fi
 
-mkdir -p "$HOME/Library/LaunchAgents"
+mkdir -p "$TARGET_DIR"
+
+# 解析可用的 Node.js 路徑
+if [ "$IS_ROOT" -eq 1 ] && [ -n "$SUDO_USER" ]; then
+    NODE_BIN="$(su - "$SUDO_USER" -c 'which node' 2>/dev/null || which node || echo "/usr/local/bin/node")"
+else
+    NODE_BIN="$(which node || echo "/usr/local/bin/node")"
+fi
+
+if [ ! -x "$NODE_BIN" ]; then
+    if [ -x "/opt/homebrew/bin/node" ]; then
+        NODE_BIN="/opt/homebrew/bin/node"
+    elif [ -x "/usr/local/bin/node" ]; then
+        NODE_BIN="/usr/local/bin/node"
+    fi
+fi
+
+echo "使用 Node.js 執行檔：$NODE_BIN"
+echo "專案工作目錄：$DIR"
 
 cat << PLIST_EOF > "$TARGET_PLIST"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -34,7 +73,7 @@ cat << PLIST_EOF > "$TARGET_PLIST"
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.antigravity.autolocalize</string>
+    <string>${LABEL}</string>
     <key>ProgramArguments</key>
     <array>
         <string>${NODE_BIN}</string>
@@ -53,9 +92,15 @@ cat << PLIST_EOF > "$TARGET_PLIST"
         <string>/Applications/Antigravity.app/Contents/Resources/app.asar</string>
         <string>/Applications/Antigravity IDE.app/Contents/Info.plist</string>
         <string>/Applications/Antigravity IDE.app/Contents/Resources/app.asar</string>
+        <string>${USER_HOME}/Applications/Antigravity.app/Contents/Info.plist</string>
+        <string>${USER_HOME}/Applications/Antigravity.app/Contents/Resources/app.asar</string>
+        <string>${USER_HOME}/Applications/Antigravity IDE.app/Contents/Info.plist</string>
+        <string>${USER_HOME}/Applications/Antigravity IDE.app/Contents/Resources/app.asar</string>
     </array>
     <key>StartInterval</key>
-    <integer>1800</integer>
+    <integer>300</integer>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
     <key>WorkingDirectory</key>
     <string>${DIR}</string>
     <key>StandardOutPath</key>
@@ -69,11 +114,28 @@ PLIST_EOF
 # 驗證 plist 格式合法性
 plutil -lint "$TARGET_PLIST" >/dev/null
 
-launchctl unload "$TARGET_PLIST" 2>/dev/null || true
-launchctl load "$TARGET_PLIST"
+if [ "$IS_ROOT" -eq 1 ]; then
+    chown root:wheel "$TARGET_PLIST"
+    chmod 644 "$TARGET_PLIST"
 
-echo "🎉 守護服務已成功安裝並啟動！"
-echo "服務工作目錄：$DIR"
+    # 若之前有安裝過使用者級 LaunchAgent，清理避免衝突雙重執行
+    AGENT_PLIST="$USER_HOME/Library/LaunchAgents/$PLIST_NAME"
+    if [ -f "$AGENT_PLIST" ]; then
+        su - "$ACTUAL_USER" -c "launchctl bootout gui/\$(id -u) '$AGENT_PLIST' 2>/dev/null || launchctl unload '$AGENT_PLIST' 2>/dev/null || true" 2>/dev/null || true
+        rm -f "$AGENT_PLIST"
+        echo "🧹 已清理舊版使用者級 LaunchAgent。"
+    fi
+
+    launchctl bootout system/$LABEL 2>/dev/null || launchctl unload "$TARGET_PLIST" 2>/dev/null || true
+    launchctl bootstrap system "$TARGET_PLIST" 2>/dev/null || launchctl load "$TARGET_PLIST"
+    echo "🎉 LaunchDaemon 系統級守護服務已成功註冊並啟動！"
+else
+    chmod 644 "$TARGET_PLIST"
+    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || launchctl unload "$TARGET_PLIST" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$TARGET_PLIST" 2>/dev/null || launchctl load "$TARGET_PLIST"
+    echo "🎉 LaunchAgent 使用者級守護服務已成功安裝並啟動！"
+    echo "💡 提示：若希望在更新時 100% 靜默免輸密碼，建議執行「點兩下安裝macOS背景守護.command」以管理員授權升級為 LaunchDaemon。"
+fi
+
 echo "日後 Antigravity IDE 官方更新時，將自動於背景為新版本重新完成繁體中文化。"
-echo "若日後需拉取最新繁中字典與程式碼，只需在終端機再次執行相同指令即可自動同步！"
 echo "=========================================================="

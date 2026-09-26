@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const child_process = require('child_process');
 const os = require('os');
+const crypto = require('crypto');
+const child_process = require('child_process');
 
 // --tw 參數：使用繁體中文字典 (dicts_tw/)，否則使用預設簡體字典 (dicts/)
 const USE_TW = process.argv.includes('--tw');
@@ -185,15 +186,24 @@ function generateJs() {
     const longEntries = REPLACEMENT_ENTRIES_PLACEHOLDER;
     const translatedValues = new WeakMap();
 
-    // 轻量级安全隔离：跳过脚本、样式、代码块(pre/code)以及编辑器区域
+    // 轻量级安全隔离：跳过脚本、样式、代码块(pre/code)、编辑器区域以及终端容器
     const SKIP_TAGS = ['SCRIPT', 'STYLE', 'PRE', 'CODE'];
+
+    // 代码及编辑器隔离选择器：排除代码块、编辑器、文件预览器、代码差异区、终端及语法高亮 Token
+    const CODE_ISOLATION_SELECTOR = 'pre, code, .monaco-editor, .cm-editor, .cm-line, [contenteditable="true"], .terminal, .xterm, .code-line, .code-block, .line-content, [aria-label="File Viewer"], [data-file-uri], [class*="diffEditor"], .token, .hljs, [class*="mtk"]';
 
     function isCodeOrEditor(node) {
         try {
             if (!node) return false;
-            const el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-            if (!el || typeof el.closest !== 'function') return false;
-            return !!el.closest('pre, code, .monaco-editor, [contenteditable="true"]');
+            let el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+            while (el) {
+                if (typeof el.closest === 'function' && el.closest(CODE_ISOLATION_SELECTOR)) {
+                    return true;
+                }
+                const root = typeof el.getRootNode === 'function' ? el.getRootNode() : null;
+                el = (root && root.host) ? root.host : null;
+            }
+            return false;
         } catch (e) {
             return false;
         }
@@ -227,12 +237,13 @@ function generateJs() {
     function translateNode(node) {
         try {
             if (!node) return;
+            if (isCodeOrEditor(node)) return;
             
             if (node.nodeType === Node.ELEMENT_NODE) {
                 const tag = node.tagName.toUpperCase();
                 if (SKIP_TAGS.includes(tag)) return;
                 if (node.isContentEditable) return;
-                if (node.classList && node.classList.contains('monaco-editor')) return;
+                if (node.classList && (node.classList.contains('monaco-editor') || node.classList.contains('terminal') || node.classList.contains('xterm'))) return;
 
                 // 翻译属性：placeholder, title, aria-label
                 for (const attr of ['placeholder', 'title', 'aria-label']) {
@@ -252,6 +263,13 @@ function generateJs() {
                                     if (/option/i.test(type)) return USE_TW ? ("顯示另外 " + num + " 個選項...") : ("显示另外 " + num + " 个选项...");
                                 }
                                 return USE_TW ? ("顯示另外 " + num + " 個...") : ("显示另外 " + num + " 个...");
+                            });
+                            node.setAttribute(attr, trans);
+                        } else if (/^(?:(Permanently delete)\\s+)?(.+?)\\s+including\\s+(\\d+)\\s+active conversations?([.。])?$/i.test(t)) {
+                            const trans = t.replace(/^(?:(Permanently delete)\\s+)?(.+?)\\s+including\\s+(\\d+)\\s+active conversations?([.。])?$/i, (match, del, name, count, dot) => {
+                                const delPrefix = del ? (USE_TW ? "永久刪除 " : "永久删除 ") : "";
+                                const suffix = dot ? "。" : "";
+                                return delPrefix + name + (USE_TW ? ("（包含 " + count + " 個活躍對話）") : ("（包含 " + count + " 个活跃会话）")) + suffix;
                             });
                             node.setAttribute(attr, trans);
                         }
@@ -413,6 +431,22 @@ function generateJs() {
                 } else if (/^Are you sure you want to delete (the |this )?project (.+?)\\??$/i.test(valNorm)) {
                     newVal = valNorm.replace(/^Are you sure you want to delete (the |this )?project (.+?)\\??$/i, (match, article, name) => {
                         return USE_TW ? ("您確定要刪除專案 " + name + " 嗎？") : ("您确定要删除项目 " + name + " 吗？");
+                    });
+                } else if (/^(?:(Permanently delete)\\s+)?(.+?)\\s+including\\s+(\\d+)\\s+active conversations?([.。])?$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^(?:(Permanently delete)\\s+)?(.+?)\\s+including\\s+(\\d+)\\s+active conversations?([.。])?$/i, (match, del, name, count, dot) => {
+                        const delPrefix = del ? (USE_TW ? "永久刪除 " : "永久删除 ") : "";
+                        const suffix = dot ? "。" : "";
+                        return delPrefix + name + (USE_TW ? ("（包含 " + count + " 個活躍對話）") : ("（包含 " + count + " 个活跃会话）")) + suffix;
+                    });
+                } else if (/^including\\s+(\\d+)\\s+active conversations?([.。])?$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^including\\s+(\\d+)\\s+active conversations?([.。])?$/i, (match, count, dot) => {
+                        const suffix = dot ? "。" : "";
+                        return (USE_TW ? ("包含 " + count + " 個活躍對話") : ("包含 " + count + " 个活跃会话")) + suffix;
+                    });
+                } else if (/^(\\d+)\\s+active conversations?([.。])?$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^(\\d+)\\s+active conversations?([.。])?$/i, (match, count, dot) => {
+                        const suffix = dot ? "。" : "";
+                        return (USE_TW ? (count + " 個活躍對話") : (count + " 个活跃会话")) + suffix;
                     });
                 } else if (/^The (.+?) remote MCP server lets you access and run (.+?) tools to (.+)$/i.test(valNorm)) {
                     newVal = valNorm.replace(/^The (.+?) remote MCP server lets you access and run (.+?) tools to (.+)$/i, (match, name, tools, action) => {
@@ -664,6 +698,23 @@ function runCommandSync(cmd) {
     }
 }
 
+function findAsarCli() {
+    const cli = path.join(__dirname, 'node_modules', '@electron', 'asar', 'bin', 'asar.mjs');
+    if (!fs.existsSync(cli)) throw new Error('缺少本機 asar 依賴，請先以一般使用者執行 npm ci --ignore-scripts。');
+    return cli;
+}
+
+function runAsar(action, source, destination) {
+    try {
+        const stdout = child_process.execFileSync(process.execPath, [findAsarCli(), action, source, destination], {
+            encoding: 'utf8', timeout: 120000, maxBuffer: 8 * 1024 * 1024
+        });
+        return { success: true, stdout, stderr: '' };
+    } catch (e) {
+        return { success: false, stdout: e.stdout || '', stderr: e.stderr || e.message };
+    }
+}
+
 function cleanElectronCache() {
     let appSupportDir = "";
     if (process.platform === 'darwin') {
@@ -798,15 +849,12 @@ function install20(resourcesDir) {
     }
 
     // 2. 临时提取目录
-    const tempDir = path.join(__dirname, "_temp_asar");
-    if (fs.existsSync(tempDir)) {
-        try {
-            fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-        } catch (e) {}
-    }
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'antigravity-asar-'));
+    try {
 
-    console.log(`[解包] 正在使用 npx 提取 app.asar...`);
-    const extractRes = runCommandSync(`npx -y @electron/asar extract "${asarPath}" "${tempDir}"`);
+    const asarCli = findAsarCli();
+    console.log(`[解包] 正在使用本機 asar 解開 app.asar...`);
+    const extractRes = runAsar('extract', asarPath, tempDir);
     if (!extractRes.success || !fs.existsSync(tempDir)) {
         console.error(`[错误] 解包失败，可能是由于系统未安装 Node.js/npm 或者网络限制。`);
         console.error(`详情: ${extractRes.stderr}\n${extractRes.stdout}`);
@@ -1046,7 +1094,7 @@ function install20(resourcesDir) {
 
     // 4. 重新打包
     console.log(`[打包] 正在将修改后的内容打包回 app.asar...`);
-    const packRes = runCommandSync(`npx -y @electron/asar pack "${tempDir}" "${asarPath}"`);
+    const packRes = runAsar('pack', tempDir, asarPath);
     
     // 5. 清理临时文件夹
     try {
@@ -1061,10 +1109,15 @@ function install20(resourcesDir) {
         return false;
     }
 
-    cleanElectronCache();
-    resignAppOnMac(resourcesDir);
+    if (!process.argv.includes('--staging')) {
+        cleanElectronCache();
+        resignAppOnMac(resourcesDir);
+    }
     console.log(`[√] Antigravity 2.0 汉化部署完成！`);
     return true;
+    } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+    }
 }
 
 function restore20(resourcesDir) {
@@ -1312,7 +1365,9 @@ function main() {
     const installDir = detectInstallationDir(manualDir);
     
     // 2. 检测客户端是否正在运行，并根据参数决定是否关闭以解除文件锁定
-    wasAppRunning = checkIfAppIsRunning();
+    const staging = args.includes('--staging');
+    if (staging) noKill = true;
+    wasAppRunning = staging ? false : checkIfAppIsRunning();
     if (noKill) {
         console.log("[跳过] 检测到 --no-kill 参数，跳过关闭 Antigravity 运行进程。");
     } else {
@@ -1369,8 +1424,9 @@ function main() {
         }
     }
 
-    // 5. 校验通过且原来客户端在运行，则自动重新启动客户端
-    if (success && wasAppRunning) {
+    // 5. 校验通过且原来客户端在运行且未指定 --no-kill，则自动重新启动客户端
+    const isAppBundle = installDir.endsWith('.app') || fs.existsSync(path.join(installDir, 'Contents', 'MacOS')) || (process.platform === 'win32' && fs.existsSync(path.join(installDir, 'Antigravity.exe')));
+    if (success && wasAppRunning && !noKill && isAppBundle) {
         console.log("\n[启动] 检测到安装前反重力客户端处于开启状态，正在重新启动客户端...");
         try {
             if (process.platform === 'win32') {
@@ -1399,4 +1455,5 @@ function main() {
     }
 }
 
-main();
+if (require.main === module) main();
+module.exports = { generateJs, runAsar, findAsarCli };

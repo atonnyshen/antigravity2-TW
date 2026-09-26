@@ -111,10 +111,11 @@ Antigravity 官方在發布版本更新後會覆蓋資源檔。透過背景常�
 
 ### 🍎 macOS 使用者
 
-- **啟用背景自動守護**（一行指令自動下載與註冊 LaunchAgents）：
+- **啟用背景自動守護**（一行指令自動下載與註冊）：
   ```bash
   curl -fsSL https://raw.githubusercontent.com/atonnyshen/antigravity2-TW/main/install_macos_autowatcher.sh | bash
   ```
+  *(若已下載本專案，亦可直接點兩下執行 **`點兩下安裝macOS背景守護.command`**)*
 - **一鍵卸載背景守護**（停止並完全移除背景服務）：
   ```bash
   curl -fsSL https://raw.githubusercontent.com/atonnyshen/antigravity2-TW/main/uninstall_macos_autowatcher.sh | bash

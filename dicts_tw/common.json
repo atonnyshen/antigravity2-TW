@@ -324,5 +324,7 @@
     "Token budget exceeded": "Token 預算額度已超限",
     "Large customizations will be truncated.": "過長的大型自訂元件將被截斷。",
     "Large customizations will be truncated automatically.": "過長的大型自訂元件將會被自動截斷。",
-    "Large customizations will be truncated": "過長的大型自訂元件將被截斷"
+    "Large customizations will be truncated": "過長的大型自訂元件將被截斷",
+    "Plugins are packaged collections of skills and MCPs to help the Agent in": "外掛程式是技能與 MCP 的套裝集合，用於協助",
+    "work with Google developer products. You can always change your choices in Settings.": "中的代理與 Google 開發者產品協同運作。您隨時可以在設定中變更選擇。"
 }

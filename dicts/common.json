@@ -310,5 +310,21 @@
     "Token budget exceeded": "Token 预算已超限",
     "Large customizations will be truncated.": "过大的自定义内容将被截断。",
     "Large customizations will be truncated automatically.": "过大的自定义内容将被自动截断。",
-    "Large customizations will be truncated": "过大的自定义内容将被截断"
+    "Large customizations will be truncated": "过大的自定义内容将被截断",
+    "Custom Keybindings": "自定义按键绑定",
+    "Customize keyboard shortcuts for various actions.": "为各种操作自定义键盘快捷键。",
+    "Plugins": "插件",
+    "Open Marketplace": "打开市场",
+    "Marketplace": "市场",
+    "Workspaces": "工作区",
+    "Quick Search": "快速搜索",
+    "Search or create a new project...": "搜索或创建新项目...",
+    "Choose folder": "选择文件夹",
+    "Settings": "设置",
+    "Feedback": "反馈",
+    "Send": "发送",
+    "Open in Editor": "在编辑器中打开",
+    "Documentation": "文档",
+    "Help": "帮助",
+    "Select Theme": "选择主题"
 }

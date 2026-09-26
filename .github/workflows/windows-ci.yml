@@ -24,7 +24,8 @@ jobs:
           chcp 65001 > nul
           type "點兩下安裝繁體中文.bat" > nul
           type "點兩下還原官方英文.bat" > nul
-          type "點兩下安裝VSCode擴充繁體中文.bat" > nul
+          type "點兩下安裝Windows背景守護.bat" > nul
+          type "點兩下卸載Windows背景守護.bat" > nul
           type "點兩下還原VSCode擴充官方英文.bat" > nul
           echo Batch scripts encoding and syntax check passed!
 
