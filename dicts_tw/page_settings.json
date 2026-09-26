@@ -1,4 +1,5 @@
 {
+    "9222": "9222",
     "Agent Settings": "代理設定",
     "Loading custom agents...": "正在載入自訂代理...",
     "Loading metrics...": "正在載入指標資料...",
@@ -214,7 +215,6 @@
     "~/.gemini/antigravity-browser-profile": "~/.gemini/antigravity-browser-profile",
     "Browser CDP Port": "瀏覽器 CDP 連接埠",
     "Port number for Chrome DevTools Protocol remote debugging. Leave empty for default (9222).": "用於 Chrome DevTools Protocol 遠端偵錯的連接埠號碼。留空則使用預設值 (9222)。",
-    "9222": "9222",
     "By using this app, you agree to its": "使用本應用程式即表示您同意其",
     "Terms of Service": "服務條款",
     "Provide Feedback": "提供意見回饋",
