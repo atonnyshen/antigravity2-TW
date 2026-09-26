@@ -764,12 +764,9 @@ function resignAppOnMac(anyPath) {
             runCommandSync(`xattr -d -r com.apple.quarantine "${targetApp}"`);
         } catch (e) {}
         console.log(`[签名] 检测到 macOS 平台，正在对应用包进行本地 ad-hoc 深度重签名: ${targetApp} ...`);
-        const signRes = runCommandSync(`codesign --force --deep --sign - "${targetApp}"`);
-        if (signRes.success) {
-            console.log(`[签名] 重新签名成功！`);
-        } else {
-            console.warn(`[警告] 重新签名失败。可能会导致应用无法打开。详情:\n${signRes.stderr}\n${signRes.stdout}`);
-        }
+        child_process.execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', targetApp], { stdio: 'pipe', timeout: 120000 });
+        child_process.execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', targetApp], { stdio: 'pipe', timeout: 30000 });
+        console.log(`[签名] 重新签名並驗證成功！`);
     } else {
         console.warn(`[警告] 未能从路径 ${anyPath} 识别到有效的 .app 路径，跳过重新签名。`);
     }
@@ -829,30 +826,15 @@ function install20(resourcesDir) {
             }
             return false;
         }
-    } else if (fs.existsSync(bakPath)) {
-        // 尝试用官方备份覆盖当前 app.asar，以确保每次汉化都基于最干净的官方英文包
-        try {
-            fs.copyFileSync(bakPath, asarPath);
-            console.log(`[还原] 已重置当前 app.asar 为官方原始备份包，以进行全新注入...`);
-        } catch (e) {
-            console.log(`[提示] 当前 app.asar 被锁定（可能是客户端正在运行），将使用当前包进行增量注入。`);
-        }
     } else {
-        console.log(`[备份] 正在创建官方原始包备份: app.asar.bak ...`);
-        try {
-            fs.copyFileSync(asarPath, bakPath);
-            console.log(`[备份] 备份成功！`);
-        } catch (e) {
-            console.error(`[错误] 创建备份失败: ${e.message}`);
-            return false;
-        }
+        console.log(`[备份] 保留既有官方備份，以目前版本清除舊注入後重新套用。`);
     }
 
     // 2. 临时提取目录
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'antigravity-asar-'));
     try {
 
-    const asarCli = findAsarCli();
+    findAsarCli();
     console.log(`[解包] 正在使用本機 asar 解開 app.asar...`);
     const extractRes = runAsar('extract', asarPath, tempDir);
     if (!extractRes.success || !fs.existsSync(tempDir)) {
@@ -1094,7 +1076,20 @@ function install20(resourcesDir) {
 
     // 4. 重新打包
     console.log(`[打包] 正在将修改后的内容打包回 app.asar...`);
-    const packRes = runAsar('pack', tempDir, asarPath);
+    const outputDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-build-'));
+    let packRes;
+    try {
+        const candidate = path.join(outputDir, 'app.asar');
+        packRes = runAsar('pack', tempDir, candidate);
+        if (packRes.success) {
+            const sourceStat = fs.statSync(asarPath);
+            fs.chmodSync(candidate, sourceStat.mode & 0o777);
+            if (process.platform !== 'win32' && process.getuid() === 0) fs.chownSync(candidate, sourceStat.uid, sourceStat.gid);
+            fs.renameSync(candidate, asarPath);
+        }
+    } finally {
+        fs.rmSync(outputDir, { recursive: true, force: true });
+    }
     
     // 5. 清理临时文件夹
     try {

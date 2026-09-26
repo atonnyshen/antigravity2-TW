@@ -3,6 +3,7 @@ cd "$(dirname "$0")"
 
 # 檢查系統管理員權限，若非 root 則自動透過 sudo 提權
 if [ "$EUID" -ne 0 ]; then
+    npm ci --ignore-scripts --no-audit --no-fund || exit 1
     echo "======================================================"
     echo " 提示：macOS 修改應用程式（/Applications）需要管理員權限"
     echo " 請在下方輸入您的電腦開機密碼（輸入時畫面不會顯示密碼，直接按 Enter）："

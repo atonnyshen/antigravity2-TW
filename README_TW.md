@@ -9,6 +9,8 @@
 
 👉 **[原版簡體中文說明 (Upstream README)](README_CN.md)**
 
+目前套件版本：**3.2.0**。上游已整合至 `c392638`；台灣用語與背景守護由本分支持續維護。
+
 ---
 
 ## 📌 術語對照標準
@@ -34,8 +36,8 @@
 ## ⚙️ 核心機制
 
 1. **同步備份檔案**：偵測官方發布新版本時，自動將全新英文包同步備份為 `app.asar.bak`，避免還原時退回舊版。
-2. **清理執行快取**：資源注入後自動清空 Electron 的 `Cache`、`Code Cache` 與 `GPUCache`，排除舊版快取干擾。
-3. **移除隔離屬性**：自動清除 macOS quarantine 屬性並重新進行本機 ad-hoc 簽署，降低系統安全性阻擋提示。
+2. **更新套用方式**：背景守護先在隔離目錄重建，確認官方檔案未再更新才置換；不關閉應用程式、不清除使用中的快取。已開啟的視窗須重啟後載入。
+3. **macOS 簽署驗證**：背景置換後執行本機 ad-hoc 簽署與驗證，失敗時嘗試還原並回傳錯誤。這不等同官方簽章或 Apple 公證。
 4. **專注桌面體驗**：全面聚焦 Antigravity 2.0 獨立桌面版 IDE 的完整繁體中文化；停止支援 VS Code 擴充套件以確保運作穩定。
 5. **常駐背景守護**：提供 macOS `launchd` 原生守護服務與 Windows 排程工作，官方版本更動時自動於背景重編注入。
 
@@ -70,6 +72,8 @@
 
 ### 步驟 2：執行一鍵套用
 
+先安裝 **Node.js 22.12.0 以上**，並確認 `node`、`npm` 可執行。安裝入口會執行 `npm ci --ignore-scripts`，依 `package-lock.json` 安裝固定版本的依賴。直接使用引擎前也須執行此指令。背景守護不會呼叫 `npx` 或臨時下載程式。
+
 1. **完全關閉** Antigravity 應用程式。
 2. 進入解壓後的資料夾：
    - **macOS 使用者**：點兩下執行 **`點兩下安裝繁體中文.command`**。
@@ -85,7 +89,7 @@ Google Antigravity 發展歷程中包含不同產品形態，本專案的支援�
 
 | 版本／形態 | 架構類型 | 應用程式路徑／識別名稱 | 繁體中文支援狀態 | 說明與建議 |
 | :--- | :--- | :--- | :---: | :--- |
-| **Antigravity 2.0 桌面端** | 獨立 Electron 客戶端（官方主流） | `/Applications/Antigravity.app`<br>`Programs\Antigravity` | **完整支援（100%）** | 主編輯介面、新手導引、偏好設定面板、MCP 知識庫與選單全介面繁體中文化；支援背景自動守護自癒。 |
+| **Antigravity 2.0 桌面端** | 獨立 Electron 客戶端 | `/Applications/Antigravity.app`<br>`Programs\Antigravity` | **主要支援** | 依字典翻譯介面並提供背景守護；官方新增介面可能仍有漏譯。2.17.0 已做本機隔離重建測試。 |
 | **Antigravity 1.0 桌面端** | 舊版 VS Code Fork 客製 IDE | `/Applications/Antigravity IDE.app`<br>`Programs\Antigravity` | **基礎相容（建議升級）** | 早期 HTML 腳本注入架構。本專案保留相容偵測邏輯，但因 Google 官方已停止維護 1.0 且全線轉移至 2.0，強烈建議使用者升級至 2.0 取得完整繁中體驗。 |
 | **VS Code 官方外掛** | VS Code 擴充套件（`google.google-antigravity`） | `~/.vscode/extensions/google.google-antigravity-*` | **已停止支援** | 核心設定與對話側邊欄由本地閉源二進位檔（`agy`）動態透過 iframe 輸出，無法全介面繁中化，且背景連線易受干擾。專案已全面終止支援。 |
 
@@ -107,24 +111,41 @@ Google Antigravity 發展歷程中包含不同產品形態，本專案的支援�
 
 ## 🛡️ 背景自動更新守護（有更新自動重套，支援 macOS / Windows）
 
-Antigravity 官方在發布版本更新後會覆蓋資源檔。透過背景常駐守護服務，當偵測到官方更新時，系統將自動重套繁中並跳出通知：
+Antigravity 官方更新會覆蓋資源檔。守護程式偵測變更後重套繁中，結果寫入日誌。已處理的檔案會記錄雜湊；引擎或字典修訂後也會重新套用。
 
 ### 🍎 macOS 使用者
+
+系統服務需要管理員認證，並使用 nodejs.org 官方獨立 Node.js 套件的 `/usr/local/bin/node`。安裝器將程式、Node 與鎖定依賴複製到 root 擁有的 `/Library/Application Support/Antigravity2TW/runtime.*`，不讓常駐 root 服務執行工作區中可隨時改寫的程式。
+
+觸發方式是載入服務、應用程式路徑變更，以及每 **5 分鐘**巡檢。檔案須先穩定，才會開始建置。服務只處理 `/Applications` 內的 Antigravity 2.x；家目錄安裝與 1.x 請手動套用。更新本儲存庫後，須重新執行安裝器才能更新受保護副本。
+
+若日誌出現 `EPERM` 或 `Operation not permitted`，檢查「系統設定 → 隱私權與安全性 → App 管理」的實際授權提示。root 不保證繞過 macOS 保護；服務註冊成功也不代表套用成功。
 
 - **啟用背景自動守護**（一行指令自動下載與註冊）：
   ```bash
   curl -fsSL https://raw.githubusercontent.com/atonnyshen/antigravity2-TW/main/install_macos_autowatcher.sh | bash
   ```
   *(若已下載本專案，亦可直接點兩下執行 **`點兩下安裝macOS背景守護.command`**)*
-- **一鍵卸載背景守護**（停止並完全移除背景服務）：
+- **卸載背景守護**（停止服務，保留設定、程式與日誌供復原）：
   ```bash
-  curl -fsSL https://raw.githubusercontent.com/atonnyshen/antigravity2-TW/main/uninstall_macos_autowatcher.sh | bash
+  sudo bash uninstall_macos_autowatcher.sh
   ```
   *(若已下載本專案，亦可直接點兩下執行 **`點兩下卸載macOS背景守護.command`**)*
+
+在本專案目錄執行卸載指令。檢查服務與最近結果：
+
+```bash
+launchctl print system/com.antigravity.autolocalize
+tail -n 60 /Library/Logs/Antigravity2TW/autolocalize.log
+```
+
+確認 `last exit code = 0`，並查看「繁中套件已套用並驗證」或「已是目前版本」日誌。背景服務會自行結束，`state = not running` 不代表未註冊。還原官方英文前先停用守護，避免它再次套用。
 
 ---
 
 ### 🪟 Windows 使用者
+
+工作排程每 **5 分鐘**巡檢一次，日誌位於專案的 `autolocalize.log`。若 Antigravity 安裝於受保護的 `Program Files`，仍須確認排程執行帳號的寫入權限。
 
 - **一鍵安裝繁中環境**（PowerShell 一行指令）：
   ```powershell
@@ -164,6 +185,8 @@ Antigravity 官方在發布版本更新後會覆蓋資源檔。透過背景常�
 ---
 
 ## 🤝 致謝與開源聲明
+
+開發者驗證：執行 `npm ci --ignore-scripts` 與 `npm test`。GitHub Actions 在 macOS、Windows 與 Linux 跑回歸測試；測試不代表已驗證真實 Windows 排程或每個官方版本的介面。
 
 - 特別感謝 [qqxpee/antigravity2-cn](https://github.com/qqxpee/antigravity2-cn) 原作者的開源貢獻與 ASAR 注入架構設計。
 - 本儲存庫為個人使用與分享版本，主要維護繁體中文語境字典與自動更新腳本。

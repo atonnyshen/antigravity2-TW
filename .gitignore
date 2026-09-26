@@ -4,6 +4,9 @@ _staging_app/
 build_app/
 autolocalize.log
 node_modules/
+.watcher-state/
+.env
+dist/
 .DS_Store
 AGENTS.md
 

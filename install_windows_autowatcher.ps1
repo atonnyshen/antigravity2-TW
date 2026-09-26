@@ -39,21 +39,27 @@ if (Test-Path "./auto_localize_watcher.js") {
 }
 
 $watcherScript = Join-Path $workDir "auto_localize_watcher.js"
+Push-Location $workDir
+try {
+    npm ci --ignore-scripts --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw "安裝鎖定依賴失敗" }
+} finally { Pop-Location }
 $taskName = "AntigravityAutoLocalize"
 
-# 3. 建立 Windows 工作排程（每 30 分鐘執行一次，並在登入時啟動）
+# 3. 建立 Windows 工作排程（每 5 分鐘執行一次）
 Write-Host "⚡ 正在註冊 Windows 排程工作 [$taskName]..." -ForegroundColor Yellow
 
 $actionCmd = "`"$nodePath`" `"$watcherScript`""
-schtasks.exe /create /tn "$taskName" /tr "$actionCmd" /sc minute /mo 30 /f | Out-Null
+schtasks.exe /create /tn "$taskName" /tr "$actionCmd" /sc minute /mo 5 /f | Out-Null
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "🎉 守護服務已成功註冊至 Windows 工作排程！" -ForegroundColor Green
     Write-Host "工作名稱：$taskName"
     Write-Host "守護工作目錄：$workDir"
-    Write-Host "執行頻率：每 30 分鐘於背景自動巡檢一次"
+    Write-Host "執行頻率：每 5 分鐘於背景自動巡檢一次"
     Write-Host "日後 Antigravity IDE 官方更新時，將自動於背景重新套用繁體中文。"
     Write-Host "==========================================================" -ForegroundColor Cyan
 } else {
     Write-Host "❌ 註冊排程工作失敗，請嘗試以系統管理員身分開啟 PowerShell 重新執行。" -ForegroundColor Red
+    exit 1
 }

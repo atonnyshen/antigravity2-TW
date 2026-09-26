@@ -1,141 +1,134 @@
 #!/bin/bash
-set -e
-REPO_URL="https://github.com/atonnyshen/antigravity2-TW.git"
-DEFAULT_INSTALL_DIR="$HOME/.antigravity2-TW"
+set -euo pipefail
 
-echo "=========================================================="
-echo "    Antigravity macOS 背景自動更新守護服務安裝工具"
-echo "=========================================================="
-
-if [ -f "$(pwd)/auto_localize_watcher.js" ]; then
-    DIR="$(pwd)"
-elif [ -f "$(dirname "$0")/auto_localize_watcher.js" ] 2>/dev/null; then
-    DIR="$(cd "$(dirname "$0")" && pwd)"
-else
-    echo "⚡ 偵測到直接透過網路執行，正在下載或更新專案至 $DEFAULT_INSTALL_DIR ..."
-    if [ -d "$DEFAULT_INSTALL_DIR/.git" ]; then
-        git -C "$DEFAULT_INSTALL_DIR" pull --ff-only 2>/dev/null || true
-    else
-        git clone "$REPO_URL" "$DEFAULT_INSTALL_DIR"
-    fi
-    DIR="$DEFAULT_INSTALL_DIR"
+if [ "$(uname -s)" != Darwin ]; then
+    echo "此安裝程式僅適用 macOS。" >&2
+    exit 1
 fi
 
-PLIST_NAME="com.antigravity.autolocalize.plist"
-LABEL="com.antigravity.autolocalize"
-
-# 判斷當前使用者與執行權限
-if [ "$EUID" -eq 0 ]; then
-    IS_ROOT=1
-    ACTUAL_USER="${SUDO_USER:-$(stat -f%Su /dev/console 2>/dev/null || echo "$USER")}"
-    USER_HOME="$(eval echo "~$ACTUAL_USER")"
-    TARGET_DIR="/Library/LaunchDaemons"
-    TARGET_PLIST="$TARGET_DIR/$PLIST_NAME"
-    echo "🛡️ 偵測到管理員權限 (root)，將安裝為系統級 LaunchDaemon 守護服務。"
-    echo "   （優勢：完全免除 macOS App Management 權限阻擋，背景 100% 靜默自癒！）"
+if [ -f "$(dirname "$0")/auto_localize_watcher.js" ]; then
+    DIR="$(cd "$(dirname "$0")" && pwd)"
+elif [ -f "$PWD/auto_localize_watcher.js" ]; then
+    DIR="$PWD"
 else
-    IS_ROOT=0
-    ACTUAL_USER="$USER"
-    USER_HOME="$HOME"
-    TARGET_DIR="$HOME/Library/LaunchAgents"
-    TARGET_PLIST="$TARGET_DIR/$PLIST_NAME"
-    if [ -e "/Applications/Antigravity.app/Contents/Resources/app.asar" ] || [ -e "/Applications/Antigravity IDE.app/Contents/Resources/app.asar" ]; then
-        echo "❌ 目前的 Antigravity 安裝在 /Applications；使用者級 LaunchAgent 沒有穩定寫入權限。"
-        echo "   請執行「點兩下安裝macOS背景守護.command」，以管理員權限安裝系統級 LaunchDaemon。"
+    if [ "$EUID" -eq 0 ]; then
+        echo "請先以一般使用者下載專案及依賴，再執行安裝。" >&2
         exit 1
     fi
-    echo "👤 偵測為一般使用者權限，將安裝為使用者級 LaunchAgent 守護服務。"
-fi
-
-mkdir -p "$TARGET_DIR"
-
-# 解析可用的 Node.js 路徑
-if [ "$IS_ROOT" -eq 1 ] && [ -n "$SUDO_USER" ]; then
-    NODE_BIN="$(su - "$SUDO_USER" -c 'which node' 2>/dev/null || which node || echo "/usr/local/bin/node")"
-else
-    NODE_BIN="$(which node || echo "/usr/local/bin/node")"
-fi
-
-if [ ! -x "$NODE_BIN" ]; then
-    if [ -x "/opt/homebrew/bin/node" ]; then
-        NODE_BIN="/opt/homebrew/bin/node"
-    elif [ -x "/usr/local/bin/node" ]; then
-        NODE_BIN="/usr/local/bin/node"
+    DIR="$HOME/.antigravity2-TW"
+    if [ -d "$DIR/.git" ]; then
+        git -C "$DIR" pull --ff-only
+    else
+        git clone https://github.com/atonnyshen/antigravity2-TW.git "$DIR"
     fi
+    exec bash "$DIR/install_macos_autowatcher.sh"
 fi
 
-echo "使用 Node.js 執行檔：$NODE_BIN"
-echo "專案工作目錄：$DIR"
+cd "$DIR"
+# A standalone Node binary avoids loading user-writable Homebrew shared libraries as root.
+NODE_BIN="/usr/local/bin/node"
+if [ ! -x "$NODE_BIN" ]; then
+    echo "請先安裝 nodejs.org 官方 macOS Node.js 22.12+ 套件（/usr/local/bin/node）。" >&2
+    exit 1
+fi
+"$NODE_BIN" -e 'const [a,b]=process.versions.node.split(".").map(Number); if(a<22||(a===22&&b<12)) process.exit(1)'
+if /usr/bin/otool -L "$NODE_BIN" | /usr/bin/awk '/^[[:space:]]+\// { print $1 }' | /usr/bin/grep -Ev '^(/usr/lib/|/System/Library/)' | /usr/bin/grep -q .; then
+    echo "Node 連結了系統目錄以外的動態函式庫，無法安裝 root 守護；請使用官方獨立套件。" >&2
+    exit 1
+fi
 
-cat << PLIST_EOF > "$TARGET_PLIST"
+if [ "$EUID" -ne 0 ]; then
+    npm ci --ignore-scripts --no-audit --no-fund
+    echo "依賴已備妥；接著需要管理員認證來安裝系統服務。"
+    exec sudo /bin/bash "$DIR/install_macos_autowatcher.sh"
+fi
+if [ ! -f "$DIR/node_modules/@electron/asar/bin/asar.mjs" ]; then
+    echo "缺少鎖定依賴；請先以一般使用者執行 npm ci --ignore-scripts。" >&2
+    exit 1
+fi
+LABEL="com.antigravity.autolocalize"
+BASE="/Library/Application Support/Antigravity2TW"
+LOG_DIR="/Library/Logs/Antigravity2TW"
+PLIST="/Library/LaunchDaemons/$LABEL.plist"
+for target in "$BASE" "$LOG_DIR" "$PLIST"; do
+    if [ -L "$target" ]; then
+        echo "拒絕覆寫符號連結：$target" >&2
+        exit 1
+    fi
+done
+/usr/bin/install -d -o root -g wheel -m 755 "$BASE" "$LOG_DIR"
+/bin/chmod go-w "$BASE" "$LOG_DIR"
+RUNTIME="$(mktemp -d "$BASE/runtime.XXXXXX")"
+/bin/chmod 755 "$RUNTIME"
+/usr/bin/install -o root -g wheel -m 755 "$NODE_BIN" "$RUNTIME/node"
+for file in auto_localize_watcher.js localization_engine.js package.json package-lock.json; do
+    /usr/bin/install -o root -g wheel -m 644 "$DIR/$file" "$RUNTIME/$file"
+done
+for folder in dicts dicts_tw node_modules; do
+    /bin/cp -R "$DIR/$folder" "$RUNTIME/$folder"
+done
+/usr/sbin/chown -R root:wheel "$RUNTIME"
+/bin/chmod -R go-w "$RUNTIME"
+"$RUNTIME/node" "$RUNTIME/node_modules/@electron/asar/bin/asar.mjs" --version
+
+PLIST_TMP="$(mktemp "$BASE/launchd.XXXXXX")"
+cat > "$PLIST_TMP" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>${LABEL}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>${NODE_BIN}</string>
-        <string>${DIR}/auto_localize_watcher.js</string>
-    </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/opt/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    </dict>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>WatchPaths</key>
-    <array>
-        <string>/Applications/Antigravity.app/Contents/Info.plist</string>
-        <string>/Applications/Antigravity.app/Contents/Resources/app.asar</string>
-        <string>/Applications/Antigravity IDE.app/Contents/Info.plist</string>
-        <string>/Applications/Antigravity IDE.app/Contents/Resources/app.asar</string>
-        <string>${USER_HOME}/Applications/Antigravity.app/Contents/Info.plist</string>
-        <string>${USER_HOME}/Applications/Antigravity.app/Contents/Resources/app.asar</string>
-        <string>${USER_HOME}/Applications/Antigravity IDE.app/Contents/Info.plist</string>
-        <string>${USER_HOME}/Applications/Antigravity IDE.app/Contents/Resources/app.asar</string>
-    </array>
-    <key>StartInterval</key>
-    <integer>300</integer>
-    <key>ThrottleInterval</key>
-    <integer>30</integer>
-    <key>WorkingDirectory</key>
-    <string>${DIR}</string>
-    <key>StandardOutPath</key>
-    <string>${DIR}/autolocalize.log</string>
-    <key>StandardErrorPath</key>
-    <string>${DIR}/autolocalize.log</string>
-</dict>
-</plist>
+<plist version="1.0"><dict>
+<key>Label</key><string>$LABEL</string>
+<key>ProgramArguments</key><array><string>$RUNTIME/node</string><string>$RUNTIME/auto_localize_watcher.js</string></array>
+<key>WorkingDirectory</key><string>$RUNTIME</string>
+<key>EnvironmentVariables</key><dict><key>PATH</key><string>/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
+<key>RunAtLoad</key><true/>
+<key>WatchPaths</key><array>
+<string>/Applications/Antigravity.app</string>
+<string>/Applications/Antigravity.app/Contents/Resources/app.asar</string>
+<string>/Applications/Antigravity IDE.app</string>
+<string>/Applications/Antigravity IDE.app/Contents/Resources/app.asar</string>
+</array>
+<key>StartInterval</key><integer>300</integer>
+<key>ThrottleInterval</key><integer>30</integer>
+<key>StandardOutPath</key><string>$LOG_DIR/autolocalize.log</string>
+<key>StandardErrorPath</key><string>$LOG_DIR/autolocalize.log</string>
+</dict></plist>
 PLIST_EOF
+/usr/bin/plutil -lint "$PLIST_TMP"
 
-# 驗證 plist 格式合法性
-plutil -lint "$TARGET_PLIST" >/dev/null
-
-if [ "$IS_ROOT" -eq 1 ]; then
-    chown root:wheel "$TARGET_PLIST"
-    chmod 644 "$TARGET_PLIST"
-
-    # 若之前有安裝過使用者級 LaunchAgent，清理避免衝突雙重執行
-    AGENT_PLIST="$USER_HOME/Library/LaunchAgents/$PLIST_NAME"
-    if [ -f "$AGENT_PLIST" ]; then
-        su - "$ACTUAL_USER" -c "launchctl bootout gui/\$(id -u) '$AGENT_PLIST' 2>/dev/null || launchctl unload '$AGENT_PLIST' 2>/dev/null || true" 2>/dev/null || true
-        rm -f "$AGENT_PLIST"
-        echo "🧹 已清理舊版使用者級 LaunchAgent。"
+ACTUAL_USER="${SUDO_USER:-$(/usr/bin/stat -f%Su /dev/console)}"
+AGENT_BACKUP=""
+if [ "$ACTUAL_USER" != root ] && [ "$ACTUAL_USER" != loginwindow ]; then
+    ACTUAL_UID="$(id -u "$ACTUAL_USER")"
+    USER_DIR="$(/usr/bin/dscl . -read "/Users/$ACTUAL_USER" NFSHomeDirectory | /usr/bin/sed 's/^NFSHomeDirectory: //')"
+    AGENT="$USER_DIR/Library/LaunchAgents/$LABEL.plist"
+    /bin/launchctl bootout "gui/$ACTUAL_UID/$LABEL" 2>/dev/null || true
+    if [ -f "$AGENT" ]; then
+        AGENT_BACKUP="$AGENT.disabled-$(date +%Y%m%d%H%M%S)"
+        /bin/mv "$AGENT" "$AGENT_BACKUP"
     fi
-
-    launchctl bootout system/$LABEL 2>/dev/null || launchctl unload "$TARGET_PLIST" 2>/dev/null || true
-    launchctl bootstrap system "$TARGET_PLIST" 2>/dev/null || launchctl load "$TARGET_PLIST"
-    echo "🎉 LaunchDaemon 系統級守護服務已成功註冊並啟動！"
-else
-    chmod 644 "$TARGET_PLIST"
-    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || launchctl unload "$TARGET_PLIST" 2>/dev/null || true
-    launchctl bootstrap "gui/$(id -u)" "$TARGET_PLIST" 2>/dev/null || launchctl load "$TARGET_PLIST"
-    echo "🎉 LaunchAgent 使用者級守護服務已成功安裝並啟動！"
-    echo "💡 提示：若希望在更新時 100% 靜默免輸密碼，建議執行「點兩下安裝macOS背景守護.command」以管理員授權升級為 LaunchDaemon。"
 fi
-
-echo "日後 Antigravity IDE 官方更新時，將自動於背景為新版本重新完成繁體中文化。"
-echo "=========================================================="
+/bin/launchctl bootout "system/$LABEL" 2>/dev/null || true
+if [ -f "$PLIST" ]; then
+    /bin/cp "$PLIST" "$BASE/previous-launchd.plist"
+fi
+/usr/bin/install -o root -g wheel -m 644 "$PLIST_TMP" "$PLIST"
+/bin/rm -f "$PLIST_TMP"
+/bin/launchctl enable "system/$LABEL"
+if ! /bin/launchctl bootstrap system "$PLIST"; then
+    /bin/mv "$PLIST" "$BASE/failed-launchd-$(date +%Y%m%d%H%M%S).plist"
+    if [ -f "$BASE/previous-launchd.plist" ]; then
+        /usr/bin/install -o root -g wheel -m 644 "$BASE/previous-launchd.plist" "$PLIST"
+        /bin/launchctl bootstrap system "$PLIST" || true
+    fi
+    if [ -n "$AGENT_BACKUP" ]; then
+        /bin/mv "$AGENT_BACKUP" "$AGENT"
+        /bin/launchctl bootstrap "gui/$ACTUAL_UID" "$AGENT" || true
+    fi
+    echo "系統服務註冊失敗；已嘗試恢復先前服務，請檢查 launchctl 狀態。" >&2
+    exit 1
+fi
+/bin/launchctl print "system/$LABEL"
+echo "已註冊系統服務；觸發後以日誌與 exit code 確認套用結果。"
+echo "日誌：$LOG_DIR/autolocalize.log"
+echo "macOS 若仍拒絕 App Management，需在系統設定授權；root 不保證繞過系統保護。"
+echo "舊服務設定與歷次 runtime 副本保留於原路徑及 $BASE，供復原。"

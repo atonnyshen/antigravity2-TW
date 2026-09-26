@@ -40,6 +40,8 @@ if (Test-Path "./localization_engine.js") {
 # 3. 執行中文化注入
 Write-Host "[1/2] 正在注入繁體中文語系..." -ForegroundColor Green
 Set-Location $workDir
+npm ci --ignore-scripts --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { throw "安裝鎖定依賴失敗" }
 node localization_engine.js --tw --brand-title english
 
 if ($LASTEXITCODE -ne 0) {

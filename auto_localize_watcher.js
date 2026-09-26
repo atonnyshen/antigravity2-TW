@@ -1,386 +1,231 @@
 #!/usr/bin/env node
-/**
- * Antigravity IDE 自動版本變化監控、自癒與繁體中文化守護程式 (v3.1 桌面版專用)
- * 支援 macOS 與 Windows
- */
+'use strict';
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 const os = require('os');
+const crypto = require('crypto');
+const { execFileSync } = require('child_process');
 
 const DIR = __dirname;
 const IS_MAC = process.platform === 'darwin';
-const IS_WIN = process.platform === 'win32';
+const ROOT = IS_MAC && process.getuid() === 0;
+const SIGNATURE = '/* --- ANTIGRAVITY CHINESE LOCALIZATION START --- */';
+const NEEDLE = '命令選擇區';
 
-const LOG_FILE = path.join(DIR, 'autolocalize.log');
-const LOCK_FILE = path.join(os.tmpdir(), 'antigravity-autolocalize.lock');
-const STABLE_SAMPLE_COUNT = 3;
-const STABLE_SAMPLE_INTERVAL_MS = 1000;
-const STABLE_WAIT_TIMEOUT_MS = 30000;
-
-function log(msg) {
-    const time = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-    const line = `[${time}] ${msg}`;
+function log(message) {
+    const line = '[' + new Date().toISOString() + '] ' + message;
     console.log(line);
-    // 終端機互動執行時手動寫入檔案；若在 launchd 下（非 TTY 且輸出已被重定向至日誌檔）避免雙重寫入
-    if (process.stdout.isTTY) {
-        try {
-            fs.appendFileSync(LOG_FILE, line + '\n', 'utf8');
-        } catch (e) {}
+    if (!process.env.XPC_SERVICE_NAME) {
+        try { fs.appendFileSync(path.join(DIR, 'autolocalize.log'), line + '\n'); } catch {}
     }
 }
 
-function sleepMs(milliseconds) {
-    const shared = new SharedArrayBuffer(4);
-    Atomics.wait(new Int32Array(shared), 0, 0, milliseconds);
+function digest(data) {
+    return crypto.createHash('sha256').update(data).digest('hex');
 }
 
-function waitForStableFile(filePath) {
-    const deadline = Date.now() + STABLE_WAIT_TIMEOUT_MS;
-    let previous = null;
-    let stableSamples = 0;
-
-    while (Date.now() <= deadline) {
+function waitForStableFile(file, { interval = 1000, timeout = 30000, samples = 3 } = {}) {
+    const start = Date.now();
+    let previous = '';
+    let count = 0;
+    while (Date.now() - start <= timeout) {
         try {
-            const stat = fs.statSync(filePath);
-            const current = `${stat.size}:${stat.mtimeMs}:${stat.ino || ''}`;
-            if (current === previous) {
-                stableSamples++;
-            } else {
-                previous = current;
-                stableSamples = 1;
-            }
-            if (stableSamples >= STABLE_SAMPLE_COUNT) return true;
-        } catch (e) {
-            stableSamples = 0;
-            previous = null;
-        }
-        sleepMs(STABLE_SAMPLE_INTERVAL_MS);
+            const stat = fs.statSync(file);
+            const key = [stat.size, stat.mtimeMs, stat.ino].join(':');
+            count = stat.size > 0 && key === previous ? count + 1 : 1;
+            previous = key;
+            if (stat.size > 0 && count >= samples) return;
+        } catch { count = 0; previous = ''; }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, interval);
     }
-    return false;
+    throw new Error('app.asar 尚未穩定，等待下次排程重試。');
 }
 
-function acquireRunLock() {
+function acquireLock(lockPath) {
     try {
-        const fd = fs.openSync(LOCK_FILE, 'wx');
-        fs.writeFileSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
-        return fd;
-    } catch (e) {
-        if (e.code === 'EEXIST') {
-            try {
-                const stat = fs.statSync(LOCK_FILE);
-                const stale = Date.now() - stat.mtimeMs > 2 * 60 * 60 * 1000;
-                if (stale) {
-                    fs.unlinkSync(LOCK_FILE);
-                    const fd = fs.openSync(LOCK_FILE, 'wx');
-                    fs.writeFileSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
-                    return fd;
-                }
-            } catch (staleError) {}
-            log('ℹ️ 已有另一個自動中文化程序執行中，略過本次觸發。');
+        fs.mkdirSync(lockPath, { mode: 0o700 });
+    } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        const stat = fs.lstatSync(lockPath);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('鎖定路徑不是一般目錄。');
+        let pid;
+        try { pid = Number(fs.readFileSync(path.join(lockPath, 'pid'), 'utf8')); } catch {}
+        if (Number.isInteger(pid) && pid > 0) {
+            try { process.kill(pid, 0); return null; } catch (e) {
+                if (e.code !== 'ESRCH') return null;
+            }
+        } else if (Date.now() - stat.mtimeMs < 30000) {
             return null;
         }
-        log(`⚠️ 無法建立自動中文化互斥鎖，略過本次觸發: ${e.message}`);
-        return null;
+        fs.rmSync(lockPath, { recursive: true });
+        return acquireLock(lockPath);
     }
-}
-
-function releaseRunLock(fd) {
-    if (fd === null || fd === undefined) return;
-    try { fs.closeSync(fd); } catch (e) {}
-    try { fs.unlinkSync(LOCK_FILE); } catch (e) {}
-}
-
-function canWriteTarget(appInfo) {
-    if (!IS_MAC || (process.getuid && process.getuid() === 0)) return true;
-    const probe = path.join(path.dirname(appInfo.asarPath), `.autolocalize-write-test-${process.pid}`);
-    try {
-        const fd = fs.openSync(probe, 'wx');
-        fs.closeSync(fd);
-        fs.unlinkSync(probe);
-        return true;
-    } catch (e) {
-        try { fs.unlinkSync(probe); } catch (cleanupError) {}
-        log('⚠️ 目前是使用者層 LaunchAgent，無法寫入 /Applications 中的 Antigravity。已略過本次建置；請用「點兩下安裝macOS背景守護.command」改裝系統級 LaunchDaemon。');
-        return false;
-    }
-}
-
-function notify(title, message) {
-    try {
-        if (IS_MAC) {
-            const safeTitle = title.replace(/"/g, '\\"');
-            const safeMsg = message.replace(/"/g, '\\"');
-            const osaCmd = `display notification "${safeMsg}" with title "${safeTitle}" sound name "Glass"`;
-            // 若以 root (LaunchDaemon) 執行，透過 launchctl asuser 委派給當前 GUI 登入使用者顯示通知
-            if (process.getuid && process.getuid() === 0) {
-                try {
-                    const consoleUser = execSync('stat -f%Su /dev/console', { encoding: 'utf8' }).trim();
-                    if (consoleUser && consoleUser !== 'root') {
-                        const uid = execSync(`id -u "${consoleUser}"`, { encoding: 'utf8' }).trim();
-                        execSync(`launchctl asuser "${uid}" osascript -e '${osaCmd}'`);
-                        return;
-                    }
-                } catch (e) {}
-            }
-            execSync(`osascript -e '${osaCmd}'`);
-        } else if (IS_WIN) {
-            const psScript = `
-[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-$template = [Windows.UI.Notifications.ToastTemplateType]::ToastText02
-$xml = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent($template)
-$textNodes = $xml.GetElementsByTagName("text")
-$textNodes.Item(0).AppendChild($xml.CreateTextNode("${title}")) | Out-Null
-$textNodes.Item(1).AppendChild($xml.CreateTextNode("${message}")) | Out-Null
-$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Antigravity")
-$notifier.Show([Windows.UI.Notifications.ToastNotification]::new($xml))
-`;
-            execSync(`powershell -WindowStyle Hidden -Command "${psScript.replace(/\r?\n/g, ' ')}"`, { stdio: 'ignore' });
-        }
-    } catch (e) {}
-}
-
-function getCustomEnv() {
-    const nodeDir = path.dirname(process.execPath);
-    const extraPaths = IS_MAC
-        ? ['/usr/local/bin', '/opt/homebrew/bin', '/opt/local/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin']
-        : [];
-    const currentPaths = (process.env.PATH || '').split(path.delimiter);
-    const combined = Array.from(new Set([nodeDir, ...extraPaths, ...currentPaths])).filter(Boolean);
-    return Object.assign({}, process.env, {
-        PATH: combined.join(path.delimiter)
-    });
-}
-
-function getUserHome() {
-    if (IS_MAC && process.getuid && process.getuid() === 0) {
-        try {
-            const consoleUser = execSync('stat -f%Su /dev/console', { encoding: 'utf8' }).trim();
-            if (consoleUser && consoleUser !== 'root') {
-                return path.join('/Users', consoleUser);
-            }
-        } catch (e) {}
-    }
-    return os.homedir();
+    fs.writeFileSync(path.join(lockPath, 'pid'), String(process.pid), { flag: 'wx' });
+    return () => fs.rmSync(lockPath, { recursive: true, force: true });
 }
 
 function getAppInfo() {
+    let candidates;
     if (IS_MAC) {
-        const userHome = getUserHome();
-        const macCandidates = [
-            '/Applications/Antigravity.app',
-            '/Applications/Antigravity IDE.app',
-            path.join(userHome, 'Applications', 'Antigravity.app'),
-            path.join(userHome, 'Applications', 'Antigravity IDE.app')
-        ];
-        for (const cand of macCandidates) {
-            const asarPath = path.join(cand, 'Contents', 'Resources', 'app.asar');
-            if (fs.existsSync(asarPath)) {
-                const appSupport = path.join(userHome, 'Library', 'Application Support', 'Antigravity');
-                return { appPath: cand, asarPath, appSupport };
-            }
-        }
-        const defaultApp = '/Applications/Antigravity.app';
-        const defaultAsar = path.join(defaultApp, 'Contents', 'Resources', 'app.asar');
-        const defaultSupport = path.join(userHome, 'Library', 'Application Support', 'Antigravity');
-        return { appPath: defaultApp, asarPath: defaultAsar, appSupport: defaultSupport };
-    } else if (IS_WIN) {
-        const candidates = [
+        candidates = ['/Applications/Antigravity.app', '/Applications/Antigravity IDE.app'];
+        if (!ROOT) candidates.push(
+            path.join(os.homedir(), 'Applications', 'Antigravity.app'),
+            path.join(os.homedir(), 'Applications', 'Antigravity IDE.app')
+        );
+    } else {
+        candidates = [
             process.env.ANTIGRAVITY_INSTALL_DIR,
-            process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs', 'antigravity') : null,
-            'C:\\Program Files\\Antigravity',
-            'C:\\Programs\\Antigravity'
+            process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', 'antigravity'),
+            'C:\\Program Files\\Antigravity', 'C:\\Programs\\Antigravity'
         ].filter(Boolean);
-
-        for (const c of candidates) {
-            const asar = path.join(c, 'resources', 'app.asar');
-            if (fs.existsSync(asar)) {
-                const appSupport = process.env.APPDATA ? path.join(process.env.APPDATA, 'Antigravity') : null;
-                return { appPath: c, asarPath: asar, appSupport };
-            }
-        }
-        return { appPath: null, asarPath: null, appSupport: null };
     }
-    return { appPath: null, asarPath: null, appSupport: null };
+    for (const appPath of candidates) {
+        const asarPath = path.join(appPath, ...(IS_MAC ? ['Contents', 'Resources'] : ['resources']), 'app.asar');
+        if (fs.existsSync(asarPath)) return { appPath, asarPath };
+    }
+    return null;
 }
 
-function cleanElectronCache(appSupportDir) {
-    if (!appSupportDir || !fs.existsSync(appSupportDir)) return;
-    const cacheDirs = ['Cache', 'Code Cache', 'GPUCache', 'DawnWebGPUCache', 'DawnGraphiteCache'];
-    let cleaned = 0;
-    for (const cName of cacheDirs) {
-        const target = path.join(appSupportDir, cName);
-        if (fs.existsSync(target)) {
-            try {
-                fs.rmSync(target, { recursive: true, force: true });
-                cleaned++;
-            } catch (e) {}
+function recipeHash() {
+    const files = ['localization_engine.js', 'auto_localize_watcher.js', 'package-lock.json'];
+    for (const folder of ['dicts', 'dicts_tw']) {
+        for (const name of fs.readdirSync(path.join(DIR, folder)).sort()) {
+            if (name.endsWith('.json')) files.push(path.join(folder, name));
         }
     }
-    if (cleaned > 0) {
-        log(`🧹 已自動清理 ${cleaned} 個 Electron 快取目錄，防止舊版 bytecode 殘留。`);
-    }
+    const hash = crypto.createHash('sha256');
+    for (const file of files) hash.update(file).update(fs.readFileSync(path.join(DIR, file)));
+    return hash.digest('hex');
 }
 
-function checkAndLocalizeApp(appInfo) {
-    const { appPath, asarPath, appSupport } = appInfo;
-    if (!asarPath || !fs.existsSync(asarPath)) {
+function isLocalized(buffer) {
+    return buffer.includes(Buffer.from(SIGNATURE)) || buffer.includes(Buffer.from(NEEDLE));
+}
+
+function ensureRegularTarget(file) {
+    // Refuse symlink destinations before privileged backup/replacement.
+    if (fs.realpathSync(path.dirname(file)) !== path.dirname(file)) {
+        throw new Error('拒絕經由符號連結修改應用程式資源目錄。');
+    }
+    try {
+        if (!fs.lstatSync(file).isFile()) throw new Error('拒絕修改非一般檔案：' + file);
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
+
+function buildArchive(stageDir) {
+    execFileSync(process.execPath, [
+        path.join(DIR, 'localization_engine.js'), '--tw', '--brand-title', 'english',
+        '--install-dir', stageDir, '--no-kill', '--staging'
+    ], { cwd: DIR, stdio: 'inherit', timeout: 180000 });
+}
+
+function signApp(appPath) {
+    if (!IS_MAC) return;
+    execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'pipe', timeout: 120000 });
+    execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], { stdio: 'pipe', timeout: 30000 });
+}
+
+function checkAndLocalizeApp(appInfo, {
+    stateDir = path.join(DIR, '.watcher-state'), build = buildArchive,
+    sign = signApp, wait = waitForStableFile, recipe = recipeHash()
+} = {}) {
+    const { appPath, asarPath } = appInfo;
+    ensureRegularTarget(asarPath);
+    wait(asarPath);
+    const original = fs.readFileSync(asarPath);
+    const originalHash = digest(original);
+    const sourceStat = fs.statSync(asarPath);
+    const localized = isLocalized(original);
+    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    const statePath = path.join(stateDir, digest(appPath) + '.json');
+    let previous = {};
+    try { previous = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch {}
+    if (localized && previous.recipe === recipe && previous.output === originalHash) {
+        log('已是目前版本的繁中套件，略過。');
         return false;
     }
 
-    // 等待 ShipIt 的原子替換及寫入完成；只延遲小檔案不足以避免競爭。
-    if (!waitForStableFile(asarPath)) {
-        log('⚠️ app.asar 在 30 秒內沒有達到穩定狀態，延後到下次 launchd 觸發再處理。');
-        return false;
-    }
-
-    const asarBuf = fs.readFileSync(asarPath);
-    const needle = Buffer.from('命令選擇區', 'utf8');
-    const isLocalized = asarBuf.indexOf(needle) !== -1;
-
-    if (!isLocalized) {
-        log('⚡ 偵測到 Antigravity 官方更新（新版英文官方包），啟動自動中文化流程...');
-
-        if (!canWriteTarget(appInfo)) return false;
-
-        const bakAsar = asarPath + '.bak';
-        try {
-            fs.copyFileSync(asarPath, bakAsar);
-            log('📦 已將最新官方英文版原檔備份至 app.asar.bak');
-        } catch (e) {
-            log(`⚠️ 備份 app.asar.bak 提示: ${e.message}`);
-        }
-
-        // 使用系統臨時目錄建立隔離暫存建置環境，避免污染 git 工作目錄
-        const stageDir = path.join(os.tmpdir(), `antigravity_staging_${Date.now()}`);
-        if (fs.existsSync(stageDir)) {
-            try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch (e) {}
-        }
-        fs.mkdirSync(stageDir, { recursive: true });
-
+    const release = acquireLock(path.join(stateDir, 'run.lock'));
+    if (!release) { log('已有守護程序執行中，略過。'); return false; }
+    let stageDir;
+    let replacementDir;
+    let replaced = false;
+    let resultHash;
+    try {
+        stageDir = fs.mkdtempSync(path.join(stateDir, 'stage-'));
         const stageAsar = path.join(stageDir, 'app.asar');
-        fs.copyFileSync(asarPath, stageAsar);
+        fs.writeFileSync(stageAsar, original, { flag: 'wx' });
+        const unpacked = asarPath + '.unpacked';
+        if (fs.existsSync(unpacked)) fs.cpSync(unpacked, stageAsar + '.unpacked', { recursive: true });
+        log(localized ? '套用新的字典／引擎修訂。' : '偵測到官方更新，開始繁中化。');
+        build(stageDir);
+        const result = fs.readFileSync(stageAsar);
+        resultHash = digest(result);
+        if (!result.includes(Buffer.from(NEEDLE))) throw new Error('建置缺少繁中特徵詞，保留原檔。');
 
-        const unpackedDir = asarPath + '.unpacked';
-        if (fs.existsSync(unpackedDir)) {
-            const stageUnpacked = stageAsar + '.unpacked';
-            try {
-                fs.cpSync(unpackedDir, stageUnpacked, { recursive: true });
-            } catch (e) {
-                log(`⚠️ 複製 app.asar.unpacked 提示: ${e.message}`);
-            }
+        // ShipIt may finish another update while the archive is being built.
+        if (digest(fs.readFileSync(asarPath)) !== originalHash) {
+            throw new Error('建置期間官方包已改變，放棄本次產物，等待下次觸發。');
         }
-
-        const engineScript = path.join(DIR, 'localization_engine.js');
-        const customEnv = getCustomEnv();
-
-        try {
-            execSync(`"${process.execPath}" "${engineScript}" --tw --brand-title english --install-dir "${stageDir}" --no-kill`, {
-                cwd: DIR,
-                stdio: 'inherit',
-                env: customEnv
-            });
-        } catch (buildErr) {
-            log(`❌ 暫存建置失敗，取消置換以保護原始檔案完整性: ${buildErr.message}`);
-            try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch (e) {}
-            return false;
+        ensureRegularTarget(asarPath);
+        if (!localized) {
+            ensureRegularTarget(asarPath + '.bak');
         }
-
-        if (!fs.existsSync(stageAsar)) {
-            log('❌ 暫存建置未產出 app.asar，取消置換。');
-            try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch (e) {}
-            return false;
+        replacementDir = fs.mkdtempSync(path.join(path.dirname(asarPath), '.autolocalize-'));
+        const candidate = path.join(replacementDir, 'app.asar');
+        fs.writeFileSync(candidate, result, { mode: sourceStat.mode & 0o777, flag: 'wx' });
+        if (ROOT) fs.chownSync(candidate, sourceStat.uid, sourceStat.gid);
+        if (!localized) {
+            const backup = path.join(replacementDir, 'official.bak');
+            fs.writeFileSync(backup, original, { mode: sourceStat.mode & 0o777, flag: 'wx' });
+            if (ROOT) fs.chownSync(backup, sourceStat.uid, sourceStat.gid);
+            fs.renameSync(backup, asarPath + '.bak');
         }
-
-        const stageBuf = fs.readFileSync(stageAsar);
-        if (stageBuf.indexOf(needle) === -1) {
-            log('❌ 暫存 app.asar 未包含繁中特徵詞，取消置換。');
-            try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch (e) {}
-            return false;
-        }
-
-        let replaced = false;
-        const tmpAsar = asarPath + '.tmp';
-
-        // 嘗試方式 1: 直接檔案系統原子置換 (適用於具寫入權限或位於 ~/Applications 之情境)
-        try {
-            if (fs.existsSync(tmpAsar)) {
-                try { fs.unlinkSync(tmpAsar); } catch (e) {}
-            }
-            fs.copyFileSync(stageAsar, tmpAsar);
-            fs.renameSync(tmpAsar, asarPath);
-            replaced = true;
-            log('✅ 繁體中文 app.asar 原子置換完成 (標準檔案系統存取)。');
-        } catch (copyErr) {
-            log(`⚠️ 直接置換受限 (${copyErr.code || copyErr.message})，正在嘗試特權或系統指令備援...`);
-        }
-
-        // 嘗試方式 2: 若直接置換失敗且為 macOS，嘗試 root cp 或 osascript 管理員授權提權
-        if (!replaced && IS_MAC) {
-            try {
-                if (process.getuid && process.getuid() === 0) {
-                    execSync(`cp -f "${stageAsar}" "${asarPath}"`);
-                    replaced = true;
-                    log('✅ 繁體中文 app.asar 置換完成 (Root LaunchDaemon 權限)。');
-                } else if (process.stdout.isTTY) {
-                    log('⚡ 調用 macOS 原生授權對話框以完成 /Applications 應用程式更新...');
-                    const prompt = 'Antigravity IDE 官方版本更新，正在為新版本套用繁體中文化。請授權以替換語言套件：';
-                    const shellCmd = `cp -f "${stageAsar}" "${asarPath}" && (xattr -d -r com.apple.quarantine "${appPath}" 2>/dev/null || true) && (codesign --force --deep --sign - "${appPath}" 2>/dev/null || true)`;
-                    const escapedShellCmd = shellCmd.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-                    const osaScript = `do shell script "${escapedShellCmd}" with prompt "${prompt}" with administrator privileges`;
-                    execSync(`osascript -e "${osaScript.replace(/"/g, '\\"')}"`);
-                    replaced = true;
-                    log('✅ 繁體中文 app.asar 置換完成 (管理員授權提權)。');
-                } else {
-                    log('❌ 背景 LaunchAgent 沒有管理員權限，未嘗試開啟互動式授權對話框。');
-                }
-            } catch (privErr) {
-                log(`❌ 管理員授權或系統指令置換失敗: ${privErr.message}`);
-            }
-        }
-
-        try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch (e) {}
-        cleanElectronCache(appSupport);
-
-        if (IS_MAC && appPath && replaced) {
-            try {
-                execSync(`xattr -d -r com.apple.quarantine "${appPath}" 2>/dev/null || true`);
-                execSync(`codesign --force --deep --sign - "${appPath}" 2>/dev/null || true`);
-                log('✅ 已完成 macOS ad-hoc 程式碼簽署並移除隔離屬性。');
-            } catch (e) {
-                log(`⚠️ 程式碼簽署提示: ${e.message}`);
-            }
-        }
-
+        if (digest(fs.readFileSync(asarPath)) !== originalHash) throw new Error('置換前官方包已更新，取消套用。');
+        fs.renameSync(candidate, asarPath);
+        replaced = true;
+        sign(appPath);
+        const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
+        fs.writeFileSync(stateTmp, JSON.stringify({ recipe, output: digest(result), updatedAt: new Date().toISOString() }) + '\n');
+        fs.renameSync(stateTmp, statePath);
+        log('繁中套件已套用並驗證；已開啟的視窗須重新啟動後載入。');
+        return true;
+    } catch (error) {
         if (replaced) {
-            log('🎉 Antigravity 自動繁體中文化全流程處理完畢！');
-            notify('Antigravity 自動中文化', '偵測到 Antigravity IDE 官方更新，已自動為新版本完成繁中化！請重啟應用程式生效。');
-            return true;
-        } else {
-            log('❌ 未能成功置換 app.asar，繁中化未套用。');
-            return false;
+            try {
+                if (digest(fs.readFileSync(asarPath)) !== resultHash) {
+                    throw new Error('套用後官方包再次改變，保留新檔，不覆蓋還原。');
+                }
+                const rollback = path.join(replacementDir, 'rollback.asar');
+                fs.writeFileSync(rollback, original, { flag: 'wx', mode: sourceStat.mode & 0o777 });
+                if (ROOT) fs.chownSync(rollback, sourceStat.uid, sourceStat.gid);
+                fs.renameSync(rollback, asarPath);
+                sign(appPath);
+                log('套用未通過，已還原原始 app.asar。');
+            } catch (rollbackError) {
+                log('還原／重新簽署失敗：' + rollbackError.message);
+            }
         }
+        throw error;
+    } finally {
+        if (stageDir) fs.rmSync(stageDir, { recursive: true, force: true });
+        if (replacementDir) fs.rmSync(replacementDir, { recursive: true, force: true });
+        release();
     }
-    return false;
 }
 
 function main() {
-    if (fs.existsSync(path.join(DIR, '.disable_autowatcher'))) {
-        log('ℹ️ 偵測到停用標記檔 (.disable_autowatcher)，略過本次自動檢查。');
-        return;
-    }
-    const lockFd = acquireRunLock();
-    if (lockFd === null) return;
     try {
+        if (fs.existsSync(path.join(DIR, '.disable_autowatcher'))) return;
         const appInfo = getAppInfo();
+        if (!appInfo) { log('尚未找到 Antigravity，等待下次排程。'); return; }
         checkAndLocalizeApp(appInfo);
-    } catch (err) {
-        log(`❌ 自動中文化監控執行異常: ${err.message}`);
+    } catch (error) {
+        log('自動繁中化失敗，稍後重試：' + error.message);
         process.exitCode = 1;
-    } finally {
-        releaseRunLock(lockFd);
     }
 }
 
-main();
+if (require.main === module) main();
+module.exports = { checkAndLocalizeApp, waitForStableFile, acquireLock, isLocalized, digest };

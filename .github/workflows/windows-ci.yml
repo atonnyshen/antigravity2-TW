@@ -1,4 +1,4 @@
-name: Windows Compatibility CI
+name: Cross-platform regression tests
 
 on:
   push:
@@ -6,58 +6,44 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+
 jobs:
-  test-windows:
-    runs-on: windows-latest
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Validate batch scripts syntax and encoding
-        shell: cmd
+          node-version: '22.17.0'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node --check localization_engine.js
+      - run: node --check auto_localize_watcher.js
+      - run: npm test
+      - name: Validate shell syntax
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
-          chcp 65001 > nul
-          type "點兩下安裝繁體中文.bat" > nul
-          type "點兩下還原官方英文.bat" > nul
-          type "點兩下安裝Windows背景守護.bat" > nul
-          type "點兩下卸載Windows背景守護.bat" > nul
-          type "點兩下還原VSCode擴充官方英文.bat" > nul
-          echo Batch scripts encoding and syntax check passed!
-
-      - name: Validate PowerShell installer syntax
+          for file in *.sh *.command; do bash -n "$file"; done
+      - name: Parse all PowerShell installers
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-              "install_windows.ps1",
-              [ref]$null,
-              [ref]$errors
-          )
-          if ($errors.Count -gt 0) {
-              Write-Error "PowerShell syntax errors detected: $errors"
-              exit 1
+          foreach ($file in Get-ChildItem *.ps1) {
+            $errors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$null, [ref]$errors)
+            if ($errors.Count -gt 0) { throw "$file : $errors" }
           }
-          Write-Host "PowerShell script syntax check passed!"
-
-      - name: Validate localization dictionaries JSON integrity via Node.js
+      - name: Check batch entrypoints exist (not runtime validation)
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          node -e "
-          const fs = require('fs');
-          const dirs = ['dicts', 'dicts_tw'];
-          for (const d of dirs) {
-            for (const f of fs.readdirSync(d)) {
-              if (f.endsWith('.json')) {
-                const p = d + '/' + f;
-                JSON.parse(fs.readFileSync(p, 'utf8'));
-                console.log('Valid JSON:', p);
-              }
-            }
+          foreach ($file in @('點兩下安裝繁體中文.bat', '點兩下還原官方英文.bat', '點兩下安裝Windows背景守護.bat', '點兩下卸載Windows背景守護.bat')) {
+            if (-not (Test-Path $file)) { throw "Missing $file" }
           }
-          console.log('All dictionary JSON files are 100% valid!');
-          "

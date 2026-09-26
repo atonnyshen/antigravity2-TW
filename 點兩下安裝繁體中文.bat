@@ -20,6 +20,8 @@ if "%CHOICE_VAL%"=="3" set "BRAND_ARG=--brand-title translated"
 echo.
 echo [1/2] 正在注入繁體中文語系與資源...
 cd /d "%~dp0"
+call npm ci --ignore-scripts --no-audit --no-fund
+if errorlevel 1 exit /b 1
 node localization_engine.js --tw %BRAND_ARG% %*
 
 if %errorlevel% neq 0 (
