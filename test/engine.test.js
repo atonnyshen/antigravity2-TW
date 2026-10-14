@@ -69,3 +69,57 @@ test('real asar CLI: paths with spaces, injection, unpacked data, repeatability'
         assert.deepEqual(fs.readFileSync(archive + '.bak'), original);
     }
 });
+
+test('FastPick and split text nodes are properly localized', () => {
+    const js = generateJs();
+    const prefix = js.slice(0, js.indexOf('    const observer = new MutationObserver'));
+    const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    // Composite node
+    const tc1 = { nodeType: 3, nodeValue: 'Show ' };
+    const tc2 = { nodeType: 3, nodeValue: ' more...' };
+    const compositeEl = {
+        nodeType: 1,
+        tagName: 'DIV',
+        textContent: 'Show 10 more...',
+        childNodes: [tc1, tc2],
+        getAttribute: () => null,
+        closest: () => false,
+        getRootNode: () => ({})
+    };
+    translateNode(compositeEl);
+    assert.equal(tc1.nodeValue, '顯示另外 ');
+    assert.equal(tc2.nodeValue, ' 個...');
+
+    // Single text child composite node
+    const tcSingle = { nodeType: 3, nodeValue: 'Show 5 more...' };
+    const compositeElSingle = {
+        nodeType: 1,
+        tagName: 'DIV',
+        textContent: 'Show 5 more...',
+        childNodes: [tcSingle],
+        getAttribute: () => null,
+        closest: () => false,
+        getRootNode: () => ({})
+    };
+    translateNode(compositeElSingle);
+    assert.equal(tcSingle.nodeValue, '顯示另外 5 個...');
+
+    // Split text node
+    const parent = {
+        nodeType: 1,
+        textContent: 'Show 7 more...',
+        getAttribute: attr => attr === 'value' ? 'fastpick-show-more:7' : null,
+        closest: () => false,
+        getRootNode: () => ({})
+    };
+    const splitText1 = { nodeType: 3, nodeValue: 'Show ', parentElement: parent };
+    const splitText2 = { nodeType: 3, nodeValue: ' more...', parentElement: parent };
+    translateNode(splitText1);
+    translateNode(splitText2);
+    assert.equal(splitText1.nodeValue, '顯示另外 ');
+    assert.equal(splitText2.nodeValue, ' 個...');
+});
+

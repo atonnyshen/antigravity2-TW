@@ -181,22 +181,36 @@ function generateJs() {
     const USE_TW = ${USE_TW ? "true" : "false"};
     const map = new Map(Object.entries(DICT_PLACEHOLDER));
     const lowerMap = new Map();
-    for (const [k, v] of map.entries()) lowerMap.set(k.toLowerCase(), v);
+    const LOWER_WORDS_EXCLUDE = new Set(['on', 'in', 'to', 'at', 'by', 'for', 'with', 'as', 'system', 'review', 'active', 'browser', 'global', 'including', 'and', 'or', 'file', 'files', 'help', 'app', 'plan', 'search']);
+    for (const [k, v] of map.entries()) {
+        const lowerK = k.toLowerCase();
+        if (LOWER_WORDS_EXCLUDE.has(lowerK) && k !== lowerK) {
+            continue;
+        }
+        lowerMap.set(lowerK, v);
+    }
     
     const longEntries = REPLACEMENT_ENTRIES_PLACEHOLDER;
     const translatedValues = new WeakMap();
 
-    // 轻量级安全隔离：跳过脚本、样式、代码块(pre/code)、编辑器区域以及终端容器
+    // 輕量級安全隔離：跳過腳本、樣式、程式碼區塊 (pre/code)
     const SKIP_TAGS = ['SCRIPT', 'STYLE', 'PRE', 'CODE'];
 
-    // 代码及编辑器隔离选择器：排除代码块、编辑器、文件预览器、代码差异区、终端及语法高亮 Token
-    const CODE_ISOLATION_SELECTOR = 'pre, code, .monaco-editor, .cm-editor, .cm-line, [contenteditable="true"], .terminal, .xterm, .code-line, .code-block, .line-content, [aria-label="File Viewer"], [data-file-uri], [class*="diffEditor"], .token, .hljs, [class*="mtk"]';
+    // 程式碼、富文字輸入框及對話內容隔離選擇器：排除 Lexical 輸入框、使用者訊息、AI 回應內文、思考內容、程式碼區塊、終端機及檔案路徑
+    const CODE_ISOLATION_SELECTOR = 'pre, code, .monaco-editor, .cm-editor, .cm-line, [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-lexical-editor], .terminal, .xterm, .code-line, .code-block, .line-content, [aria-label="File Viewer"], [data-file-uri], [data-uri], [class*="diffEditor"], .token, .hljs, [class*="mtk"], .font-mono, [data-quotable-inline="true"], .context-scope-mention, [data-testid="file-title-name"], [data-testid="entity-pill"], [data-project-card="true"], [data-testid="conversation-row-sidebar"] span.truncate, [translate="no"], .notranslate, .md-divider-spacing, .cursor-edit, [data-testid="user-input-step"] [data-quotable="true"], [data-testid="user-input-step"] .whitespace-pre-wrap, [data-testid="planner-response-text"], [data-testid="thinking-collapsible-trigger"] + div, [data-testid="thinking-collapsible-trigger"] ~ div';
 
     function isCodeOrEditor(node) {
         try {
             if (!node) return false;
             let el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+            if (!el) return false;
+            if (el.isContentEditable) return true;
+            const active = (typeof document !== 'undefined' && document) ? document.activeElement : null;
+            if (active && (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active.getAttribute && active.getAttribute('data-lexical-editor') === 'true')) && (active === el || (typeof active.contains === 'function' && active.contains(el)))) {
+                return true;
+            }
             while (el) {
+                if (el.isContentEditable) return true;
                 if (typeof el.closest === 'function' && el.closest(CODE_ISOLATION_SELECTOR)) {
                     return true;
                 }
@@ -276,6 +290,30 @@ function generateJs() {
                     }
                 }
 
+                // 處理 FastPick / 列表底部的 "Show <N> more..." 複合節點
+                const elText = node.textContent ? node.textContent.trim() : '';
+                if (/^Show\\s+\\d+\\s+more(?:\\.\\.\\.|…)?$/i.test(elText)) {
+                    const textChildren = Array.from(node.childNodes).filter(c => c.nodeType === Node.TEXT_NODE);
+                    if (textChildren.length >= 2) {
+                        for (const tc of textChildren) {
+                            const v = tc.nodeValue;
+                            if (v === 'Show ' || norm(v) === 'Show') {
+                                tc.nodeValue = USE_TW ? '顯示另外 ' : '显示另外 ';
+                                translatedValues.set(tc, tc.nodeValue);
+                            } else if (v === ' more...' || v === ' more…' || norm(v) === 'more...') {
+                                tc.nodeValue = USE_TW ? ' 個...' : ' 个...';
+                                translatedValues.set(tc, tc.nodeValue);
+                            }
+                        }
+                    } else if (textChildren.length === 1) {
+                        const m = elText.match(/^Show\\s+(\\d+)\\s+more(?:\\.\\.\\.|…)?$/i);
+                        if (m) {
+                            textChildren[0].nodeValue = USE_TW ? ('顯示另外 ' + m[1] + ' 個...') : ('显示另外 ' + m[1] + ' 个...');
+                            translatedValues.set(textChildren[0], textChildren[0].nodeValue);
+                        }
+                    }
+                }
+
                 if (node.shadowRoot) translateNode(node.shadowRoot);
                 for (const child of node.childNodes) translateNode(child);
 
@@ -301,6 +339,24 @@ function generateJs() {
                     return;
                 }
 
+                // 處理 FastPick / 列表底部由於 React 節點拆分導致的 "Show ", num, " more..." 分段文字
+                const parentText = node.parentElement && node.parentElement.textContent ? node.parentElement.textContent.trim() : '';
+                if (parentText && (
+                    /^(?:Show|显示另外|顯示另外)\\s+\\d+\\s+(?:more|个|個)(?:\\.\\.\\.|…)?$/i.test(parentText) ||
+                    (node.parentElement.getAttribute && node.parentElement.getAttribute('value')?.startsWith('fastpick-show-more:'))
+                )) {
+                    if (originalVal === 'Show ' || norm(originalVal) === 'Show') {
+                        node.nodeValue = USE_TW ? '顯示另外 ' : '显示另外 ';
+                        translatedValues.set(node, node.nodeValue);
+                        return;
+                    }
+                    if (originalVal === ' more...' || originalVal === ' more…' || norm(originalVal) === 'more...') {
+                        node.nodeValue = USE_TW ? ' 個...' : ' 个...';
+                        translatedValues.set(node, node.nodeValue);
+                        return;
+                    }
+                }
+
                 if (translatedValues.get(node) === originalVal) return;
 
                 let newVal = originalVal;
@@ -315,6 +371,96 @@ function generateJs() {
                     newVal = map.get(valNorm);
                 } else if (lowerMap.has(valLower)) {
                     newVal = lowerMap.get(valLower);
+                } else if (/^Send message\\s+(Enter|⏎|\\u23ce)$/i.test(valNorm)) {
+                    newVal = (USE_TW ? "傳送訊息 " : "发送消息 ") + valNorm.replace(/^Send message\\s+/i, '');
+                } else if (/^Queue message\\s+(Enter|⏎|\\u23ce)$/i.test(valNorm)) {
+                    newVal = (USE_TW ? "排隊傳送訊息 " : "排队发送消息 ") + valNorm.replace(/^Queue message\\s+/i, '');
+                } else if (/^to have the agent generate a plan\\.?$/i.test(valNorm)) {
+                    newVal = USE_TW ? "讓 Agent 產生規劃。" : "让智能体生成计划。";
+                } else if ((valNorm === 'Type' || valNorm === 'and select') && node.parentElement && (
+                    (typeof node.parentElement.closest === 'function' && node.parentElement.closest('[data-testid="plan-command-fyi-alert"]')) ||
+                    (node.parentElement.textContent && node.parentElement.textContent.includes('generate a plan'))
+                )) {
+                    if (valNorm === 'Type') newVal = USE_TW ? "輸入" : "输入";
+                    else if (valNorm === 'and select') newVal = USE_TW ? "並選取" : "并选择";
+                } else if (valNorm === 'and' && node.parentElement && (
+                    node.parentElement.textContent && (
+                        node.parentElement.textContent.includes('Privacy Policy') ||
+                        node.parentElement.textContent.includes('Terms of Service') ||
+                        node.parentElement.textContent.includes('隐私政策') ||
+                        node.parentElement.textContent.includes('隱私權政策')
+                    )
+                )) {
+                    newVal = USE_TW ? "以及" : "以及";
+                } else if (/^Show\\s+(\\d+)\\s+breakdown(s)?$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^Show\\s+(\\d+)\\s+breakdown(s)?$/i, (match, num) => {
+                        return USE_TW ? ("顯示 " + num + " 項明細") : ("显示 " + num + " 项细目");
+                    });
+                } else if (/^Hide\\s+breakdown(s)?$/i.test(valNorm)) {
+                    newVal = USE_TW ? "收起明細" : "收起细目";
+                } else if (/^Show\\s+breakdown(s)?$/i.test(valNorm)) {
+                    newVal = USE_TW ? "顯示明細" : "显示细目";
+                } else if (/^Hide\\s+tools$/i.test(valNorm)) {
+                    newVal = USE_TW ? "收起工具" : "收起工具";
+                } else if (/^(\\d+)\\s+tools$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^(\\d+)\\s+tools$/i, (match, num) => {
+                        return num + (USE_TW ? " 個工具" : " 个工具");
+                    });
+                } else if (/^(\\d+)\\s+tools?\\s+excluded$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^(\\d+)\\s+tools?\\s+excluded$/i, (match, num) => {
+                        return num + (USE_TW ? " 個工具已排除" : " 个工具已排除");
+                    });
+                } else if (/^Exceeded the rules token budget\\.\\s+Full rule content\\s+\\(([\\d,]+)\\s+tokens?\\)\\s+was replaced with a lightweight file-path pointer in context\\.$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^Exceeded the rules token budget\\.\\s+Full rule content\\s+\\(([\\d,]+)\\s+tokens?\\)\\s+was replaced with a lightweight file-path pointer in context\\.$/i, (match, num) => {
+                        return USE_TW ? ("已超出規則 Token 預算。完整規則內容 (" + num + " 個 Token) 已在上下文中替換為輕量級檔案路徑指標。") : ("已超出规则 Token 预算。完整规则内容 (" + num + " 个 Token) 已在上下文中替换为轻量级文件路径指针。");
+                    });
+                } else if (/^All tools in this MCP server\\s+\\(([\\d,]+)\\s+tokens?\\)\\s+exceeded the customization budget and were excluded from context\\.$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^All tools in this MCP server\\s+\\(([\\d,]+)\\s+tokens?\\)\\s+exceeded the customization budget and were excluded from context\\.$/i, (match, num) => {
+                        return USE_TW ? ("此 MCP 伺服器中的所有工具 (" + num + " 個 Token) 均已超出自訂項預算，並已從上下文中排除。") : ("此 MCP 服务器中的所有工具 (" + num + " 个 Token) 均已超出自定义项预算，并已从上下文中排除。");
+                    });
+                } else if (/^(\\d+)\\s+tools?\\s+in this MCP server\\s+\\(([\\d,]+)\\s+tokens?\\)\\s+exceeded the customization budget and were excluded from context\\.$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^(\\d+)\\s+tools?\\s+in this MCP server\\s+\\(([\\d,]+)\\s+tokens?\\)\\s+exceeded the customization budget and were excluded from context\\.$/i, (match, tCount, num) => {
+                        return USE_TW ? ("此 MCP 伺服器中有 " + tCount + " 個工具 (" + num + " 個 Token) 超出自訂項預算，並已從上下文中排除。") : ("此 MCP 服务器中有 " + tCount + " 个工具 (" + num + " 个 Token) 超出自定义项预算，并已从上下文中排除。");
+                    });
+                } else if (/^Exceeded the customization token budget\\s+\\(([\\d,]+)\\s+tokens?\\)\\s+and was excluded from context\\.$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^Exceeded the customization token budget\\s+\\(([\\d,]+)\\s+tokens?\\)\\s+and was excluded from context\\.$/i, (match, num) => {
+                        return USE_TW ? ("超出自訂項 Token 預算 (" + num + " 個 Token)，已從上下文中排除。") : ("超出自定义项 Token 预算 (" + num + " 个 Token)，已从上下文中排除。");
+                    });
+                } else if (/^The (.+?) remote MCP server (allows you to|lets you) (.+)$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^The (.+?) remote MCP server (allows you to|lets you) (.+)$/i, (match, name, verb, rest) => {
+                        let text = rest;
+                        text = text.replace(/enroll projects/gi, USE_TW ? "註冊專案" : "注册项目")
+                                   .replace(/generate audit and scope reports/gi, USE_TW ? "產生稽核與範圍報告" : "生成审计与范围报告")
+                                   .replace(/manage/gi, USE_TW ? "管理" : "管理")
+                                   .replace(/access and run/gi, USE_TW ? "存取並執行" : "访问并运行")
+                                   .replace(/tools/gi, USE_TW ? "工具" : "工具")
+                                   .replace(/resources/gi, USE_TW ? "資源" : "资源");
+                        return name + (USE_TW ? " 遠端 MCP 伺服器可讓您 " : " 远程 MCP 服务器可让您 ") + text + (text.endsWith('。') || text.endsWith('.') ? '' : (USE_TW ? '。' : '。'));
+                    });
+                } else if (/^(?:Thought|Thinking|Worked|Working|Took)\\s+for\\s+(\\d+m\\s+\\d+s|\\d+s|\\d+m|\\d+\\.\\d+s)(?:\\s*\\([\\d\\.]+\\s*tokens?\\/s\\))?$/i.test(valNorm)) {
+                    newVal = valNorm.replace(/^(Thought|Thinking|Worked|Working|Took)\\s+for\\s+(\\d+m\\s+\\d+s|\\d+s|\\d+m|\\d+\\.\\d+s)(\\s*\\([\\d\\.]+\\s*tokens?\\/s\\))?$/i, (match, verb, dur, tps) => {
+                        const verbMap = USE_TW
+                            ? { thought: '已思考', thinking: '思考中', worked: '已工作', working: '工作中', took: '耗時' }
+                            : { thought: '已思考', thinking: '思考中', worked: '已工作', working: '工作中', took: '耗时' };
+                        const v = verbMap[verb.toLowerCase()] || verb;
+                        const d = dur.replace(/m/g, ' 分 ').replace(/s/g, ' 秒').trim();
+                        const speed = tps ? tps.replace(/tokens?\/s/i, 'Token/秒') : '';
+                        return v + ' ' + d + (speed ? ' ' + speed : '');
+                    });
+                } else if (/^(?:(Exploring|Explored|Editing|Edited|Running|Ran)\\s+)?(\\d+)\\s+(files?|folders?|searches?|commands?|tasks?|pages?|browsers?|images?|actions?|artifacts?)(\\s*,\\s*(?:(Exploring|Explored|Editing|Edited|Running|Ran)\\s+)?(\\d+)\\s+(files?|folders?|searches?|commands?|tasks?|pages?|browsers?|images?|actions?|artifacts?))*$/i.test(valNorm)) {
+                    const verbMap = USE_TW
+                        ? { exploring: '正在探索', explored: '已探索', editing: '正在編輯', edited: '已編輯', running: '正在執行', ran: '已執行' }
+                        : { exploring: '正在探索', explored: '已探索', editing: '正在编辑', edited: '已编辑', running: '正在运行', ran: '已运行' };
+                    const nounMap = USE_TW
+                        ? { file: '個檔案', files: '個檔案', folder: '個資料夾', folders: '個資料夾', search: '次搜尋', searches: '次搜尋', command: '個指令', commands: '個指令', task: '項任務', tasks: '項任務', page: '個網頁', pages: '個網頁', browser: '次瀏覽器操作', browsers: '次瀏覽器操作', image: '張圖片', images: '張圖片', action: '項操作', actions: '項操作', artifact: '個成果物', artifacts: '個成果物' }
+                        : { file: '个文件', files: '个文件', folder: '个文件夹', folders: '个文件夹', search: '次搜索', searches: '次搜索', command: '个命令', commands: '个命令', task: '个任务', tasks: '个任务', page: '个网页', pages: '个网页', browser: '次浏览器操作', browsers: '次浏览器操作', image: '张图片', images: '张图片', action: '项操作', actions: '项操作', artifact: '个工件', artifacts: '个工件' };
+                    newVal = valNorm.split(/\\s*,\\s*/).map(part => {
+                        const pm = part.match(/^(?:(Exploring|Explored|Editing|Edited|Running|Ran)\\s+)?(\\d+)\\s+(files?|folders?|searches?|commands?|tasks?|pages?|browsers?|images?|actions?|artifacts?)$/i);
+                        if (!pm) return part;
+                        const v = pm[1] ? (verbMap[pm[1].toLowerCase()] || pm[1]) + ' ' : '';
+                        const n = nounMap[pm[3].toLowerCase()] || pm[3];
+                        return v + pm[2] + ' ' + n;
+                    }).join('，');
                 } else if (/^The AlloyDB for PostgreSQL remote/i.test(valNorm)) {
                     newVal = USE_TW ? "AlloyDB for PostgreSQL 遠端 MCP 伺服器可讓您存取並執行 AlloyDB 工具，用於管理 AlloyDB 叢集及執行個體、管理使用者，以及建立和復原資料備份。" : "AlloyDB for PostgreSQL 远程 MCP 服务器可让您访问并运行 AlloyDB 工具，用于管理 AlloyDB 集群及实例、管理用户，以及创建和恢复数据备份。";
                 } else if (/^The Cloud SQL remote/i.test(valNorm)) {
@@ -464,14 +610,17 @@ function generateJs() {
                         return USE_TW ? "以此身分傳送意見回饋：" : "以如下身份发送反馈：";
                     });
                 } else {
-                    // 2. 长句子串滑动替换与前缀截断智能匹配 (缩短至前 18 字符即可高精度命中)
+                    // 2. 長句子滑動替換與末尾截斷智慧匹配 (僅當原句帶有省略號截斷時，才允許基於長前綴匹配)
                     for (const [key, translated] of longEntries) {
                         if (key.length > 15 && valNorm.includes(key)) {
                             newVal = newVal.split(key).join(translated);
                             break;
-                        } else if (key.length >= 18 && valNorm.length >= 18 && valLower.slice(0, 18) === key.slice(0, 18).toLowerCase()) {
-                            newVal = translated;
-                            break;
+                        } else if ((valNorm.endsWith('...') || valNorm.endsWith('…')) && valNorm.length >= 35) {
+                            const cleanVal = valNorm.replace(/(\.\.\.|…)$/, '').trim().toLowerCase();
+                            if (cleanVal.length >= 30 && key.toLowerCase().startsWith(cleanVal)) {
+                                newVal = translated;
+                                break;
+                            }
                         }
                     }
                 }
@@ -484,14 +633,191 @@ function generateJs() {
         } catch (e) {}
     }
 
+    let mcpSnifferTimer = null;
+    let lastCapturedCount = 0;
+    function scheduleMcpSniffer() {
+        if (mcpSnifferTimer) clearTimeout(mcpSnifferTimer);
+        mcpSnifferTimer = setTimeout(runMcpSniffer, 600);
+    }
+
+    function extractMcpCatalog(screen) {
+        if (!screen) return null;
+        let templates = null;
+        try {
+            const findFiber = (dom) => {
+                if (!dom) return null;
+                const k = Object.keys(dom).find(key => key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$'));
+                return k ? dom[k] : null;
+            };
+
+            const candidates = [
+                screen,
+                screen.querySelector('.divide-y'),
+                screen.querySelector('.divide-y > div')
+            ].filter(Boolean);
+
+            for (const dom of candidates) {
+                let fiber = findFiber(dom);
+                let queue = [fiber];
+                let visited = new Set();
+                let depth = 0;
+                while (queue.length > 0 && depth < 300) {
+                    depth++;
+                    const cur = queue.shift();
+                    if (!cur || visited.has(cur)) continue;
+                    visited.add(cur);
+
+                    if (cur.memoizedProps && Array.isArray(cur.memoizedProps.mcpTemplates) && cur.memoizedProps.mcpTemplates.length > 0) {
+                        templates = cur.memoizedProps.mcpTemplates;
+                        break;
+                    }
+                    if (cur.child) queue.push(cur.child);
+                    if (cur.sibling) queue.push(cur.sibling);
+                    if (cur.return) queue.push(cur.return);
+                }
+                if (templates) break;
+            }
+        } catch (e) {}
+
+        if (!templates || templates.length === 0) {
+            try {
+                const rows = screen.querySelectorAll('.divide-y > div');
+                if (rows && rows.length > 0) {
+                    const domItems = [];
+                    for (const row of rows) {
+                        const titleEl = row.querySelector('a, span.font-medium, .text-sm.font-medium');
+                        const descEl = row.querySelector('.line-clamp-2, .text-xs.text-muted-foreground.mt-1');
+                        const title = titleEl ? (titleEl.childNodes[0]?.textContent || titleEl.textContent || '').trim() : '';
+                        const desc = descEl ? (descEl.textContent || '').trim() : '';
+                        if (title || desc) {
+                            domItems.push({
+                                id: title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                                title: title,
+                                description: desc
+                            });
+                        }
+                    }
+                    if (domItems.length > 0) {
+                        templates = domItems;
+                    }
+                }
+            } catch (e) {}
+        }
+
+        return templates;
+    }
+
+    function renderBadge(screen, catalog) {
+        try {
+            if (!screen) return;
+            let badge = document.getElementById('__antigravity_mcp_badge__');
+            const searchRow = screen.querySelector('.relative.flex.items-center');
+            if (!badge && searchRow && searchRow.parentNode) {
+                badge = document.createElement('div');
+                badge.id = '__antigravity_mcp_badge__';
+                badge.className = 'text-xs text-emerald-500 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded flex items-center justify-between cursor-pointer select-none transition-all';
+                badge.style.marginTop = '6px';
+                badge.style.marginBottom = '2px';
+                searchRow.parentNode.insertBefore(badge, searchRow.nextSibling);
+            }
+            if (badge) {
+                const scText = '✓ 已自动捕获 ' + catalog.length + ' 个 MCP 服务器（点击复制 JSON）';
+                const tcText = '✓ 已自動捕獲 ' + catalog.length + ' 個 MCP 伺服器（點擊複製 JSON）';
+                badge.innerHTML = '<span>' + (USE_TW ? tcText : scText) + '</span><span style="opacity:0.75; font-size:11px;">' + (USE_TW ? '點擊複製' : '点击复制') + '</span>';
+                badge.onclick = () => {
+                    try {
+                        navigator.clipboard.writeText(JSON.stringify(catalog, null, 2));
+                        badge.innerHTML = '<span>' + (USE_TW ? '✓ 已複製 JSON 到剪貼簿！' : '✓ 已复制 JSON 到剪贴板！') + '</span>';
+                        setTimeout(() => {
+                            if (badge) badge.innerHTML = '<span>' + (USE_TW ? tcText : scText) + '</span><span style="opacity:0.75; font-size:11px;">' + (USE_TW ? '點擊複製' : '点击复制') + '</span>';
+                        }, 2000);
+                    } catch (err) {}
+                };
+            }
+        } catch (e) {}
+    }
+
+    function runMcpSniffer(retryCount = 0) {
+        try {
+            const screen = document.querySelector('[data-testid="add-mcp-screen"]');
+            if (!screen) return;
+            const items = extractMcpCatalog(screen);
+            if (!items || items.length === 0) {
+                if (retryCount < 12) {
+                    setTimeout(() => runMcpSniffer(retryCount + 1), 500);
+                }
+                return;
+            }
+
+            const catalog = items.map(item => ({
+                id: item.id || '',
+                title: item.title || '',
+                description: item.description || '',
+                link: item.link || '',
+                trustLevel: item.trustLevel || ''
+            }));
+
+            if (catalog.length === lastCapturedCount) {
+                renderBadge(screen, catalog);
+                return;
+            }
+            lastCapturedCount = catalog.length;
+
+            const dumpStr = JSON.stringify(catalog, null, 2);
+
+            try {
+                localStorage.setItem('__antigravity_mcp_dump__', dumpStr);
+            } catch (e) {}
+
+            window.__antigravity_mcp_dump__ = catalog;
+            window.__exportMcpCatalog = function() {
+                console.log(dumpStr);
+                return catalog;
+            };
+
+            try {
+                const req = typeof require === 'function' ? require : null;
+                if (req) {
+                    const fs = req('fs');
+                    const path = req('path');
+                    const os = req('os');
+                    if (fs && path && os) {
+                        const fp = path.join(os.homedir(), '.gemini', 'antigravity', 'mcp_catalog_dump.json');
+                        try {
+                            const dir = path.dirname(fp);
+                            if (fs.existsSync(dir)) {
+                                fs.writeFileSync(fp, dumpStr, 'utf-8');
+                                console.log('[Antigravity] MCP Catalog saved to: ' + fp);
+                            }
+                        } catch (err) {}
+                    }
+                }
+            } catch (e) {}
+
+            console.log('%c[Antigravity] 已自動捕獲 ' + catalog.length + ' 個 MCP 伺服器！', 'color: #10b981; font-weight: bold;', catalog);
+            renderBadge(screen, catalog);
+        } catch (e) {}
+    }
+
     const observer = new MutationObserver(mutations => {
+        let hasMcpModal = false;
         for (const m of mutations) {
             if (m.type === 'childList') {
-                for (const n of m.addedNodes) translateNode(n);
+                for (const n of m.addedNodes) {
+                    translateNode(n);
+                    if (!hasMcpModal && n.nodeType === 1) {
+                        if (n.getAttribute && n.getAttribute('data-testid') === 'add-mcp-screen') {
+                            hasMcpModal = true;
+                        } else if (n.querySelector && n.querySelector('[data-testid="add-mcp-screen"]')) {
+                            hasMcpModal = true;
+                        }
+                    }
+                }
             } else if (m.type === 'characterData') {
                 translateNode(m.target);
             }
         }
+        if (hasMcpModal) scheduleMcpSniffer();
     });
 
     const obsOpts = { childList: true, subtree: true, characterData: true };
@@ -502,6 +828,9 @@ function generateJs() {
             try {
                 observer.observe(target, obsOpts);
                 translateNode(target);
+                if (document.querySelector('[data-testid="add-mcp-screen"]')) {
+                    scheduleMcpSniffer();
+                }
             } catch (e) {}
         }
     };
@@ -548,20 +877,8 @@ function cleanMenuJsContent(content) {
 }
 
 function cleanTrayJsContent(content) {
-    const startMark = "/* --- TRAY TRANSLATION START --- */";
-    const endMark = "/* --- TRAY TRANSLATION END --- */";
-    const startIdx = content.indexOf(startMark);
-    const endIdx = content.indexOf(endMark);
-    if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
-        content = content.substring(0, startIdx) + content.substring(endIdx + endMark.length);
-    }
-    const dblStartMark = "/* --- TRAY DOUBLE CLICK START --- */";
-    const dblEndMark = "/* --- TRAY DOUBLE CLICK END --- */";
-    const dblStartIdx = content.indexOf(dblStartMark);
-    const dblEndIdx = content.indexOf(dblEndMark);
-    if (dblStartIdx !== -1 && dblEndIdx !== -1 && dblStartIdx < dblEndIdx) {
-        content = content.substring(0, dblStartIdx) + content.substring(dblEndIdx + dblEndMark.length);
-    }
+    content = content.replace(/\n\s*\/\* --- TRAY TRANSLATION START --- \*\/[\s\S]*?\/\* --- TRAY TRANSLATION END --- \*\//g, '');
+    content = content.replace(/\n\s*\/\* --- TRAY DOUBLE CLICK START --- \*\/[\s\S]*?\/\* --- TRAY DOUBLE CLICK END --- \*\//g, '');
     return content;
 }
 
@@ -577,7 +894,7 @@ function checkIfAppIsRunning() {
             const stdout = child_process.execSync('tasklist /fi "imagename eq Antigravity.exe" /nh', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
             return stdout.toLowerCase().includes('antigravity.exe');
         } else if (process.platform === 'darwin') {
-            const stdout = child_process.execSync('pgrep -f Antigravity', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+            const stdout = child_process.execSync('pgrep -x Antigravity || pgrep -f "/Contents/MacOS/Antigravity"', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
             return stdout.trim().length > 0;
         }
     } catch (e) {
@@ -587,12 +904,12 @@ function checkIfAppIsRunning() {
 }
 
 function closeAntigravityProcesses() {
-    console.log("[1] 检测到 Antigravity 客户端正在运行，正在关闭以解除文件锁...");
+    console.log("[1] 正在關閉 Antigravity 執行行程以解除檔案鎖定...");
     try {
         if (process.platform === 'win32') {
             child_process.execSync('taskkill /f /im Antigravity.exe /t >nul 2>nul');
         } else {
-            child_process.execSync('pkill -f Antigravity >/dev/null 2>&1');
+            child_process.execSync('killall Antigravity >/dev/null 2>&1; killall "Antigravity Helper" >/dev/null 2>&1; pkill -x Antigravity >/dev/null 2>&1; pkill -f "/Contents/MacOS/Antigravity" >/dev/null 2>&1');
         }
     } catch (e) {
         // ignore

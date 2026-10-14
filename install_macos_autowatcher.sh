@@ -57,7 +57,12 @@ for target in "$BASE" "$LOG_DIR" "$PLIST"; do
     fi
 done
 /usr/bin/install -d -o root -g wheel -m 755 "$BASE" "$LOG_DIR"
-/bin/chmod go-w "$BASE" "$LOG_DIR"
+/bin/chmod 755 "$BASE" "$LOG_DIR"
+if [ ! -f "$LOG_DIR/autolocalize.log" ]; then
+    /usr/bin/install -o root -g wheel -m 644 /dev/null "$LOG_DIR/autolocalize.log"
+else
+    /bin/chmod 644 "$LOG_DIR/autolocalize.log"
+fi
 RUNTIME="$(mktemp -d "$BASE/runtime.XXXXXX")"
 /bin/chmod 755 "$RUNTIME"
 /usr/bin/install -o root -g wheel -m 755 "$NODE_BIN" "$RUNTIME/node"
@@ -67,6 +72,9 @@ done
 for folder in dicts dicts_tw node_modules; do
     /bin/cp -R "$DIR/$folder" "$RUNTIME/$folder"
 done
+if [ -d "$DIR/scripts" ]; then
+    /bin/cp -R "$DIR/scripts" "$RUNTIME/scripts"
+fi
 /usr/sbin/chown -R root:wheel "$RUNTIME"
 /bin/chmod -R go-w "$RUNTIME"
 "$RUNTIME/node" "$RUNTIME/node_modules/@electron/asar/bin/asar.mjs" --version

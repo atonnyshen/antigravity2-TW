@@ -9,15 +9,39 @@ const { execFileSync } = require('child_process');
 
 const DIR = __dirname;
 const IS_MAC = process.platform === 'darwin';
-const ROOT = IS_MAC && process.getuid() === 0;
+const ROOT = IS_MAC && typeof process.getuid === 'function' && process.getuid() === 0;
 const SIGNATURE = '/* --- ANTIGRAVITY CHINESE LOCALIZATION START --- */';
 const NEEDLE = '命令選擇區';
+
+function stripQuarantine(target) {
+    if (!IS_MAC) return;
+    try {
+        execFileSync('/usr/bin/xattr', ['-d', 'com.apple.quarantine', target], { stdio: 'ignore' });
+    } catch {}
+}
+
+function stripQuarantineRecursive(target) {
+    if (!IS_MAC) return;
+    try {
+        execFileSync('/usr/bin/xattr', ['-d', '-r', 'com.apple.quarantine', target], { stdio: 'ignore' });
+    } catch {}
+}
 
 function log(message) {
     const line = '[' + new Date().toISOString() + '] ' + message;
     console.log(line);
+    const logPaths = [];
+    if (IS_MAC && ROOT) {
+        logPaths.push('/Library/Logs/Antigravity2TW/autolocalize.log');
+    }
     if (!process.env.XPC_SERVICE_NAME) {
-        try { fs.appendFileSync(path.join(DIR, 'autolocalize.log'), line + '\n'); } catch {}
+        logPaths.push(path.join(DIR, 'autolocalize.log'));
+    }
+    for (const lp of logPaths) {
+        try {
+            fs.appendFileSync(lp, line + '\n');
+            fs.chmodSync(lp, 0o644);
+        } catch {}
     }
 }
 
@@ -42,10 +66,32 @@ function waitForStableFile(file, { interval = 1000, timeout = 30000, samples = 3
     throw new Error('app.asar 尚未穩定，等待下次排程重試。');
 }
 
+function ensureAccessibleDir(dir) {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
+    try { fs.chmodSync(dir, 0o755); } catch {}
+    if (ROOT) {
+        try {
+            const parentStat = fs.statSync(path.dirname(dir));
+            if (parentStat.uid !== 0) {
+                fs.chownSync(dir, parentStat.uid, parentStat.gid);
+            }
+        } catch {}
+    }
+}
+
 function acquireLock(lockPath) {
     try {
-        fs.mkdirSync(lockPath, { mode: 0o700 });
+        fs.mkdirSync(lockPath, { mode: 0o755 });
+        if (ROOT) {
+            try {
+                const parentStat = fs.statSync(path.dirname(lockPath));
+                if (parentStat.uid !== 0) fs.chownSync(lockPath, parentStat.uid, parentStat.gid);
+            } catch {}
+        }
     } catch (error) {
+        if (error.code === 'EACCES') {
+            try { fs.chmodSync(lockPath, 0o755); } catch {}
+        }
         if (error.code !== 'EEXIST') throw error;
         const stat = fs.lstatSync(lockPath);
         if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('鎖定路徑不是一般目錄。');
@@ -58,10 +104,17 @@ function acquireLock(lockPath) {
         } else if (Date.now() - stat.mtimeMs < 30000) {
             return null;
         }
-        fs.rmSync(lockPath, { recursive: true });
+        fs.rmSync(lockPath, { recursive: true, force: true });
         return acquireLock(lockPath);
     }
-    fs.writeFileSync(path.join(lockPath, 'pid'), String(process.pid), { flag: 'wx' });
+    const pidFile = path.join(lockPath, 'pid');
+    fs.writeFileSync(pidFile, String(process.pid), { flag: 'wx' });
+    if (ROOT) {
+        try {
+            const parentStat = fs.statSync(path.dirname(lockPath));
+            if (parentStat.uid !== 0) fs.chownSync(pidFile, parentStat.uid, parentStat.gid);
+        } catch {}
+    }
     return () => fs.rmSync(lockPath, { recursive: true, force: true });
 }
 
@@ -90,12 +143,20 @@ function getAppInfo() {
 function recipeHash() {
     const files = ['localization_engine.js', 'auto_localize_watcher.js', 'package-lock.json'];
     for (const folder of ['dicts', 'dicts_tw']) {
-        for (const name of fs.readdirSync(path.join(DIR, folder)).sort()) {
-            if (name.endsWith('.json')) files.push(path.join(folder, name));
+        const folderPath = path.join(DIR, folder);
+        if (fs.existsSync(folderPath)) {
+            for (const name of fs.readdirSync(folderPath).sort()) {
+                if (name.endsWith('.json')) files.push(path.join(folder, name));
+            }
         }
     }
     const hash = crypto.createHash('sha256');
-    for (const file of files) hash.update(file).update(fs.readFileSync(path.join(DIR, file)));
+    for (const file of files) {
+        const fullPath = path.join(DIR, file);
+        if (fs.existsSync(fullPath)) {
+            hash.update(file).update(fs.readFileSync(fullPath));
+        }
+    }
     return hash.digest('hex');
 }
 
@@ -105,12 +166,35 @@ function isLocalized(buffer) {
 
 function ensureRegularTarget(file) {
     // Refuse symlink destinations before privileged backup/replacement.
-    if (fs.realpathSync(path.dirname(file)) !== path.dirname(file)) {
+    const parentDir = path.dirname(file);
+    if (fs.existsSync(parentDir) && fs.realpathSync(parentDir) !== parentDir) {
         throw new Error('拒絕經由符號連結修改應用程式資源目錄。');
     }
     try {
-        if (!fs.lstatSync(file).isFile()) throw new Error('拒絕修改非一般檔案：' + file);
+        const stat = fs.lstatSync(file);
+        if (!stat.isFile()) throw new Error('拒絕修改非一般檔案：' + file);
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
+}
+
+function safeReplaceFile(src, dst, mode, uid, gid) {
+    stripQuarantine(dst);
+    try {
+        fs.renameSync(src, dst);
+    } catch (error) {
+        if (error.code === 'EPERM' || error.code === 'EXDEV' || error.code === 'EACCES') {
+            try { fs.chmodSync(dst, 0o644); } catch {}
+            fs.copyFileSync(src, dst);
+            try { fs.unlinkSync(src); } catch {}
+        } else {
+            throw error;
+        }
+    }
+    if (mode != null) {
+        try { fs.chmodSync(dst, mode & 0o777); } catch {}
+    }
+    if (ROOT && uid != null && gid != null) {
+        try { fs.chownSync(dst, uid, gid); } catch {}
+    }
 }
 
 function buildArchive(stageDir) {
@@ -120,10 +204,22 @@ function buildArchive(stageDir) {
     ], { cwd: DIR, stdio: 'inherit', timeout: 180000 });
 }
 
-function signApp(appPath) {
+function signApp(appPath, sourceStat) {
     if (!IS_MAC) return;
+    stripQuarantineRecursive(appPath);
     execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'pipe', timeout: 120000 });
     execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], { stdio: 'pipe', timeout: 30000 });
+    if (ROOT && sourceStat && sourceStat.uid !== 0) {
+        try {
+            const sigDir = path.join(appPath, 'Contents', '_CodeSignature');
+            if (fs.existsSync(sigDir)) {
+                fs.chownSync(sigDir, sourceStat.uid, sourceStat.gid);
+                for (const f of fs.readdirSync(sigDir)) {
+                    fs.chownSync(path.join(sigDir, f), sourceStat.uid, sourceStat.gid);
+                }
+            }
+        } catch {}
+    }
 }
 
 function checkAndLocalizeApp(appInfo, {
@@ -137,7 +233,7 @@ function checkAndLocalizeApp(appInfo, {
     const originalHash = digest(original);
     const sourceStat = fs.statSync(asarPath);
     const localized = isLocalized(original);
-    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    ensureAccessibleDir(stateDir);
     const statePath = path.join(stateDir, digest(appPath) + '.json');
     let previous = {};
     try { previous = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch {}
@@ -172,23 +268,44 @@ function checkAndLocalizeApp(appInfo, {
         if (!localized) {
             ensureRegularTarget(asarPath + '.bak');
         }
-        replacementDir = fs.mkdtempSync(path.join(path.dirname(asarPath), '.autolocalize-'));
+
+        // Try creating replacementDir in Resources dir; if denied by macOS EPERM, fall back to stateDir or os.tmpdir()
+        try {
+            replacementDir = fs.mkdtempSync(path.join(path.dirname(asarPath), '.autolocalize-'));
+        } catch (dirErr) {
+            try {
+                replacementDir = fs.mkdtempSync(path.join(stateDir, '.autolocalize-'));
+            } catch {
+                replacementDir = fs.mkdtempSync(path.join(os.tmpdir(), '.autolocalize-'));
+            }
+        }
+
         const candidate = path.join(replacementDir, 'app.asar');
         fs.writeFileSync(candidate, result, { mode: sourceStat.mode & 0o777, flag: 'wx' });
-        if (ROOT) fs.chownSync(candidate, sourceStat.uid, sourceStat.gid);
+        if (ROOT) {
+            try { fs.chownSync(candidate, sourceStat.uid, sourceStat.gid); } catch {}
+        }
         if (!localized) {
             const backup = path.join(replacementDir, 'official.bak');
             fs.writeFileSync(backup, original, { mode: sourceStat.mode & 0o777, flag: 'wx' });
-            if (ROOT) fs.chownSync(backup, sourceStat.uid, sourceStat.gid);
-            fs.renameSync(backup, asarPath + '.bak');
+            if (ROOT) {
+                try { fs.chownSync(backup, sourceStat.uid, sourceStat.gid); } catch {}
+            }
+            safeReplaceFile(backup, asarPath + '.bak', sourceStat.mode, sourceStat.uid, sourceStat.gid);
         }
         if (digest(fs.readFileSync(asarPath)) !== originalHash) throw new Error('置換前官方包已更新，取消套用。');
-        fs.renameSync(candidate, asarPath);
+        safeReplaceFile(candidate, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid);
         replaced = true;
-        sign(appPath);
+        sign(appPath, sourceStat);
         const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
         fs.writeFileSync(stateTmp, JSON.stringify({ recipe, output: digest(result), updatedAt: new Date().toISOString() }) + '\n');
-        fs.renameSync(stateTmp, statePath);
+        if (ROOT) {
+            try {
+                const parentStat = fs.statSync(path.dirname(stateTmp));
+                if (parentStat.uid !== 0) fs.chownSync(stateTmp, parentStat.uid, parentStat.gid);
+            } catch {}
+        }
+        safeReplaceFile(stateTmp, statePath, 0o644, sourceStat.uid, sourceStat.gid);
         log('繁中套件已套用並驗證；已開啟的視窗須重新啟動後載入。');
         return true;
     } catch (error) {
@@ -197,11 +314,13 @@ function checkAndLocalizeApp(appInfo, {
                 if (digest(fs.readFileSync(asarPath)) !== resultHash) {
                     throw new Error('套用後官方包再次改變，保留新檔，不覆蓋還原。');
                 }
-                const rollback = path.join(replacementDir, 'rollback.asar');
+                const rollback = path.join(replacementDir || stageDir, 'rollback.asar');
                 fs.writeFileSync(rollback, original, { flag: 'wx', mode: sourceStat.mode & 0o777 });
-                if (ROOT) fs.chownSync(rollback, sourceStat.uid, sourceStat.gid);
-                fs.renameSync(rollback, asarPath);
-                sign(appPath);
+                if (ROOT) {
+                    try { fs.chownSync(rollback, sourceStat.uid, sourceStat.gid); } catch {}
+                }
+                safeReplaceFile(rollback, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid);
+                sign(appPath, sourceStat);
                 log('套用未通過，已還原原始 app.asar。');
             } catch (rollbackError) {
                 log('還原／重新簽署失敗：' + rollbackError.message);
@@ -209,8 +328,12 @@ function checkAndLocalizeApp(appInfo, {
         }
         throw error;
     } finally {
-        if (stageDir) fs.rmSync(stageDir, { recursive: true, force: true });
-        if (replacementDir) fs.rmSync(replacementDir, { recursive: true, force: true });
+        if (stageDir) {
+            try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch {}
+        }
+        if (replacementDir) {
+            try { fs.rmSync(replacementDir, { recursive: true, force: true }); } catch {}
+        }
         release();
     }
 }
@@ -228,4 +351,4 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { checkAndLocalizeApp, waitForStableFile, acquireLock, isLocalized, digest };
+module.exports = { checkAndLocalizeApp, waitForStableFile, acquireLock, isLocalized, digest, safeReplaceFile, recipeHash, ensureAccessibleDir };

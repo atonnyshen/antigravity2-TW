@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { checkAndLocalizeApp, waitForStableFile, acquireLock, digest } = require('../auto_localize_watcher');
+const { checkAndLocalizeApp, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir } = require('../auto_localize_watcher');
 
 function fixture(t) {
     const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-watcher-'));
@@ -123,3 +123,72 @@ test('stable file debounce requires nonzero size', t => {
     fs.writeFileSync(f.asarPath, '');
     assert.throws(() => waitForStableFile(f.asarPath, { interval: 1, timeout: 5 }), /尚未穩定/);
 });
+
+test('safeReplaceFile falls back to copyFileSync and unlinks src when renameSync throws EPERM/EXDEV/EACCES', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-replace-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const src = path.join(root, 'src.txt');
+    const dst = path.join(root, 'dst.txt');
+
+    const origRename = fs.renameSync;
+    for (const code of ['EPERM', 'EXDEV', 'EACCES']) {
+        fs.writeFileSync(src, `content-for-${code}`);
+        fs.writeFileSync(dst, 'old-content');
+        let renameAttempted = false;
+        fs.renameSync = () => {
+            renameAttempted = true;
+            const err = new Error(`Simulated ${code}`);
+            err.code = code;
+            throw err;
+        };
+        try {
+            safeReplaceFile(src, dst, 0o644);
+            assert.equal(renameAttempted, true);
+            assert.equal(fs.readFileSync(dst, 'utf8'), `content-for-${code}`);
+            assert.equal(fs.existsSync(src), false);
+        } finally {
+            fs.renameSync = origRename;
+        }
+    }
+});
+
+test('safeReplaceFile rethrows unexpected errors', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-replace-err-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const src = path.join(root, 'src.txt');
+    const dst = path.join(root, 'dst.txt');
+    fs.writeFileSync(src, 'content');
+
+    const origRename = fs.renameSync;
+    fs.renameSync = () => {
+        const err = new Error('Disk full');
+        err.code = 'ENOSPC';
+        throw err;
+    };
+    try {
+        assert.throws(() => safeReplaceFile(src, dst), /Disk full/);
+    } finally {
+        fs.renameSync = origRename;
+    }
+});
+
+test('ensureAccessibleDir creates directory recursively and ensures accessible mode', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-dir-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const targetDir = path.join(root, 'nested', 'deep', 'dir');
+    ensureAccessibleDir(targetDir);
+    assert.equal(fs.existsSync(targetDir), true);
+    const stat = fs.statSync(targetDir);
+    assert.equal(stat.isDirectory(), true);
+    if (process.platform !== 'win32') {
+        assert.ok((stat.mode & 0o755) === 0o755);
+        // Test upgrading existing restrictive directory
+        const restrictive = path.join(root, 'restrictive');
+        fs.mkdirSync(restrictive, { mode: 0o700 });
+        fs.chmodSync(restrictive, 0o700);
+        ensureAccessibleDir(restrictive);
+        const updatedStat = fs.statSync(restrictive);
+        assert.equal(updatedStat.mode & 0o777, 0o755);
+    }
+});
+

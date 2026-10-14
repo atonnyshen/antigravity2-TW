@@ -1,0 +1,2134 @@
+[
+  {
+    "title": "Cloud Audit Manager (us-central1)",
+    "id": "google-cloud-audit-manager-us-central1",
+    "link": "https://cloud.google.com/audit-manager",
+    "description": "The Cloud Audit Manager remote MCP server allows you to enroll projects, generate audit and scope reports, and check resource enrollment statuses in the us-central1 region.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://auditmanager.us-central1.rep.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/auditmanager.md"
+  },
+  {
+    "title": "Cloud Audit Manager (europe-west1)",
+    "id": "google-cloud-audit-manager-europe-west1",
+    "link": "https://cloud.google.com/audit-manager",
+    "description": "The Cloud Audit Manager remote MCP server allows you to enroll projects, generate audit and scope reports, and check resource enrollment statuses in the europe-west1 region.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://auditmanager.europe-west1.rep.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/auditmanager.md"
+  },
+  {
+    "title": "Antimetal",
+    "id": "antimetal",
+    "link": "https://docs.antimetal.com/connect",
+    "description": "Investigate and fix software issues using AI-powered root cause analysis. This MCP server connects to your Antimetal account to search issues, read investigative reports with causal graphs, retrieve observability artifacts (logs, traces, metrics), and apply remediations—directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.antimetal.com"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/antimetal/skills/main/README.md"
+  },
+  {
+    "title": "Windsor.ai",
+    "id": "windsor",
+    "link": "https://windsor.ai/documentation/windsor-mcp/",
+    "description": "Query and act on your marketing, analytics, CRM, e-commerce, and warehouse data across 325+ connectors (Meta Ads, Google Ads, TikTok Ads, GA4, HubSpot, Salesforce, Shopify, Stripe, BigQuery, Snowflake, and more) using natural language. Read live data and write changes back (pause or enable campaigns, set budgets, upload conversions) with no SQL and no custom integrations.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.windsor.ai"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/windsor-ai/windsor_mcp/main/README.md"
+  },
+  {
+    "title": "GitLab Orbit",
+    "id": "gitlab-orbit",
+    "link": "https://docs.gitlab.com/orbit/remote/access/mcp/",
+    "description": "Query your GitLab SDLC as a knowledge graph. Orbit indexes groups, projects, source code, merge requests, pipelines, work items, and security findings into a single graph so agents can answer blast radius, onboarding, and dependency mapping questions by traversing real relationships instead of grepping across separate systems.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://gitlab.com/api/v4/orbit/mcp"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://gitlab.com/gitlab-org/orbit/knowledge-graph/-/raw/main/docs/source/remote/access/mcp.md"
+  },
+  {
+    "title": "Cloud Run",
+    "id": "cloudrun",
+    "link": "https://github.com/GoogleCloudPlatform/cloud-run-mcp",
+    "description": "Enable Antigravity to deploy apps to Google Cloud Run.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@google-cloud/cloud-run-mcp"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/GoogleCloudPlatform/cloud-run-mcp/refs/heads/main/README.md"
+  },
+  {
+    "title": "PostHog",
+    "id": "posthog",
+    "link": "https://posthog.com/mcp",
+    "description": "Ask questions. Get answers.\nThe MCP is a server your coding agent talks to. Ask a question in English. It runs the query against your PostHog data. The answer lands in your editor. No SQL. No dashboards. No tabs full of charts you forgot you opened.\n\nTry things like:\n - \"How many unique users signed up in the last 7 days, broken down by day?\"\n - \"Create an A/B test for our pricing page that measures conversion to checkout.\"\n - \"What are the top 5 errors in my project this week?\"",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote@latest",
+              "https://mcp.posthog.com/mcp"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED"
+  },
+  {
+    "title": "Mobbin",
+    "id": "mobbin",
+    "link": "https://mobbin.com/mcp",
+    "description": "Search and reference over 600,000 real-world app screens, user flows, and UI patterns from Mobbin directly within your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://api.mobbin.com/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/mobbin/mobbin-mcp-server/main/README.md"
+  },
+  {
+    "title": "Lovable",
+    "id": "lovable",
+    "link": "https://docs.lovable.dev/integrations/lovable-mcp-server",
+    "description": "Build, edit, deploy, and manage full-stack web apps with Lovable, the AI-powered app builder, using natural language. This MCP server connects your AI client to Lovable so you can create projects and workspaces, send build instructions to the Lovable agent, inspect generated code via diffs and file trees, read and write project knowledge, manage Postgres databases and connectors, and deploy apps directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.lovable.dev"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/lovablelabs/mcp/main/README.md"
+  },
+  {
+    "title": "Splunk",
+    "id": "splunk",
+    "link": "https://splunkbase.splunk.com/app/7931",
+    "description": "Let your agents talk to your Splunk data. Ask what broke, why, and what changed -- in plain English -- and agents search your events, surface the saved searches and lookups that matter, and write the SPL for you.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp-oauth-google.stg.splunkcloud.com/en-US/splunkd/__raw/services/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED"
+  },
+  {
+    "title": "Wiz",
+    "id": "wiz",
+    "link": "https://www.wiz.io/blog/introducing-wiz-mcp",
+    "description": "The Wiz MCP Server connects multiple security data sources through a central host and server setup. This creates a single, contextual view of your security posture—simplifying investigations and speeding up incident response and remediation.  Wiz MCP also gives users instant access to cloud inventory, configurations, and security issues, all through a single host with just a simple prompt.  By using Wiz MCP, customers can enrich security investigations with precise business context. This allows security teams to prioritize responses based on relevance, drastically improving the accuracy and effectiveness of threat mitigation.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.app.wiz.io"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.wiz.io/blog/introducing-wiz-mcp"
+  },
+  {
+    "title": "Google Kubernetes Engine (Remote)",
+    "id": "google-kubernetes-engine",
+    "link": "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/use-gke-mcp",
+    "description": "The GKE remote MCP server provides read write access to your GKE Kubernetes resources. It allows an AI agent to inspect and observe your environment.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://container.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/container.md"
+  },
+  {
+    "title": "Dart",
+    "id": "dart-mcp-server",
+    "link": "https://dart.dev/tools/mcp-server",
+    "description": "The Dart and Flutter MCP server exposes Dart (and Flutter) development tool actions to compatible AI-assistant clients.",
+    "local": {
+      "commands": {
+        "dart": {
+          "template": {
+            "command": "dart",
+            "args": [
+              "mcp-server"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/dart-lang/sdk/main/README.md"
+  },
+  {
+    "title": "Firebase",
+    "id": "firebase-mcp-server",
+    "link": "https://firebase.google.com/docs/ai-assistance/mcp-server",
+    "description": "The Firebase Model Context Protocol (MCP) Server gives AI-powered development tools the ability to work with your Firebase projects and your app's codebase.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "firebase-tools@latest",
+              "mcp"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/firebase/firebase-tools/master/src/mcp/antigravity/README.md"
+  },
+  {
+    "title": "Genkit",
+    "id": "genkit-mcp-server",
+    "link": "https://genkit.dev/docs/mcp-server",
+    "description": "The Genkit Model Context Protocol (MCP) Server gives AI-powered development tools the ability to build, debug and inspect your Genkit app.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "genkit-cli@^1.28.0",
+              "mcp",
+              "--explicitProjectRoot",
+              "--no-update-notification",
+              "--non-interactive"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/firebase/genkit/refs/heads/main/genkit-tools/cli/src/mcp/README.md"
+  },
+  {
+    "title": "Go",
+    "id": "gopls-mcp-server",
+    "link": "https://go.dev/gopls",
+    "description": "The gopls Model Context Protocol (MCP) server provides tools for semantic code analysis, live diagnostics, and transformation of your Go codebase.",
+    "local": {
+      "commands": {
+        "go": {
+          "template": {
+            "command": "go",
+            "args": [
+              "run",
+              "golang.org/x/tools/gopls@latest",
+              "mcp"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/golang/tools/master/gopls/README.md"
+  },
+  {
+    "title": "BigQuery",
+    "id": "bigquery",
+    "link": "https://cloud.google.com/bigquery/docs/use-bigquery-mcp",
+    "description": "Interact with your BigQuery data using natural language. This MCP server allows you to securely connect to your datasets to search the datasets, inspect table metadata, execute SQL queries, generate time-series forecasts, and perform contribution analysis directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://bigquery.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.cloud.google.com/bigquery/docs/use-bigquery-mcp"
+  },
+  {
+    "title": "AlloyDB for PostgreSQL",
+    "id": "alloydb-postgresql",
+    "link": "https://cloud.google.com/alloydb/docs/ai/use-alloydb-mcp",
+    "description": "The AlloyDB for PostgreSQL remote MCP server lets you access and run AlloyDB tools to manage AlloyDB clusters and instances, manage users, create and restore backups, administer users, import and export data, and run SQL queries from your AI-enabled development environments and AI agent platforms.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://alloydb.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.cloud.google.com/alloydb/docs/ai/use-alloydb-mcp"
+  },
+  {
+    "title": "Google Cloud Bigtable Admin",
+    "id": "google-cloud-bigtable-admin",
+    "link": "https://docs.cloud.google.com/bigtable/docs/use-bigtable-mcp",
+    "description": "The Bigtable Admin remote MCP server lets you manage Bigtable resources.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://bigtableadmin.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/GoogleCloudPlatform/cloud-bigtable-ecosystem/refs/heads/main/docs/bigtablemcpadmin.md"
+  },
+  {
+    "title": "Google Cloud CLI (Preview)",
+    "id": "cloud-cli-execution",
+    "link": "https://docs.cloud.google.com/sdk/use-gcloud-mcp",
+    "description": "Manage Google Cloud resources with gcloud and bq CLI tools in a remote sandbox environment",
+    "remote": {
+      "template": {
+        "serverUrl": "https://cloudcli.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/cloudcli.md"
+  },
+  {
+    "title": "Cloud SQL",
+    "id": "cloud-sql",
+    "link": "https://docs.cloud.google.com/sql/docs/mysql/use-cloudsql-mcp",
+    "description": "The Cloud SQL remote MCP server lets you access and run Cloud SQL tools to manage Cloud SQL instances, manage users, create and restore backups, administer users, import and export data, and run SQL queries from your AI-enabled development environments and AI agent platforms.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://sqladmin.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.cloud.google.com/sql/docs/mysql/use-cloudsql-mcp"
+  },
+  {
+    "title": "Spanner",
+    "id": "google-cloud-spanner",
+    "link": "https://docs.cloud.google.com/spanner/docs/use-spanner-mcp",
+    "description": "The Spanner remote MCP server lets you access and run Spanner tools to create, manage, and query Spanner resources from your AI-enabled development environments and AI agent platforms.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://spanner.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/cloudspannerecosystem/spanner-ai/refs/heads/main/spannermcp.md"
+  },
+  {
+    "title": "Google Cloud Apigee API hub",
+    "id": "google-cloud-apigee-api-hub",
+    "link": "https://docs.cloud.google.com/apigee/docs/reference/apis/apihub/mcp",
+    "description": "The Apigee API hub remote MCP server lets you manage the APIs, versions, specs, operations, deployments, attributes, external APIs, and dependencies registered in your API hub instance - including creating, reading, updating, and deleting them - and search across resources, using natural language.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://apihub.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.cloud.google.com/apigee/docs/reference/apis/apihub/mcp"
+  },
+  {
+    "title": "Looker",
+    "id": "looker",
+    "link": "https://mcp-toolbox.dev/documentation/connect-to/ides/looker_mcp/",
+    "description": "Connect your AI assistants to Looker business intelligence. This MCP server enables data exploration and content management by allowing you to execute natural language queries, run saved Looks, create and manage dashboards, and perform instance health checks within your Looker environment.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@toolbox-sdk/server@>=0.26.0",
+              "--prebuilt",
+              "looker,looker-dev",
+              "--stdio",
+              "--user-agent-metadata",
+              "antigravity"
+            ],
+            "env": {
+              "LOOKER_BASE_URL": "<LOOKER_BASE_URL>",
+              "LOOKER_CLIENT_ID": "<LOOKER_CLIENT_ID>",
+              "LOOKER_CLIENT_SECRET": "<LOOKER_CLIENT_SECRET>",
+              "LOOKER_SHOW_HIDDEN_EXPLORES": "<LOOKER_SHOW_HIDDEN_EXPLORES>",
+              "LOOKER_SHOW_HIDDEN_FIELDS": "<LOOKER_SHOW_HIDDEN_FIELDS>",
+              "LOOKER_SHOW_HIDDEN_MODELS": "<LOOKER_SHOW_HIDDEN_MODELS>",
+              "LOOKER_USE_CLIENT_OAUTH": "<LOOKER_USE_CLIENT_OAUTH>",
+              "LOOKER_VERIFY_SSL": "<LOOKER_VERIFY_SSL>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<LOOKER_BASE_URL>",
+              "title": "Looker Base URL",
+              "description": "The URL of your Looker instance."
+            },
+            {
+              "name": "<LOOKER_CLIENT_ID>",
+              "title": "Looker Client ID",
+              "description": "The client ID for the Looker API."
+            },
+            {
+              "name": "<LOOKER_CLIENT_SECRET>",
+              "title": "Looker Client Secret",
+              "description": "The client secret for the Looker API."
+            },
+            {
+              "name": "<LOOKER_VERIFY_SSL>",
+              "title": "Looker Verify SSL",
+              "description": "Whether to verify SSL certificates."
+            },
+            {
+              "name": "<LOOKER_USE_CLIENT_OAUTH>",
+              "title": "Looker Use Client OAuth",
+              "description": "Whether to use OAuth for authentication."
+            },
+            {
+              "name": "<LOOKER_SHOW_HIDDEN_MODELS>",
+              "title": "Looker Show Hidden Models",
+              "description": "Whether to show hidden models."
+            },
+            {
+              "name": "<LOOKER_SHOW_HIDDEN_EXPLORES>",
+              "title": "Looker Show Hidden Explores",
+              "description": "Whether to show hidden explores."
+            },
+            {
+              "name": "<LOOKER_SHOW_HIDDEN_FIELDS>",
+              "title": "Looker Show Hidden Fields",
+              "description": "Whether to show hidden fields."
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/googleapis/mcp-toolbox/main/docs/LOOKER_README.md"
+  },
+  {
+    "title": "Knowledge Catalog",
+    "id": "knowledge-catalog",
+    "link": "https://docs.cloud.google.com/dataplex/docs/use-remote-mcp",
+    "description": "Connect your AI assistants to the Knowledge Catalog (formerly known as Dataplex). This MCP server enables data discovery and governance by allowing you to search for data assets, retrieve detailed metadata such as schemas and ownership, and explore aspect types across your distributed data.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://dataplex.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.cloud.google.com/dataplex/docs/use-remote-mcp"
+  },
+  {
+    "title": "MCP Toolbox for Databases",
+    "id": "mcp-toolbox-for-databases",
+    "link": "https://mcp-toolbox.dev/documentation/introduction/",
+    "description": "The MCP Toolbox for Databases is an open-source MCP server designed to simplify and secure the development of tools for interacting with databases.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@toolbox-sdk/server@>=0.26.0",
+              "--tools-file=<TOOLS_CONFIG_PATH>",
+              "--stdio",
+              "--user-agent-metadata",
+              "antigravity"
+            ]
+          },
+          "variables": [
+            {
+              "name": "<TOOLS_CONFIG_PATH>",
+              "title": "Tools Config Path",
+              "description": "The absolute path to the tools configuration file (e.g. /path/to/tools.yaml).",
+              "link": "https://mcp-toolbox.dev/documentation/configuration/"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/googleapis/mcp-toolbox/main/docs/TOOLBOX_README.md"
+  },
+  {
+    "title": "Oracle Database",
+    "id": "oracledb",
+    "link": "https://mcp-toolbox.dev/documentation/connect-to/ides/oracle_mcp/",
+    "description": "Interact with your Oracle Database data using natural language. This MCP server allows you to securely connect to your databases for executing SQL queries, inspecting table schemas, and troubleshooting database performance issues directly from your AI tools.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@toolbox-sdk/server@>=0.30.0",
+              "--prebuilt",
+              "oracledb",
+              "--stdio",
+              "--user-agent-metadata",
+              "antigravity"
+            ],
+            "env": {
+              "ORACLE_DATABASE_HOST": "<ORACLE_DATABASE_HOST>",
+              "ORACLE_DATABASE_PASSWORD": "<ORACLE_DATABASE_PASSWORD>",
+              "ORACLE_DATABASE_PORT": "<ORACLE_DATABASE_PORT>",
+              "ORACLE_DATABASE_SERVICE_NAME": "<ORACLE_DATABASE_SERVICE_NAME>",
+              "ORACLE_DATABASE_USER": "<ORACLE_DATABASE_USER>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<ORACLE_DATABASE_HOST>",
+              "title": "Oracle Database Host",
+              "description": "The host of your Oracle Database."
+            },
+            {
+              "name": "<ORACLE_DATABASE_PORT>",
+              "title": "Oracle Database Port",
+              "description": "The port of your Oracle Database."
+            },
+            {
+              "name": "<ORACLE_DATABASE_SERVICE_NAME>",
+              "title": "Oracle Database Service Name",
+              "description": "The service name of your Oracle Database."
+            },
+            {
+              "name": "<ORACLE_DATABASE_USER>",
+              "title": "Oracle Database User",
+              "description": "The database username."
+            },
+            {
+              "name": "<ORACLE_DATABASE_PASSWORD>",
+              "title": "Oracle Database Password",
+              "description": "The password for the database user."
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/googleapis/mcp-toolbox/main/docs/ORACLEDB_README.md"
+  },
+  {
+    "title": "Figma Dev Mode MCP",
+    "id": "figma-dev-mode-mcp-server",
+    "link": "https://help.figma.com/hc/en-us/articles/32132100833559-Guide-to-the-Dev-Mode-MCP-Server",
+    "description": "The Dev Mode MCP Server brings Figma directly into your workflow by providing important design information and context to AI agents generating code from Figma design files.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.figma.com/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/figma/mcp-server-guide/refs/heads/main/README.md"
+  },
+  {
+    "title": "GitHub",
+    "id": "github-mcp-server",
+    "link": "https://github.com/github/github-mcp-server",
+    "description": "The GitHub MCP Server is a Model Context Protocol (MCP) server that provides seamless integration with GitHub APIs, enabling advanced automation and interaction capabilities for developers and tools.",
+    "local": {
+      "commands": {
+        "docker": {
+          "template": {
+            "command": "docker",
+            "args": [
+              "run",
+              "-i",
+              "--rm",
+              "-e",
+              "GITHUB_PERSONAL_ACCESS_TOKEN",
+              "ghcr.io/github/github-mcp-server"
+            ],
+            "env": {
+              "GITHUB_PERSONAL_ACCESS_TOKEN": "<github_token>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<github_token>",
+              "title": "GitHub Token",
+              "description": "GitHub Personal Access Token"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/github/github-mcp-server/main/README.md"
+  },
+  {
+    "title": "Google Home Developer",
+    "id": "google-home-developer",
+    "link": "https://developers.home.google.com/mcp/developer",
+    "description": "The Google Home Developer MCP server allows you to search through Google Home documentation, OpenThread and Matter specifications documentation.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://homedevelopers.googleapis.com/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://developers.home.google.com/mcp/developer"
+  },
+  {
+    "title": "Neon",
+    "id": "mcp-server-neon",
+    "link": "https://github.com/neondatabase-labs/mcp-server-neon",
+    "description": "Manage your Neon backend with the Neon MCP Server: Lakebase Postgres, branching, Object Storage, Functions, and the AI Gateway",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://mcp.neon.tech/sse"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "Manage your Neon backend directly through Antigravity. Run SQL and transactions on Lakebase Postgres, inspect and diff table schemas, apply migrations on a temporary branch before committing them, and provision Auth and the Data API. Create copy-on-write branches for isolated work, query logs from Serverless Functions and Object Storage for debugging, tune slow queries, and search Neon docs all through natural language commands. Connect with OAuth. During authorization, choose read-only or full access. Always review and authorize actions before execution."
+  },
+  {
+    "title": "Stripe",
+    "id": "stripe",
+    "link": "https://github.com/stripe/agent-toolkit/tree/main/modelcontextprotocol",
+    "description": "The Stripe Model Context Protocol server allows you to integrate with Stripe APIs through function calling. This protocol supports various tools to interact with different Stripe services.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@stripe/mcp",
+              "--tools=all",
+              "--api-key=<STRIPE_SECRET_KEY>"
+            ]
+          },
+          "variables": [
+            {
+              "name": "<STRIPE_SECRET_KEY>",
+              "title": "Stripe secret key",
+              "description": "Your Stripe secret key is used to authenticate your Stripe API requests. You can generate a secret key in your Stripe dashboard.",
+              "link": "https://dashboard.stripe.com/apikeys"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/stripe/agent-toolkit/main/modelcontextprotocol/README.md"
+  },
+  {
+    "title": "Redis",
+    "id": "redis",
+    "link": "https://github.com/redis/mcp-redis",
+    "description": "Interact with Redis key-value stores",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@modelcontextprotocol/server-redis"
+            ],
+            "env": {
+              "REDIS_URL": "<REDIS_URL>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<REDIS_URL>",
+              "title": "Redis URL",
+              "description": "The URL of the Redis database. Format: redis://user:password@host:port",
+              "link": "https://github.com/redis/mcp-redis"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "REFERENCE",
+    "readme": "https://raw.githubusercontent.com/redis/mcp-redis/refs/heads/main/README.md"
+  },
+  {
+    "title": "MongoDB",
+    "id": "mongodb-mcp-server",
+    "link": "https://github.com/mongodb-js/mongodb-mcp-server",
+    "description": "A Model Context Protocol server for interacting with MongoDB Atlas.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mongodb-mcp-server"
+            ],
+            "env": {
+              "MDB_MCP_CONNECTION_STRING": "<CONNECTION_STRING>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<CONNECTION_STRING>",
+              "title": "Connection string",
+              "description": "MongoDB connection string for direct database connections (optional users may choose to inform it on every tool call).",
+              "link": "https://github.com/mongodb-js/mongodb-mcp-server"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/mongodb-js/mongodb-mcp-server/main/README.md"
+  },
+  {
+    "title": "Notion",
+    "id": "notion-mcp-server",
+    "link": "https://github.com/makenotion/notion-mcp-server",
+    "description": "Official Notion MCP Server that allows interaction with Notion workspaces, pages, databases, and comments via the Notion API.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@notionhq/notion-mcp-server"
+            ],
+            "env": {
+              "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer <NOTION_API_TOKEN>\", \"Notion-Version\": \"2022-06-28\"}"
+            }
+          },
+          "variables": [
+            {
+              "name": "<NOTION_API_TOKEN>",
+              "title": "Notion API Token",
+              "description": "Integration token from Notion. Go to https://www.notion.so/profile/integrations to create a new internal integration or select an existing one.",
+              "link": "https://www.notion.so/profile/integrations"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/makenotion/notion-mcp-server/main/README.md"
+  },
+  {
+    "title": "Linear",
+    "id": "linear-mcp-server",
+    "link": "https://linear.app/changelog/2025-05-01-mcp",
+    "description": "Official Linear.app MCP Server for interacting with Linear projects, issues, and workflows.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://mcp.linear.app/sse"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED"
+  },
+  {
+    "title": "Perplexity Ask",
+    "id": "perplexity-ask",
+    "link": "https://github.com/ppl-ai/modelcontextprotocol",
+    "description": "An MCP server implementation that integrates the Perplexity Sonar API to provide real-time, web-wide research capabilities.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "server-perplexity-ask"
+            ],
+            "env": {
+              "PERPLEXITY_API_KEY": "<PERPLEXITY_API_KEY>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<PERPLEXITY_API_KEY>",
+              "title": "Perplexity API Key",
+              "description": "Your Perplexity Sonar API key for web search capabilities.",
+              "link": "https://docs.perplexity.ai/guides/getting-started"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "COMMUNITY",
+    "readme": "https://raw.githubusercontent.com/ppl-ai/modelcontextprotocol/main/README.md"
+  },
+  {
+    "title": "PayPal",
+    "id": "paypal-mcp-server",
+    "link": "https://developer.paypal.com/tools/mcp-server/",
+    "description": "Official PayPal MCP Server that allows integration with PayPal APIs for payment processing, transaction management, and account operations.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@paypal/mcp"
+            ],
+            "env": {
+              "PAYPAL_ACCESS_TOKEN": "<PAYPAL_ACCESS_TOKEN>",
+              "PAYPAL_ENVIRONMENT": "<PAYPAL_ENVIRONMENT>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<PAYPAL_ACCESS_TOKEN>",
+              "title": "PayPal Access Token",
+              "description": "Your PayPal API access token generated using your client ID and client secret.",
+              "link": "https://developer.paypal.com/docs/api/overview/#get-an-access-token"
+            },
+            {
+              "name": "<PAYPAL_ENVIRONMENT>",
+              "title": "PayPal Environment",
+              "description": "Execution environment for PayPal integration. Use `SANDBOX` for testing or `PRODUCTION` for live transactions.",
+              "link": "https://developer.paypal.com/dashboard/applications/"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/paypal/agent-toolkit/refs/heads/main/README.md"
+  },
+  {
+    "title": "Heroku",
+    "id": "heroku",
+    "link": "https://github.com/heroku/heroku-mcp-server",
+    "description": "The Heroku Platform MCP Server enables seamless interaction with Heroku Platform resources, allowing LLMs to read, manage, and operate applications, add-ons, databases, and more.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@heroku/mcp-server"
+            ],
+            "env": {
+              "HEROKU_API_KEY": "<HEROKU_API_KEY>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<HEROKU_API_KEY>",
+              "title": "Heroku API Key",
+              "description": "Your Heroku authentication token. Generate one using 'heroku authorizations:create' or through the Heroku Dashboard.",
+              "link": "https://dashboard.heroku.com/account/applications"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/heroku/heroku-mcp-server/main/README.md"
+  },
+  {
+    "title": "Pinecone",
+    "id": "pinecone-mcp-server",
+    "link": "https://github.com/pinecone-io/pinecone-mcp",
+    "description": "The Pinecone MCP Server enables AI tools to search Pinecone documentation, configure indexes, generate code informed by your index configuration, and upsert/search data in your Pinecone indexes.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@pinecone-database/mcp"
+            ],
+            "env": {
+              "PINECONE_API_KEY": "<PINECONE_API_KEY>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<PINECONE_API_KEY>",
+              "title": "Pinecone API Key",
+              "description": "Your Pinecone API key. Generate one using the Pinecone console.",
+              "link": "https://app.pinecone.io"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/pinecone-io/pinecone-mcp/main/README.md"
+  },
+  {
+    "title": "Supabase",
+    "id": "supabase",
+    "link": "https://github.com/supabase-community/supabase-mcp",
+    "description": "Connect your Supabase projects to AI assistants. This MCP server allows managing tables, fetching config, executing SQL queries, managing edge functions, and working with database schema in your Supabase projects.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.supabase.com/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/supabase-community/supabase-mcp/main/README.md"
+  },
+  {
+    "title": "Prisma",
+    "id": "prisma-mcp-server",
+    "link": "https://github.com/prisma/prisma?tab=readme-ov-file#mcp-server",
+    "description": "The Prisma MCP Server enables AI tools to interact with Prisma for creating and managing Postgres databases easily.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "prisma",
+              "mcp"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/prisma/prisma/main/README.md"
+  },
+  {
+    "title": "Locofy",
+    "id": "locofy",
+    "link": "https://www.locofy.ai/docs/export-and-deployment/locofy-mcp/",
+    "description": "The Locofy MCP Server enables Locofy.ai code to be integrated and extended with your IDE.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@locofy/mcp@latest"
+            ],
+            "env": {
+              "IDE_SOURCE": "antigravity",
+              "PERSONAL_ACCESS_TOKEN": "<LOCIOFY_PERSONAL_ACCESS_TOKEN>",
+              "PROJECT_ID": "<LOCIOFY_PROJECT_ID>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<LOCIOFY_PERSONAL_ACCESS_TOKEN>",
+              "title": "Locofy Personal Access Token",
+              "description": "Your Locofy Personal Access Token. Generate it from your Locofy account settings.",
+              "link": "https://www.locofy.ai/docs/export-and-deployment/locofy-mcp/"
+            },
+            {
+              "name": "<LOCIOFY_PROJECT_ID>",
+              "title": "Locofy Project ID",
+              "description": "The ID of the Locofy project for the MCP server to interact with.",
+              "link": "https://www.locofy.ai/docs/export-and-deployment/locofy-mcp/"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED"
+  },
+  {
+    "title": "Airweave",
+    "id": "airweave",
+    "link": "https://github.com/airweave-ai/airweave",
+    "description": "Airweave lets agents search any app.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "airweave-mcp-search"
+            ],
+            "env": {
+              "AIRWEAVE_API_KEY": "<AIRWEAVE_API_KEY>",
+              "AIRWEAVE_BASE_URL": "<AIRWEAVE_BASE_URL>",
+              "AIRWEAVE_COLLECTION": "<AIRWEAVE_COLLECTION>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<AIRWEAVE_API_KEY>",
+              "title": "Airweave API Key",
+              "description": "Your Airweave API Key",
+              "link": "https://airweave.ai/"
+            },
+            {
+              "name": "<AIRWEAVE_COLLECTION>",
+              "title": "Airweave Collection ID",
+              "description": "Your Airweave Collection ID",
+              "link": "https://airweave.ai/"
+            },
+            {
+              "name": "<AIRWEAVE_BASE_URL>",
+              "title": "Airweave Base URL",
+              "description": "The base URL for the Airweave API",
+              "link": "https://airweave.ai/"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/airweave-ai/airweave/main/README.md"
+  },
+  {
+    "title": "Atlassian",
+    "id": "atlassian-mcp-server",
+    "link": "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/",
+    "description": "Atlassian MCP Server for interacting with Atlassian products.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://mcp.atlassian.com/v1/sse"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://exafunction.github.io/public/cascade_plugins/atlassian/readme.md"
+  },
+  {
+    "title": "Harness",
+    "id": "harness",
+    "link": "https://github.com/harness/mcp-server",
+    "description": "Interact with your Harness account using natural language. This MCP server lets AI agents inspect and manage CI/CD pipelines, executions, services, environments, connectors, feature flags, cloud costs, security findings, chaos experiments, and other Harness platform resources.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "harness-mcp-v2@latest",
+              "stdio"
+            ],
+            "env": {
+              "HARNESS_API_KEY": "<HARNESS_API_KEY>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<HARNESS_API_KEY>",
+              "title": "Harness API Key",
+              "description": "Harness personal access token or service account token. Create one from Harness → My Profile → API Keys."
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/harness/mcp-server/main/README.md"
+  },
+  {
+    "title": "SonarQube",
+    "id": "sonarqube",
+    "link": "https://github.com/SonarSource/sonarqube-mcp-server",
+    "description": "SonarQube MCP Server enables AI assistants to interact with SonarQube instances for code quality analysis, project management, and quality gate operations.",
+    "local": {
+      "commands": {
+        "docker": {
+          "template": {
+            "command": "docker",
+            "args": [
+              "run",
+              "-i",
+              "--rm",
+              "-e",
+              "SONARQUBE_TOKEN",
+              "-e",
+              "SONARQUBE_ORG",
+              "-e",
+              "SONARQUBE_URL",
+              "mcp/sonarqube",
+              "stdio"
+            ],
+            "env": {
+              "SONARQUBE_ORG": "<SONARQUBE_ORG>",
+              "SONARQUBE_TOKEN": "<SONARQUBE_TOKEN>",
+              "SONARQUBE_URL": "<SONARQUBE_URL>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<SONARQUBE_TOKEN>",
+              "title": "SonarQube Token",
+              "description": "Your SonarQube Cloud or Server token",
+              "link": "https://docs.sonarsource.com/sonarqube-cloud/managing-your-account/managing-tokens/"
+            },
+            {
+              "name": "<SONARQUBE_ORG>",
+              "title": "SonarQube Organization Key",
+              "description": "Your SonarQube Cloud organization key (only for SonarCloud)",
+              "link": "https://sonarcloud.io/account/organizations"
+            },
+            {
+              "name": "<SONARQUBE_URL>",
+              "title": "SonarQube Server URL",
+              "description": "URL of your self-hosted SonarQube Server (only for SonarQube Server)",
+              "link": "https://docs.sonarsource.com/sonarqube/latest/setup-and-upgrade/install-the-server/"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/SonarSource/sonarqube-mcp-server/master/README.md"
+  },
+  {
+    "title": "Netlify",
+    "id": "netlify",
+    "link": "https://github.com/netlify/netlify-mcp",
+    "description": "Netlify MCP Server enables AI assistants to interact with Netlify's platform for managing sites, deployments, domains, and other web development workflows.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@netlify/mcp"
+            ],
+            "env": {
+              "NETLIFY_PERSONAL_ACCESS_TOKEN": "<NETLIFY_PERSONAL_ACCESS_TOKEN>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<NETLIFY_PERSONAL_ACCESS_TOKEN>",
+              "title": "Netlify Personal Access Token (optional)",
+              "description": "Optional Netlify personal access token used for authentication when automatic browser login is not possible.",
+              "link": "https://docs.netlify.com/cli/get-started/#obtain-a-token-in-the-netlify-ui"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/netlify/netlify-mcp/main/README.md"
+  },
+  {
+    "title": "Sequential Thinking",
+    "id": "sequential-thinking",
+    "link": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
+    "description": "A Model Context Protocol server that provides structured thinking and reasoning capabilities for LLM conversations.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@modelcontextprotocol/server-sequential-thinking"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "REFERENCE",
+    "readme": "https://raw.githubusercontent.com/modelcontextprotocol/servers/main/src/sequentialthinking/README.md"
+  },
+  {
+    "title": "Sonatype Guide",
+    "id": "sonatype-guide",
+    "link": "https://github.com/sonatype/dependency-management-mcp-server",
+    "description": "Sonatype MCP server for interacting with our dependency management and security intelligence platform.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "mcp-remote@latest",
+              "https://mcp.guide.sonatype.com/mcp",
+              "--header",
+              "Authorization: Bearer <SONATYPE_API_TOKEN>"
+            ]
+          },
+          "variables": [
+            {
+              "name": "<SONATYPE_API_TOKEN>",
+              "title": "Sonatype Guide Bearer Token",
+              "description": " Your Sonatype Guide User Token is used to authenticate your requests to the Sonatype Guide MCP server. You can generate a token in your Sonatype Guide Settings > Tokens.",
+              "link": "https://guide.sonatype.com/settings/tokens"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/sonatype/dependency-management-mcp-server/refs/heads/main/README.md"
+  },
+  {
+    "title": "Google Maps Platform Code Assist",
+    "id": "gmp-code-assist",
+    "link": "https://developers.google.com/maps/ai/code-assist",
+    "description": "The Google Maps Platform Code Assist MCP server provides your favorite AI coding assistant with up-to-date, official Google Maps Platform documentation, code samples, and best practices. By grounding your AI assistant in our official resources, it can generate more accurate, reliable, and useful code.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mapscodeassist.googleapis.com/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://developers.google.com/maps/ai/code-assist.md.txt"
+  },
+  {
+    "title": "ArizeTracingAssistant",
+    "id": "arize-tracing-assistant",
+    "link": "https://github.com/Arize-ai/arize-tracing-assistant",
+    "description": "This MCP server provides your LLM with docs and examples to instrument your AI apps with Arize AX. It also provides access to Arize support. Connect it to your IDE or LLM and get curated tracing examples, best practices and Arize support!",
+    "local": {
+      "commands": {
+        "uvx": {
+          "template": {
+            "command": "uvx",
+            "args": [
+              "arize-tracing-assistant@latest"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/Arize-ai/arize-tracing-assistant/refs/heads/main/README.md"
+  },
+  {
+    "title": "Postman",
+    "id": "postman-mcp-server",
+    "link": "https://github.com/postmanlabs/postman-mcp-server",
+    "description": "The Postman MCP Server connects Postman to AI tools, giving AI agents and assistants the ability to access workspaces, manage collections and environments, evaluate APIs, and automate workflows through natural language interactions.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "@postman/postman-mcp-server"
+            ],
+            "env": {
+              "POSTMAN_API_KEY": "<POSTMAN_API_KEY>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<POSTMAN_API_KEY>",
+              "title": "Postman API Key",
+              "description": "Your Postman API Key (begins with PMAK-)"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/postmanlabs/postman-mcp-server/main/README.md"
+  },
+  {
+    "title": "Stitch",
+    "id": "StitchMCP",
+    "link": "https://stitch.withgoogle.com/docs",
+    "description": "The Stitch MCP server enables AI assistants to interact with Stitch for vibe design: generating UI designs from text and images, and accessing project and screen details. See https://stitch.withgoogle.com/docs for more details.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://stitch.googleapis.com/mcp",
+              "--header",
+              "X-Goog-Api-Key: <STITCH_API_KEY>"
+            ]
+          },
+          "variables": [
+            {
+              "name": "<STITCH_API_KEY>",
+              "title": "Stitch API Key",
+              "description": "Your Stitch API Key. Create one in the Stitch UI (https://stitch.withgoogle.com/settings)",
+              "link": "https://stitch.withgoogle.com/settings"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED"
+  },
+  {
+    "title": "Google Developer Knowledge",
+    "id": "google-developer-knowledge",
+    "link": "https://developers.google.com/knowledge/mcp",
+    "description": "The Google Developer Knowledge MCP server gives AI-powered development tools the ability to search Google's official developer documentation and retrieve information for Google's products such as Firebase, Google Cloud, Android, Maps, and more. By connecting your AI application straight to our official library of documentation, it ensures the code and guidance you receive are up-to-date and based on authoritative context.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://developerknowledge.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://developers.google.com/knowledge/mcp.md.txt"
+  },
+  {
+    "title": "ClickHouse",
+    "id": "clickhouse",
+    "link": "https://clickhouse.com/docs/use-cases/AI/MCP",
+    "description": "The ClickHouse MCP server enables agents to securely interact with ClickHouse databases. It provides a universal interface to execute SQL, explore data, and view backup & billing details, allowing agentic tooling to leverage ClickHouse's high-performance analytical capabilities.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://mcp.clickhouse.cloud/mcp"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/ClickHouse/mcp-clickhouse/main/README.md"
+  },
+  {
+    "title": "Google Compute Engine",
+    "id": "google-compute-engine",
+    "link": "https://cloud.google.com/compute/docs/use-compute-engine-mcp",
+    "description": "Perform a range of infrastructure management tasks, including: manage virtual machine (VM) instances, manage instance group managers and instance templates, manage disks and snapshots, retrieve information about reservations and commitments.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://compute.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/compute.md"
+  },
+  {
+    "title": "Android Management API",
+    "id": "android-management-api",
+    "link": "https://developers.google.com/android/management/use-android-management-mcp",
+    "description": "Access enterprise mobility data using natural language queries about device fleets, automated auditing of policy compliance, and the integration of device management data into broader automated workflows.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://androidmanagement.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/androidmanagement.md"
+  },
+  {
+    "title": "Google Cloud Resource Manager",
+    "id": "google-cloud-resource-manager",
+    "link": "https://cloud.google.com/resource-manager/docs/use-resourcemanager-mcp",
+    "description": "Search your Google Cloud projects using natural language.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://cloudresourcemanager.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/cloudresourcemanager.md"
+  },
+  {
+    "title": "Google Cloud Organization Policy",
+    "id": "google-cloud-organization-policy",
+    "link": "https://docs.cloud.google.com/organization-policy/use-organization-policy-mcp",
+    "description": "Discover, manage, and audit organization policies and custom constraints across your Google Cloud resources using natural language.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://orgpolicy.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/orgpolicy.md"
+  },
+  {
+    "title": "Google Cloud API Keys",
+    "id": "google-cloud-apikeys",
+    "link": "https://docs.cloud.google.com/api-keys/docs/overview",
+    "description": "Create, inspect, restrict, and manage the lifecycle of API keys in your Google Cloud projects using natural language.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://apikeys.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/apikeys.md"
+  },
+  {
+    "title": "Vertex AI Search",
+    "id": "vertex-ai-search",
+    "link": "https://cloud.google.com/generative-ai-app-builder/docs/reference/mcp",
+    "description": "Perform searches on ingested data in Google-owned data stores.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://discoveryengine.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/discoveryengine.md"
+  },
+  {
+    "title": "Google Cloud Firestore",
+    "id": "google-cloud-firestore",
+    "link": "https://cloud.google.com/firestore/native/docs/use-firestore-mcp",
+    "description": "Interact with documents stored in a Firestore database using natural language.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://firestore.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/firestore.md"
+  },
+  {
+    "title": "Google Cloud Logging",
+    "id": "google-cloud-logging",
+    "link": "https://cloud.google.com/logging/docs/use-logging-mcp",
+    "description": "Access resources in the Cloud Logging platform using natural language.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://logging.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/logging.md"
+  },
+  {
+    "title": "Google Managed Service for Apache Kafka",
+    "id": "google-managed-service-for-apache-kafka",
+    "link": "https://cloud.google.com/managed-service-for-apache-kafka/docs/use-managed-service-for-apache-kafka-mcp",
+    "description": "Manage clusters for Managed Service for Apache Kafka and Kafka Connect using natural language.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://managedkafka.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/managedkafka.md"
+  },
+  {
+    "title": "Google Cloud Monitoring",
+    "id": "google-cloud-monitoring",
+    "link": "https://cloud.google.com/monitoring/docs/use-monitoring-mcp",
+    "description": "Access resources in the Cloud Monitoring platform using natural language.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://monitoring.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/monitoring.md"
+  },
+  {
+    "title": "Google Cloud Pub/Sub",
+    "id": "google-cloud-pubsub",
+    "link": "https://cloud.google.com/pubsub/docs/use-pubsub-mcp",
+    "description": "Manage Pub/Sub resources and publish messages. Create, list, get, update, and delete Pub/Sub topics, subscriptions, and snapshots, as well as publish messages to topics.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://pubsub.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/pubsub.md"
+  },
+  {
+    "title": "Google Cloud Quotas",
+    "id": "google-cloud-quotas",
+    "link": "go/onemcp",
+    "description": "The Cloud Quotas MCP server allows you to view quota allocations, request quota increases, and manage Quota Adjuster configurations.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://cloudquotas.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/cloudquotas.md"
+  },
+  {
+    "title": "Personalized Service Health",
+    "id": "personalized-service-health",
+    "link": "https://cloud.google.com/service-health/docs",
+    "description": "Access Personalized Service Health events impacting Google Cloud products and services relevant to your projects using natural language.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://servicehealth.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.gstatic.com/onemcp/servicehealth.md"
+  },
+  {
+    "title": "Google Cloud Unified Maintenance",
+    "id": "google-cloud-unified-maintenance",
+    "link": "go/umm:mcp-debug",
+    "description": "The Unified Maintenance MCP server allows you to discover and query planned disruptive maintenance events across Google Cloud resources.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://maintenance.googleapis.com/mcp",
+        "authProviderType": "google_credentials"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://g3doc.corp.google.com/company/teams/easysaas/team/maintenance/docs/Operational/How-To/MCP.md"
+  },
+  {
+    "title": "Neo4j",
+    "id": "neo4j",
+    "link": "https://neo4j.com/docs/mcp/current/",
+    "description": "Interact with your Neo4j graph database using natural language. This MCP server connects directly to your Neo4j instance to explore your graph schema, run read and write Cypher queries, and inspect nodes, relationships, and paths directly from your AI tools.",
+    "local": {
+      "commands": {
+        "uvx": {
+          "template": {
+            "command": "uvx",
+            "args": [
+              "neo4j-mcp-server"
+            ],
+            "env": {
+              "NEO4J_DATABASE": "<NEO4J_DATABASE>",
+              "NEO4J_PASSWORD": "<NEO4J_PASSWORD>",
+              "NEO4J_READ_ONLY": "<NEO4J_READ_ONLY>",
+              "NEO4J_URI": "<NEO4J_URI>",
+              "NEO4J_USERNAME": "<NEO4J_USERNAME>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<NEO4J_URI>",
+              "title": "Neo4j Connection URI",
+              "description": "The Bolt connection URI for your Neo4j instance (e.g. \"bolt://localhost:7687\" for a local/Desktop database, or \"neo4j+s://<dbid>.databases.neo4j.io\" for an Aura instance)."
+            },
+            {
+              "name": "<NEO4J_USERNAME>",
+              "title": "Neo4j Username",
+              "description": "The username for authentication to the Neo4j database."
+            },
+            {
+              "name": "<NEO4J_PASSWORD>",
+              "title": "Neo4j Password",
+              "description": "The password for authentication to the Neo4j database."
+            },
+            {
+              "name": "<NEO4J_DATABASE>",
+              "title": "Neo4j Database Name",
+              "description": "The name of the database to connect to (e.g. \"neo4j\")."
+            },
+            {
+              "name": "<NEO4J_READ_ONLY>",
+              "title": "Neo4j Read Only",
+              "description": "Set to \"true\" to restrict queries to read-only operations, or \"false\" to allow write queries."
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/neo4j/mcp/main/README.md"
+  },
+  {
+    "title": "mabl",
+    "id": "mabl",
+    "link": "https://help.mabl.com/hc/en-us/articles/47299375773844-mabl-MCP-overview",
+    "description": "Author, run, and maintain mabl end-to-end tests from your AI tools. Connect to your mabl workspaces to generate and edit tests, trigger cloud or local runs, diagnose failures with AI analysis, and query results across environments — with every run and its evidence retained in mabl for auditability and compliance.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.mabl.com/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/mablhq/mabl-mcp-server/main/README.md"
+  },
+  {
+    "title": "Miro",
+    "id": "miro",
+    "link": "https://developers.miro.com/docs/miro-mcp",
+    "description": "Connect your Miro boards to AI assistants. This MCP server allows summarizing and searching boards, creating and updating board items (sticky notes, shapes, frames, connectors), generating Mermaid diagrams, and acting on board comments - all while respecting existing Miro permissions and access controls.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.miro.com/"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://developers.miro.com/docs/miro-mcp"
+  },
+  {
+    "title": "Parallel Search",
+    "id": "parallel-search",
+    "link": "https://docs.parallel.ai/search/search-mcp",
+    "description": "Search the live web and extract content from URLs directly in Antigravity. Parallel provides relevant search results and readable page content for your agent. Free to get started, with no API key required.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://search.parallel.ai/mcp"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/parallel-web/parallel-llms-txt/main/public/docs/search/search-mcp.md"
+  },
+  {
+    "title": "Grafana Cloud",
+    "id": "grafana-cloud",
+    "link": "https://github.com/grafana/ai-marketplace/tree/main/plugins/grafana-cloud-mcp",
+    "description": "The Grafana Cloud MCP server is a remotely hosted Model Context Protocol (MCP) server that lets external AI agents connect directly to your Grafana Cloud data. MCP-compatible clients can query metrics, logs, and other observability data from your Grafana environment without any local installation.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.grafana.com/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/grafana/ai-marketplace/main/plugins/grafana-cloud-mcp/README.md"
+  },
+  {
+    "title": "Exa",
+    "id": "exa",
+    "link": "https://docs.exa.ai/reference/exa-mcp",
+    "description": "Give your agent real-time web search and content retrieval. This MCP server connects to Exa's search API so you can run web searches, read full page content as clean markdown, and run multi-step research agents for list-building and enrichment directly from your AI tools.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "exa-mcp-server"
+            ],
+            "env": {
+              "EXA_API_KEY": "<EXA_API_KEY>",
+              "EXA_SOURCE": "antigravity"
+            }
+          },
+          "variables": [
+            {
+              "name": "<EXA_API_KEY>",
+              "title": "Exa API Key",
+              "description": "Your Exa API key, created at https://dashboard.exa.ai/api-keys.",
+              "link": "https://dashboard.exa.ai/api-keys"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/exa-labs/exa-mcp-server/main/README.md"
+  },
+  {
+    "title": "Crowdstrike-Falcon",
+    "id": "crowdstrike-falcon",
+    "link": "https://github.com/CrowdStrike/falcon-mcp",
+    "description": "Use natural language to find hosts, review detections, search events, and perform other security operations across your Falcon environment. CrowdStrike MCP securely connects AI applications to Falcon platform capabilities through the Model Context Protocol (MCP).",
+    "local": {
+      "commands": {
+        "uvx": {
+          "template": {
+            "command": "uvx",
+            "args": [
+              "falcon-mcp"
+            ],
+            "env": {
+              "FALCON_BASE_URL": "<FALCON_BASE_URL>",
+              "FALCON_CLIENT_ID": "<FALCON_CLIENT_ID>",
+              "FALCON_CLIENT_SECRET": "<FALCON_CLIENT_SECRET>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<FALCON_CLIENT_ID>",
+              "title": "Falcon Client ID",
+              "description": "CrowdStrike Falcon API Client ID."
+            },
+            {
+              "name": "<FALCON_CLIENT_SECRET>",
+              "title": "Falcon Client Secret",
+              "description": "CrowdStrike Falcon API Client Secret."
+            },
+            {
+              "name": "<FALCON_BASE_URL>",
+              "title": "Falcon Base URL",
+              "description": "The API base URL for your Falcon cloud region (e.g., https://api.crowdstrike.com for US-1, https://api.us-2.crowdstrike.com for US-2, https://api.eu-1.crowdstrike.com for EU-1).",
+              "link": "https://developer.crowdstrike.com/falcon-mcp/"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/CrowdStrike/falcon-mcp/main/README.md"
+  },
+  {
+    "title": "Vercel",
+    "id": "vercel",
+    "link": "https://vercel.com/docs/agent-resources/vercel-mcp",
+    "description": "Interact with your Vercel projects using natural language. Vercel MCP allows AI tools to search Vercel documentation, inspect projects and deployments, analyze deployment and build logs, and manage supported Vercel resources securely.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.vercel.com"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://vercel.com/docs/agent-resources/vercel-mcp"
+  },
+  {
+    "title": "FactSet AI-Ready Data",
+    "id": "factset-ai-ready-data",
+    "link": "https://developer.factset.com/mcp/factset-ai-ready-data-mcp",
+    "description": "Connect to FactSet AI-Ready Data to search and read institutional-grade financial data using natural language. This MCP server provides unified access to company fundamentals, consensus estimates, global prices, ownership, M&A transactions, debt capital structure, supply chain relationships, funds/ETFs, and unstructured content directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.factset.com/content/v1"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://developer.factset.com/mcp/factset-ai-ready-data-mcp"
+  },
+  {
+    "title": "Relativity",
+    "id": "relativity",
+    "link": "https://docs.cloud.google.com/gemini/enterprise/docs/connectors/relativity",
+    "description": "Stand up matters, shape workspace schema, govern access, and analyze usage in RelativityOne. This MCP server allows you to securely connect to your RelativityOne instance to search and locate content, create and edit matters, workspaces, and clients, manage user and group permissions, and generate usage reports using natural language.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "<RELATIVITY_INSTANCE_URI>/mcp",
+              "--static-oauth-client-info",
+              "{\"client_id\":\"<RELATIVITY_CLIENT_ID>\"}"
+            ]
+          },
+          "variables": [
+            {
+              "name": "<RELATIVITY_INSTANCE_URI>",
+              "title": "RelativityOne Base URL",
+              "description": "The base URL of your RelativityOne instance. Must start with https:// and have no trailing slash (e.g., https://<tenant>.r1.kcura.com or https://<your-domain>.relativity.one).",
+              "link": "https://docs.cloud.google.com/gemini/enterprise/docs/connectors/relativity/third-party-config"
+            },
+            {
+              "name": "<RELATIVITY_CLIENT_ID>",
+              "title": "Client ID for your Relativity Integration",
+              "description": "The OAuth 2.0 Client ID for your RelativityOne integration (configured with PKCE and UserInfoAccess, offline_access scopes).",
+              "link": "https://docs.cloud.google.com/gemini/enterprise/docs/connectors/relativity/third-party-config"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.cloud.google.com/gemini/enterprise/docs/connectors/relativity"
+  },
+  {
+    "title": "Daloopa",
+    "id": "daloopa",
+    "link": "https://docs.daloopa.com/docs/mcp",
+    "description": "Connect to Daloopa to discover companies, series, get company fundamentals, search financial documents, and get stock prices. Access verified financial data and KPIs from SEC filings, investor presentations, and earnings reports with source traceability.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://mcp.daloopa.com/server/mcp",
+              "--header",
+              "x-api-key: <DALOOPA_API_KEY>"
+            ]
+          },
+          "variables": [
+            {
+              "name": "<DALOOPA_API_KEY>",
+              "title": "Daloopa API Key",
+              "description": "Your Daloopa API Key. Generate one from your Daloopa account settings.",
+              "link": "https://docs.daloopa.com/docs/mcp"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/daloopa/investing/main/README.md"
+  },
+  {
+    "title": "Finnhub",
+    "id": "finnhub",
+    "link": "https://finnhub.io/mcp",
+    "description": "Search and retrieve real-time financial and stock market data from Finnhub using natural language. This MCP server connects to your Finnhub account to access stock quotes, historical OHLCV candles, company profiles, standardized financial statements (balance sheets, income statements, cash flow), earnings call transcripts, analyst estimates and price targets, SEC filings, ETF and mutual fund holdings, forex, crypto, and economic indicators directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.finnhub.io/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://finnhub.io/docs/api"
+  },
+  {
+    "title": "S&P Global",
+    "id": "s-p-global",
+    "link": "https://github.com/kensho-technologies/kfinance",
+    "description": "Search and retrieve comprehensive financial and corporate data from S&P Global using natural language. This MCP server connects to S&P Global Market Intelligence (via Kensho) to query company profiles, identifiers (CUSIP, ISIN), financial statements (balance sheets, income statements, cash flows), historical stock prices, market capitalization, earnings call transcripts, M&A transactions, funding rounds, consensus analyst estimates, and executive profiles directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://kfinance.kensho.com/integrations/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/kensho-technologies/kfinance/main/README.md"
+  },
+  {
+    "title": "LSEG",
+    "id": "lseg",
+    "link": "https://developers.lseg.com/",
+    "description": "Explore deep global markets data and financial analytics from LSEG (London Stock Exchange Group). This MCP server connects your AI tools to LSEG Financial Analytics (LFA) to price bonds and bond futures, analyze yield and credit curves, evaluate FX spot and forward carry trades, value options with full Greeks, and access IBES consensus estimates, company fundamentals, historical pricing, and macroeconomic indicators.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://api.analytics.lseg.com/lfa/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/anthropics/financial-services/main/plugins/partner-built/lseg/README.md"
+  },
+  {
+    "title": "Harvey",
+    "id": "harvey",
+    "link": "https://developers.harvey.ai/guides/harvey_mcp",
+    "description": "Bring Harvey's legal intelligence into your AI tools for general legal inquiries, Vault project analysis, and specialized knowledge source research. The Harvey MCP server lets you ask general legal questions, analyze documents in your Vault projects, and query specialized legal research knowledge sources.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://api.harvey.ai/hosted_mcp/mcp",
+              "--header",
+              "Authorization: Bearer <HARVEY_API_TOKEN>"
+            ]
+          },
+          "variables": [
+            {
+              "name": "<HARVEY_API_TOKEN>",
+              "title": "Harvey API Token",
+              "description": "Your Harvey API Token used to authenticate requests to the Harvey MCP server. You can generate or retrieve your token from your Harvey settings.",
+              "link": "https://developers.harvey.ai/guides/harvey_mcp"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://developers.harvey.ai/guides/harvey_mcp.md"
+  },
+  {
+    "title": "Guidepoint",
+    "id": "guidepoint",
+    "link": "https://github.com/guidepointglobal/mcp-skills-plugins",
+    "description": "Search Guidepoint's expert network for interview transcripts, browse curated event catalogs, and retrieve your personal event schedule. This MCP server also allows you to manage your event participation by registering for, requesting approval for, or canceling upcoming Guidepoint events directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://clapi.guidepoint.io/mcp-server/v1/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/guidepointglobal/mcp-skills-plugins/main/README.md"
+  },
+  {
+    "title": "Fiscal.ai",
+    "id": "fiscal-ai",
+    "link": "https://docs.fiscal.ai/mcp",
+    "description": "Access institutional-grade financial data in your AI tools, delivering fundamentals, ratios, KPIs, segments, adjusted metrics, SEC filings, earnings calls, and market quotes within minutes of earnings.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://api.fiscal.ai/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.fiscal.ai/mcp"
+  },
+  {
+    "title": "Docusign",
+    "id": "docusign",
+    "link": "https://developers.docusign.com/platform/mcp-server/",
+    "description": "Connect with your Docusign account using natural language. This MCP server allows you to search and locate Docusign envelopes, templates, and documents, read item details and metadata, create and update envelopes, and trigger or cancel workflow instances directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.docusign.com/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://developers.docusign.com/platform/mcp-server/"
+  },
+  {
+    "title": "LegalZoom",
+    "id": "legalzoom",
+    "link": "https://www.legalzoom.com/ai",
+    "description": "LegalZoom's MCP connector gives users instant access to legal product information, business formation guidance, and on-demand attorney consultations, all without leaving the conversation.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://www.legalzoom.com/mcp/gemini"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://www.legalzoom.com/mcp/catalog.txt"
+  },
+  {
+    "title": "NetDocuments",
+    "id": "netdocuments",
+    "link": "https://docs.cloud.google.com/gemini/enterprise/docs/connectors/netdocuments",
+    "description": "Search and retrieve documents from your NetDocuments repository using natural language. This MCP server allows AI tools to securely search documents and emails, filter by metadata, and read document contents and details while respecting your existing NetDocuments permissions and governance controls.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://web-api.us.netdocuments.app/connect/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.cloud.google.com/gemini/enterprise/docs/connectors/netdocuments"
+  },
+  {
+    "title": "iManage",
+    "id": "imanage",
+    "link": "https://docs.imanage.com/ai/mcpserver-user-help/en-US/iManage_MCP_Server_Help.html",
+    "description": "Interact with your iManage Work platform using natural language. This MCP server connects to your iManage account to search workspaces, folders, and documents, inspect document profiles and version histories, read document contents, and manage legal and knowledge work workflows directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://cloudimanage.com/mcp/work"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.imanage.com/ai/mcpserver-user-help/en-US/iManage_MCP_Server_Help.html"
+  },
+  {
+    "title": "Salesforce",
+    "id": "salesforce",
+    "link": "https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/sobject-all.html",
+    "description": "Search and manage Salesforce records from your Salesforce remote MCP server. Connect to your Salesforce instance to search across objects (SOSL), execute SOQL queries, inspect object schemas, traverse related records, and create, update, or delete records.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/salesforcecli/mcp/main/README.md"
+  },
+  {
+    "title": "Courtroom5",
+    "id": "courtroom5",
+    "link": "https://courtroom5.com/claude/",
+    "description": "Civil legal guidance for people navigating court without a lawyer. This MCP server provides educational guidance for self-represented litigants in U.S. civil legal matters across all 50 states, including case intake assessments, procedural deadline calculations, and prioritized next-step guidance directly from your AI tools.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://mcp.courtroom5.com/v1"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://courtroom5.com/claude/"
+  },
+  {
+    "title": "Opsera AI Agents",
+    "id": "opsera-ai-agents",
+    "link": "https://docs.agents.opsera.ai/",
+    "description": "Intelligent DevSecOps automation for your development workflow, powered by natural language. Connects your AI coding agent (Antigravity) to 150+ integrated DevOps tools via MCP — security scanning, pipeline generation, compliance auditing, and documentation, all via plain-English commands without leaving the IDE. Source code analysis runs locally; only structured results are returned to the portal.",
+    "remote": {
+      "template": {
+        "serverUrl": "https://agent.opsera.ai/mcp"
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://docs.agents.opsera.ai/readme.md"
+  },
+  {
+    "title": "Forge",
+    "id": "forge",
+    "link": "https://app.softwareforge.ai/docs/introduction",
+    "description": "Forge is an AI-powered platform that automates the earliest, most time-consuming phase of software development — the \"Day 0\" planning that typically takes weeks of meetings, documents, and back-and-forth. Exposes project/repo linking, PRD/BRD/architecture artifact retrieval, work-order management, commit/PR automation, and CI/CD pipeline tools directly to your AI coding agent.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "mcp-remote",
+              "https://app.softwareforge.ai/api/mcp",
+              "--header",
+              "Authorization: Bearer <FORGE_API_TOKEN>"
+            ]
+          },
+          "variables": [
+            {
+              "name": "<FORGE_API_TOKEN>",
+              "title": "Forge API Token",
+              "description": "Your Forge API token used to authenticate with the MCP server.",
+              "link": "https://app.softwareforge.ai/docs/introduction"
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED"
+  },
+  {
+    "title": "Endor Labs",
+    "id": "endor-cli-tools",
+    "link": "https://docs.endorlabs.com/setup-deployment/mcp/antigravity",
+    "description": "Bring Endor Labs security into your AI tools. With this MCP server, you can check dependency safety before adding a new package, scan your open source dependencies for vulnerabilities and malware, find leaked secrets accidentally committed in your Git history, run static analysis (SAST) on your code, and perform AI security reviews on your code changes.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "endorctl",
+              "ai-tools",
+              "mcp-server"
+            ],
+            "env": {
+              "ENDOR_MCP_SERVER_AUTH_MODE": "<ENDOR_MCP_SERVER_AUTH_MODE>",
+              "ENDOR_MCP_SERVER_AUTH_TENANT": "<ENDOR_MCP_SERVER_AUTH_TENANT>",
+              "ENDOR_NAMESPACE": "<ENDOR_NAMESPACE>"
+            }
+          },
+          "variables": [
+            {
+              "name": "<ENDOR_NAMESPACE>",
+              "title": "Endor Labs Namespace",
+              "description": "(Optional) Your Endor Labs tenant namespace. Required for Enterprise Edition only; the free Developer Edition runs with no configuration."
+            },
+            {
+              "name": "<ENDOR_MCP_SERVER_AUTH_MODE>",
+              "title": "Authentication Mode",
+              "description": "(Optional) Enterprise Edition authentication method: \"github\", \"gitlab\", \"google\", or \"sso\". A browser window opens automatically on first use to complete authentication."
+            },
+            {
+              "name": "<ENDOR_MCP_SERVER_AUTH_TENANT>",
+              "title": "SSO Tenant",
+              "description": "(Optional) SSO tenant name. Only needed when the authentication mode is \"sso\"."
+            }
+          ]
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/endorlabs/mcp-server-docs/main/antigravity/README.md"
+  },
+  {
+    "title": "Chrome DevTools for agents",
+    "id": "chrome-devtools-mcp",
+    "link": "https://github.com/ChromeDevTools/chrome-devtools-mcp",
+    "description": "Enable Antigravity to control and inspect a live Chrome browser, with access to the full power of Chrome DevTools for reliable automation, in-depth debugging, and performance analysis.",
+    "local": {
+      "commands": {
+        "npx": {
+          "template": {
+            "command": "npx",
+            "args": [
+              "-y",
+              "chrome-devtools-mcp@latest"
+            ]
+          }
+        }
+      }
+    },
+    "trustLevel": "TRUSTED",
+    "readme": "https://raw.githubusercontent.com/ChromeDevTools/chrome-devtools-mcp/main/README.md"
+  }
+]
