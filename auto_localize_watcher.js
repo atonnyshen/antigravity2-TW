@@ -30,11 +30,20 @@ function stripQuarantineRecursive(target) {
 function log(message) {
     const line = '[' + new Date().toISOString() + '] ' + message;
     console.log(line);
+    const isService = Boolean(process.env.XPC_SERVICE_NAME);
     const logPaths = [];
     if (IS_MAC && ROOT) {
-        logPaths.push('/Library/Logs/Antigravity2TW/autolocalize.log');
+        try {
+            const sysLogDir = '/Library/Logs/Antigravity2TW';
+            if (fs.existsSync(sysLogDir)) fs.chmodSync(sysLogDir, 0o755);
+            const sysLog = path.join(sysLogDir, 'autolocalize.log');
+            if (fs.existsSync(sysLog)) fs.chmodSync(sysLog, 0o644);
+        } catch {}
+        if (!isService) {
+            logPaths.push('/Library/Logs/Antigravity2TW/autolocalize.log');
+        }
     }
-    if (!process.env.XPC_SERVICE_NAME) {
+    if (!isService) {
         logPaths.push(path.join(DIR, 'autolocalize.log'));
     }
     for (const lp of logPaths) {
@@ -66,26 +75,52 @@ function waitForStableFile(file, { interval = 1000, timeout = 30000, samples = 3
     throw new Error('app.asar 尚未穩定，等待下次排程重試。');
 }
 
-function ensureAccessibleDir(dir) {
+function ensureAccessibleDir(dir, targetUid, targetGid) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
     try { fs.chmodSync(dir, 0o755); } catch {}
     if (ROOT) {
         try {
-            const parentStat = fs.statSync(path.dirname(dir));
-            if (parentStat.uid !== 0) {
-                fs.chownSync(dir, parentStat.uid, parentStat.gid);
+            let uid = targetUid;
+            let gid = targetGid;
+            if (uid == null || uid === 0) {
+                const parentStat = fs.statSync(path.dirname(dir));
+                if (parentStat.uid !== 0) {
+                    uid = parentStat.uid;
+                    gid = parentStat.gid;
+                }
+            }
+            if (uid != null && uid !== 0) {
+                fs.chownSync(dir, uid, gid);
+                try {
+                    for (const f of fs.readdirSync(dir)) {
+                        const fp = path.join(dir, f);
+                        try {
+                            fs.chownSync(fp, uid, gid);
+                            const st = fs.lstatSync(fp);
+                            fs.chmodSync(fp, st.isDirectory() ? 0o755 : 0o644);
+                        } catch {}
+                    }
+                } catch {}
             }
         } catch {}
     }
 }
 
-function acquireLock(lockPath) {
+function acquireLock(lockPath, targetUid, targetGid) {
     try {
         fs.mkdirSync(lockPath, { mode: 0o755 });
         if (ROOT) {
             try {
-                const parentStat = fs.statSync(path.dirname(lockPath));
-                if (parentStat.uid !== 0) fs.chownSync(lockPath, parentStat.uid, parentStat.gid);
+                let uid = targetUid;
+                let gid = targetGid;
+                if (uid == null || uid === 0) {
+                    const parentStat = fs.statSync(path.dirname(lockPath));
+                    if (parentStat.uid !== 0) {
+                        uid = parentStat.uid;
+                        gid = parentStat.gid;
+                    }
+                }
+                if (uid != null && uid !== 0) fs.chownSync(lockPath, uid, gid);
             } catch {}
         }
     } catch (error) {
@@ -104,15 +139,32 @@ function acquireLock(lockPath) {
         } else if (Date.now() - stat.mtimeMs < 30000) {
             return null;
         }
-        fs.rmSync(lockPath, { recursive: true, force: true });
-        return acquireLock(lockPath);
+        try {
+            fs.rmSync(lockPath, { recursive: true, force: true });
+        } catch (rmErr) {
+            if (rmErr.code === 'EACCES') {
+                try { fs.chmodSync(lockPath, 0o777); } catch {}
+                fs.rmSync(lockPath, { recursive: true, force: true });
+            } else {
+                throw rmErr;
+            }
+        }
+        return acquireLock(lockPath, targetUid, targetGid);
     }
     const pidFile = path.join(lockPath, 'pid');
     fs.writeFileSync(pidFile, String(process.pid), { flag: 'wx' });
     if (ROOT) {
         try {
-            const parentStat = fs.statSync(path.dirname(lockPath));
-            if (parentStat.uid !== 0) fs.chownSync(pidFile, parentStat.uid, parentStat.gid);
+            let uid = targetUid;
+            let gid = targetGid;
+            if (uid == null || uid === 0) {
+                const parentStat = fs.statSync(path.dirname(lockPath));
+                if (parentStat.uid !== 0) {
+                    uid = parentStat.uid;
+                    gid = parentStat.gid;
+                }
+            }
+            if (uid != null && uid !== 0) fs.chownSync(pidFile, uid, gid);
         } catch {}
     }
     return () => fs.rmSync(lockPath, { recursive: true, force: true });
@@ -141,7 +193,7 @@ function getAppInfo() {
 }
 
 function recipeHash() {
-    const files = ['localization_engine.js', 'auto_localize_watcher.js', 'package-lock.json'];
+    const files = ['package.json', 'package-lock.json', 'localization_engine.js', 'auto_localize_watcher.js'];
     for (const folder of ['dicts', 'dicts_tw']) {
         const folderPath = path.join(DIR, folder);
         if (fs.existsSync(folderPath)) {
@@ -176,19 +228,66 @@ function ensureRegularTarget(file) {
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
 }
 
+function notifyMacUser(title, message) {
+    if (!IS_MAC) return;
+    try {
+        const script = `display notification "${message.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"`;
+        execFileSync('/usr/bin/osascript', ['-e', script], { stdio: 'ignore' });
+    } catch {}
+}
+
 function safeReplaceFile(src, dst, mode, uid, gid) {
+    stripQuarantine(src);
     stripQuarantine(dst);
     try {
         fs.renameSync(src, dst);
     } catch (error) {
         if (error.code === 'EPERM' || error.code === 'EXDEV' || error.code === 'EACCES') {
-            try { fs.chmodSync(dst, 0o644); } catch {}
-            fs.copyFileSync(src, dst);
-            try { fs.unlinkSync(src); } catch {}
+            let replaced = false;
+            // 1. Try copyFileSync
+            try {
+                if (fs.existsSync(dst)) {
+                    try { fs.chmodSync(dst, 0o644); } catch {}
+                }
+                fs.copyFileSync(src, dst);
+                replaced = true;
+            } catch (copyErr) {
+                // 2. Try in-place write via openSync('r+') to avoid copyfile(3) attribute issues without unlinking
+                try {
+                    if (fs.existsSync(dst)) {
+                        try { fs.chmodSync(dst, 0o644); } catch {}
+                        const fd = fs.openSync(dst, 'r+');
+                        try {
+                            const buf = fs.readFileSync(src);
+                            fs.ftruncateSync(fd, 0);
+                            fs.writeSync(fd, buf, 0, buf.length, 0);
+                            replaced = true;
+                        } finally {
+                            fs.closeSync(fd);
+                        }
+                    } else {
+                        const buf = fs.readFileSync(src);
+                        fs.writeFileSync(dst, buf, { mode: mode || 0o644 });
+                        replaced = true;
+                    }
+                } catch (writeErr) {
+                    // 3. Try /bin/cp without -f to avoid unlinking dst if copy fails
+                    try {
+                        execFileSync('/bin/cp', [src, dst], { stdio: 'ignore' });
+                        replaced = true;
+                    } catch (cpErr) {
+                        throw writeErr;
+                    }
+                }
+            }
+            if (replaced) {
+                try { fs.unlinkSync(src); } catch {}
+            }
         } else {
             throw error;
         }
     }
+    stripQuarantine(dst);
     if (mode != null) {
         try { fs.chmodSync(dst, mode & 0o777); } catch {}
     }
@@ -233,7 +332,7 @@ function checkAndLocalizeApp(appInfo, {
     const originalHash = digest(original);
     const sourceStat = fs.statSync(asarPath);
     const localized = isLocalized(original);
-    ensureAccessibleDir(stateDir);
+    ensureAccessibleDir(stateDir, sourceStat.uid, sourceStat.gid);
     const statePath = path.join(stateDir, digest(appPath) + '.json');
     let previous = {};
     try { previous = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch {}
@@ -242,7 +341,7 @@ function checkAndLocalizeApp(appInfo, {
         return false;
     }
 
-    const release = acquireLock(path.join(stateDir, 'run.lock'));
+    const release = acquireLock(path.join(stateDir, 'run.lock'), sourceStat.uid, sourceStat.gid);
     if (!release) { log('已有守護程序執行中，略過。'); return false; }
     let stageDir;
     let replacementDir;
@@ -286,12 +385,27 @@ function checkAndLocalizeApp(appInfo, {
             try { fs.chownSync(candidate, sourceStat.uid, sourceStat.gid); } catch {}
         }
         if (!localized) {
-            const backup = path.join(replacementDir, 'official.bak');
-            fs.writeFileSync(backup, original, { mode: sourceStat.mode & 0o777, flag: 'wx' });
-            if (ROOT) {
-                try { fs.chownSync(backup, sourceStat.uid, sourceStat.gid); } catch {}
+            let needBackup = true;
+            try {
+                if (fs.existsSync(asarPath + '.bak')) {
+                    const existingBak = fs.readFileSync(asarPath + '.bak');
+                    if (digest(existingBak) === originalHash) {
+                        needBackup = false;
+                    }
+                }
+            } catch {}
+            if (needBackup) {
+                try {
+                    const backup = path.join(replacementDir, 'official.bak');
+                    fs.writeFileSync(backup, original, { mode: sourceStat.mode & 0o777, flag: 'wx' });
+                    if (ROOT) {
+                        try { fs.chownSync(backup, sourceStat.uid, sourceStat.gid); } catch {}
+                    }
+                    safeReplaceFile(backup, asarPath + '.bak', sourceStat.mode, sourceStat.uid, sourceStat.gid);
+                } catch (bakErr) {
+                    log('應用程式目錄備份非致命略過：' + bakErr.message);
+                }
             }
-            safeReplaceFile(backup, asarPath + '.bak', sourceStat.mode, sourceStat.uid, sourceStat.gid);
         }
         if (digest(fs.readFileSync(asarPath)) !== originalHash) throw new Error('置換前官方包已更新，取消套用。');
         safeReplaceFile(candidate, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid);
@@ -345,7 +459,10 @@ function main() {
         if (!appInfo) { log('尚未找到 Antigravity，等待下次排程。'); return; }
         checkAndLocalizeApp(appInfo);
     } catch (error) {
-        log('自動繁中化失敗，稍後重試：' + error.message);
+        log('自動繁中化失敗，稍後重試：' + (error.stack || error.message));
+        if (IS_MAC && (error.code === 'EPERM' || (error.message && error.message.includes('EPERM')))) {
+            notifyMacUser('Antigravity 繁中化', '因 macOS 系統權限或 App 管理限制，自動覆寫受阻；請在專案中執行「點兩下安裝繁體中文」或於系統設定授權。');
+        }
         process.exitCode = 1;
     }
 }

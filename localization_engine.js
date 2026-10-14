@@ -1032,6 +1032,65 @@ function runAsar(action, source, destination) {
     }
 }
 
+function safeReplaceFile(src, dst, mode, uid, gid) {
+    if (process.platform === 'darwin') {
+        try {
+            child_process.execFileSync('/usr/bin/xattr', ['-d', 'com.apple.quarantine', dst], { stdio: 'ignore' });
+        } catch {}
+    }
+    try {
+        fs.renameSync(src, dst);
+    } catch (error) {
+        if (error.code === 'EPERM' || error.code === 'EXDEV' || error.code === 'EACCES') {
+            let replaced = false;
+            try {
+                if (fs.existsSync(dst)) {
+                    try { fs.chmodSync(dst, 0o644); } catch {}
+                }
+                fs.copyFileSync(src, dst);
+                replaced = true;
+            } catch (copyErr) {
+                try {
+                    if (fs.existsSync(dst)) {
+                        try { fs.chmodSync(dst, 0o644); } catch {}
+                        const fd = fs.openSync(dst, 'r+');
+                        try {
+                            const buf = fs.readFileSync(src);
+                            fs.ftruncateSync(fd, 0);
+                            fs.writeSync(fd, buf, 0, buf.length, 0);
+                            replaced = true;
+                        } finally {
+                            fs.closeSync(fd);
+                        }
+                    } else {
+                        const buf = fs.readFileSync(src);
+                        fs.writeFileSync(dst, buf, { mode: mode || 0o644 });
+                        replaced = true;
+                    }
+                } catch (writeErr) {
+                    try {
+                        child_process.execFileSync('/bin/cp', [src, dst], { stdio: 'ignore' });
+                        replaced = true;
+                    } catch {
+                        throw writeErr;
+                    }
+                }
+            }
+            if (replaced) {
+                try { fs.unlinkSync(src); } catch {}
+            }
+        } else {
+            throw error;
+        }
+    }
+    if (mode != null) {
+        try { fs.chmodSync(dst, mode & 0o777); } catch {}
+    }
+    if (process.platform !== 'win32' && process.getuid && process.getuid() === 0 && uid != null && gid != null) {
+        try { fs.chownSync(dst, uid, gid); } catch {}
+    }
+}
+
 function cleanElectronCache() {
     let appSupportDir = "";
     if (process.platform === 'darwin') {
@@ -1400,9 +1459,7 @@ function install20(resourcesDir) {
         packRes = runAsar('pack', tempDir, candidate);
         if (packRes.success) {
             const sourceStat = fs.statSync(asarPath);
-            fs.chmodSync(candidate, sourceStat.mode & 0o777);
-            if (process.platform !== 'win32' && process.getuid() === 0) fs.chownSync(candidate, sourceStat.uid, sourceStat.gid);
-            fs.renameSync(candidate, asarPath);
+            safeReplaceFile(candidate, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid);
         }
     } finally {
         fs.rmSync(outputDir, { recursive: true, force: true });
@@ -1443,8 +1500,7 @@ function restore20(resourcesDir) {
 
     console.log("[还原] 正在用官方备份文件恢复...");
     try {
-        fs.copyFileSync(bakPath, asarPath);
-        fs.unlinkSync(bakPath);
+        safeReplaceFile(bakPath, asarPath);
     } catch (e) {
         console.error(`[错误] 恢复备份失败: ${e.message}`);
         if (process.platform === 'darwin' && e.code === 'EPERM') {

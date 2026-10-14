@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { checkAndLocalizeApp, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir } = require('../auto_localize_watcher');
+const { checkAndLocalizeApp, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir, recipeHash } = require('../auto_localize_watcher');
 
 function fixture(t) {
     const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-watcher-'));
@@ -191,4 +191,59 @@ test('ensureAccessibleDir creates directory recursively and ensures accessible m
         assert.equal(updatedStat.mode & 0o777, 0o755);
     }
 });
+
+test('recipeHash incorporates package.json changes', t => {
+    const hash1 = recipeHash();
+    assert.equal(typeof hash1, 'string');
+    assert.equal(hash1.length, 64);
+});
+
+test('safeReplaceFile falls back to in-place write when copyFileSync throws EPERM', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-replace-eperm-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const src = path.join(root, 'src.txt');
+    const dst = path.join(root, 'dst.txt');
+    fs.writeFileSync(src, 'new-data');
+    fs.writeFileSync(dst, 'old-data');
+
+    const origRename = fs.renameSync;
+    const origCopy = fs.copyFileSync;
+    let renameFailed = false;
+    let copyAttempt = 0;
+    fs.renameSync = () => {
+        renameFailed = true;
+        const err = new Error('Rename EPERM');
+        err.code = 'EPERM';
+        throw err;
+    };
+    fs.copyFileSync = (s, d) => {
+        copyAttempt++;
+        const err = new Error('Copy EPERM');
+        err.code = 'EPERM';
+        throw err;
+    };
+    try {
+        safeReplaceFile(src, dst, 0o644);
+        assert.equal(renameFailed, true);
+        assert.equal(copyAttempt, 1);
+        assert.equal(fs.readFileSync(dst, 'utf8'), 'new-data');
+        assert.equal(fs.existsSync(src), false);
+    } finally {
+        fs.renameSync = origRename;
+        fs.copyFileSync = origCopy;
+    }
+});
+
+test('acquireLock recovers and reclaims stale lock with restrictive directory permissions', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-perm-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const lockDir = path.join(root, 'test.lock');
+    fs.mkdirSync(lockDir, { mode: 0o700 });
+    fs.writeFileSync(path.join(lockDir, 'pid'), '999999999');
+    const release = acquireLock(lockDir);
+    assert.notEqual(release, null);
+    release();
+    assert.equal(fs.existsSync(lockDir), false);
+});
+
 
