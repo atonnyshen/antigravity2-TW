@@ -1,5 +1,16 @@
 # 更新紀錄
 
+## 3.3.2 — 2026-11-10
+
+- 適配 Antigravity v2.30.0+ 官方介面更新：
+  - 整合 v2.22 至 v2.30 介面修訂，新增 `page_v222_patch.json`、`page_v226_patch.json`、`page_v227_patch.json`、`page_v228_patch.json`、`page_v229_patch.json` 與 `page_v230_patch.json` 繁中修訂字典。
+  - 全面清洗並校準為台灣在地用語（zh-TW），涵蓋對話設定、知識庫、MCP 工具、模型面板及自訂代理介面。
+  - 強化輸入焦點隔離與程式碼選擇器，確保編輯器、終端機與思考內容不被誤翻譯。
+- 提升 macOS Sequoia 相容性與守護穩定度：
+  - 主動清除 `com.apple.provenance` 延伸屬性，解決 macOS Sequoia 檔案屬性鎖定阻礙置換之問題。
+  - 加固 `localization_engine.js` 本機 asar 提取與封裝機制，相容特殊字元與空白路徑，保持背景離線可用。
+  - 完善 `--staging` 與測試隔離環境，21 項跨平台自動化測試全數通過。
+
 ## 3.3.1 — 2026-10-14
 
 - 修復 macOS 守護服務置換檔案時造成 `app.asar` 遺失的資料損毀問題：

@@ -253,8 +253,8 @@ function generateJs() {
                 if (el.tagName === 'TEXTAREA') return true;
                 if (el.tagName === 'OPTION' && !el.hasAttribute('value')) return true;
             }
-            const active = document.activeElement;
-            if (active && (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active.getAttribute && active.getAttribute('data-lexical-editor') === 'true')) && (active === el || active.contains(el))) {
+            const active = (typeof document !== 'undefined' && document) ? document.activeElement : null;
+            if (active && (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active.getAttribute && active.getAttribute('data-lexical-editor') === 'true')) && (active === el || (typeof active.contains === 'function' && active.contains(el)))) {
                 return true;
             }
             while (el) {
@@ -1640,6 +1640,43 @@ function asarUnpackArguments(layout, extractedDir) {
     return args;
 }
 
+function findAsarCli() {
+    const cli = path.join(__dirname, 'node_modules', '@electron', 'asar', 'bin', 'asar.mjs');
+    if (fs.existsSync(cli)) return cli;
+    return null;
+}
+
+function runAsar(action, source, destination, extraArgs = []) {
+    const cli = findAsarCli();
+    if (cli) {
+        try {
+            const stdout = child_process.execFileSync(process.execPath, [cli, action, source, destination, ...extraArgs], {
+                encoding: 'utf8', timeout: 120000, maxBuffer: 8 * 1024 * 1024
+            });
+            return { success: true, stdout, stderr: '' };
+        } catch (e) {
+            return { success: false, stdout: e.stdout || '', stderr: e.stderr || e.message };
+        }
+    }
+    const extra = extraArgs.length ? ' ' + extraArgs.map(a => `"${a}"`).join(' ') : '';
+    return runCommandSync(`npx -y @electron/asar ${action} "${source}" "${destination}"${extra}`);
+}
+
+function asarUnpackArgumentsList(layout, extractedDir) {
+    const pattern = values => {
+        if (values.some(value => /[\r\n"'`$*?\[\]{}!,]/.test(value))) throw new Error('Unsupported ASAR unpack path');
+        return values.length === 1 ? values[0] : `{${values.join(',')}}`;
+    };
+    const args = [];
+    if (layout.unpackDirs && layout.unpackDirs.length) {
+        args.push('--unpack-dir', pattern(layout.unpackDirs));
+    }
+    if (layout.unpackFiles && layout.unpackFiles.length) {
+        args.push('--unpack', pattern(layout.unpackFiles));
+    }
+    return args;
+}
+
 function validateAsarCandidate(sourcePath, candidatePath) {
     const before = readAsarLayout(sourcePath);
     const after = readAsarLayout(candidatePath);
@@ -1696,8 +1733,8 @@ function install20(resourcesDir) {
     const tempDir = path.join(buildDir, 'extracted');
     const candidatePath = path.join(buildDir, 'candidate.asar');
 
-    console.log(`[解包] 正在使用 npx 提取 app.asar...`);
-    const extractRes = runCommandSync(`npx -y @electron/asar extract "${sourceArchive}" "${tempDir}"`);
+    console.log(`[解包] 正在使用 asar 提取 app.asar...`);
+    const extractRes = runAsar('extract', sourceArchive, tempDir);
     if (!extractRes.success || !fs.existsSync(tempDir)) {
         console.error(`[错误] 解包失败，可能是由于系统未安装 Node.js/npm 或者网络限制。`);
         console.error(`详情: ${extractRes.stderr}\n${extractRes.stdout}`);
@@ -2009,7 +2046,8 @@ function install20(resourcesDir) {
 
     // 4. 重新打包
     console.log(`[打包] 正在生成并校验汉化候选包...`);
-    const packRes = runCommandSync(`npx -y @electron/asar pack "${tempDir}" "${candidatePath}"${asarUnpackArguments(layout, tempDir)}`);
+    const packArgs = asarUnpackArgumentsList(layout, tempDir);
+    const packRes = runAsar('pack', tempDir, candidatePath, packArgs);
 
     if (!packRes.success) {
         console.error(`[错误] 打包失败。`);
@@ -2039,8 +2077,10 @@ function install20(resourcesDir) {
         throw error;
     }
 
-    cleanElectronCache();
-    resignAppOnMac(resourcesDir);
+    if (!process.argv.includes('--staging')) {
+        cleanElectronCache();
+        resignAppOnMac(resourcesDir);
+    }
     console.log(`[√] Antigravity 2.0 汉化部署完成！`);
     return true;
     } catch (error) {
@@ -2292,7 +2332,9 @@ function main() {
     const installDir = detectInstallationDir(manualDir);
     
     // 2. 检测客户端是否正在运行，并根据参数决定是否关闭以解除文件锁定
-    wasAppRunning = checkIfAppIsRunning();
+    const staging = args.includes('--staging');
+    if (staging) noKill = true;
+    wasAppRunning = staging ? false : checkIfAppIsRunning();
     if (noKill) {
         console.log("[跳过] 检测到 --no-kill 参数，跳过关闭 Antigravity 运行进程。");
     } else {
@@ -2349,8 +2391,9 @@ function main() {
         }
     }
 
-    // 5. 校验通过且原来客户端在运行，则自动重新启动客户端
-    if (success && wasAppRunning) {
+    // 5. 校验通过且原来客户端在运行且未指定 --no-kill，则自动重新启动客户端
+    const isAppBundle = installDir.endsWith('.app') || fs.existsSync(path.join(installDir, 'Contents', 'MacOS')) || (process.platform === 'win32' && fs.existsSync(path.join(installDir, 'Antigravity.exe')));
+    if (success && wasAppRunning && !noKill && isAppBundle) {
         console.log("\n[启动] 检测到安装前反重力客户端处于开启状态，正在重新启动客户端...");
         try {
             if (process.platform === 'win32') {
@@ -2383,4 +2426,5 @@ function main() {
     }
 }
 
-main();
+if (require.main === module) main();
+module.exports = { generateJs, runAsar, findAsarCli };
