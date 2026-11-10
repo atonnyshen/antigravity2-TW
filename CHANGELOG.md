@@ -9,7 +9,7 @@
 - 提升 macOS Sequoia 相容性與守護穩定度：
   - 主動清除 `com.apple.provenance` 延伸屬性，解決 macOS Sequoia 檔案屬性鎖定阻礙置換之問題。
   - 加固 `localization_engine.js` 本機 asar 提取與封裝機制，相容特殊字元與空白路徑，保持背景離線可用。
-  - 完善 `--staging` 與測試隔離環境，21 項跨平台自動化測試全數通過。
+  - 完善 `--staging` 與測試隔離環境，22 項跨平台自動化測試全數通過。
 
 ## 3.3.1 — 2026-10-14
 
