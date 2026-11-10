@@ -18,6 +18,9 @@ function stripQuarantine(target) {
     try {
         execFileSync('/usr/bin/xattr', ['-d', 'com.apple.quarantine', target], { stdio: 'ignore' });
     } catch {}
+    try {
+        execFileSync('/usr/bin/xattr', ['-d', 'com.apple.provenance', target], { stdio: 'ignore' });
+    } catch {}
 }
 
 function stripQuarantineRecursive(target) {
@@ -271,9 +274,9 @@ function safeReplaceFile(src, dst, mode, uid, gid) {
                         replaced = true;
                     }
                 } catch (writeErr) {
-                    // 3. Try /bin/cp without -f to avoid unlinking dst if copy fails
+                    // 3. Try /bin/cp -f to unlink dst first and bypass macOS Sequoia provenance locking
                     try {
-                        execFileSync('/bin/cp', [src, dst], { stdio: 'ignore' });
+                        execFileSync('/bin/cp', ['-f', src, dst], { stdio: 'ignore' });
                         replaced = true;
                     } catch (cpErr) {
                         throw writeErr;
