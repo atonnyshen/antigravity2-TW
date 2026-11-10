@@ -138,6 +138,15 @@ if (USE_TW) {
         "[启动] 客户端启动成功！": "[啟動] 用戶端啟動成功！",
         "[警告] 未找到客户端主程序: ": "[警告] 未找到用戶端主程式: ",
         "[警告] 客户端启动失败: ": "[警告] 用戶端啟動失敗: ",
+        "[解包] 正在使用 asar 提取 app.asar...": "[解包] 正在使用 asar 提取 app.asar...",
+        "[打包] 正在生成并校验汉化候选包...": "[打包] 正在產生並校驗繁中化候選包...",
+        "[错误] 汉化未完成，未提交的候选包不会替换客户端:": "[錯誤] 繁中化未完成，未確認的候選包不會替換用戶端:",
+        "[错误] 管理员提权执行失败或用户取消了密码输入。": "[錯誤] 管理員提權執行失敗或使用者取消了密碼輸入。",
+        "[警告] 未能在 tray.js 中找到 createTray 函数插入点。": "[警告] 未能在 tray.js 中找到 createTray 函式插入點。",
+        "[提示] 临时目录已保留:": "[提示] 暫存目錄已保留:",
+        "[错误] 恢复备份失败:": "[錯誤] 還原備份失敗:",
+        "[提示] macOS 写入受限，请使用管理员权限运行脚本。": "[提示] macOS 寫入受限，請使用管理員權限執行腳本。",
+        "[代理] 已保留代理文件（无法确认其归属，请按需手动处理）:": "[代理] 已保留代理檔案（無法確認其歸屬，請按需手動處理）:",
         "[代理] 检测到 proxy_config 配置目录，正在注入代理模块...": "[代理] 偵測到 proxy_config 設定目錄，正在注入代理模組...",
         "[代理] 代理模块注入成功: ": "[代理] 代理模組注入成功: ",
         "[代理] 已清理代理注入文件: ": "[代理] 已清理代理注入檔案: ",
@@ -1203,7 +1212,7 @@ function generateJs() {
                                 const dir = path.dirname(fp);
                                 if (fs.existsSync(dir)) {
                                     fs.writeFileSync(fp, dumpStr, 'utf-8');
-                                    console.log('[Antigravity CN] MCP Catalog saved to: ' + fp);
+                                    console.log((USE_TW ? '[Antigravity TW] ' : '[Antigravity CN] ') + 'MCP Catalog saved to: ' + fp);
                                 }
                             } catch (err) {}
                         }
@@ -1211,8 +1220,13 @@ function generateJs() {
                 }
             } catch (e) {}
 
-            console.log('%c[Antigravity CN] 已自动捕获 ' + catalog.length + ' 个 MCP 服务器！', 'color: #10b981; font-weight: bold;', catalog);
-            console.log('[Antigravity CN] 如需查看/导出 JSON，可在控制台执行: copy(window.__exportMcpCatalog())');
+            if (USE_TW) {
+                console.log('%c[Antigravity TW] 已自動捕獲 ' + catalog.length + ' 個 MCP 伺服器！', 'color: #10b981; font-weight: bold;', catalog);
+                console.log('[Antigravity TW] 如需查看／匯出 JSON，可在主控台執行: copy(window.__exportMcpCatalog())');
+            } else {
+                console.log('%c[Antigravity CN] 已自动捕获 ' + catalog.length + ' 个 MCP 服务器！', 'color: #10b981; font-weight: bold;', catalog);
+                console.log('[Antigravity CN] 如需查看/导出 JSON，可在控制台执行: copy(window.__exportMcpCatalog())');
+            }
 
             renderBadge(screen, catalog);
         } catch (e) {}

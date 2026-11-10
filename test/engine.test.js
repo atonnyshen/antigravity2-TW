@@ -123,3 +123,9 @@ test('FastPick and split text nodes are properly localized', () => {
     assert.equal(splitText2.nodeValue, ' 個...');
 });
 
+test('generated script includes Taiwan MCP sniffer messages in Traditional Chinese', () => {
+    const js = generateJs();
+    assert.ok(js.includes('[Antigravity TW] 已自動捕獲 '));
+    assert.ok(js.includes('[Antigravity TW] 如需查看／匯出 JSON，可在主控台執行: copy(window.__exportMcpCatalog())'));
+});
+
