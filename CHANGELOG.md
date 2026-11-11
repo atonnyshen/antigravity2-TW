@@ -1,5 +1,16 @@
 # 更新紀錄
 
+## 3.3.3 — 2026-11-11
+
+- 補齊 Antigravity v2.30.0+ 登入與新手導覽（NUX Onboarding）中英夾雜漏譯：
+  - 深度適配 React 前端以動態變數拆分字串之 TextNode 架構，補齊 `Customize your experience...`、`'s agents are powerful...`、`Help us improve Antigravity.` 等切斷節點繁中化。
+  - 補齊服務條款詳細頁（Terms of Service & Data Use）、隱私權聲明與背景代理運作提示，UI 詞條涵蓋率達 100% 全量覆蓋。
+- 根除 macOS 背景守護服務誤開 Finder 視窗之問題：
+  - 完善 `localization_engine.js` 重啟守衛，強制在 `--staging` 沙箱模式或 `--no-kill` 時略過用戶端重啟。
+  - 嚴格檢驗目標路徑必須為正規 `.app` 應用程式套件（含 `Contents/MacOS`），杜絕暫存資料夾被系統 `open` 指令喚起 Finder 視窗之烏龍。
+- 維護性與跨平台測試：
+  - 22 項跨平台自動化測試全數通過（macOS / Linux / Windows）。
+
 ## 3.3.2 — 2026-11-10
 
 - 適配 Antigravity v2.30.0+ 官方介面更新：
