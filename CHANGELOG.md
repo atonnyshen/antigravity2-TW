@@ -1,5 +1,14 @@
 # 更新紀錄
 
+## 3.3.4 — 2026-11-12
+
+- 適配 Antigravity v2.31.0 / v2.31.1 官方介面更新：
+  - 新增 `page_v231_patch.json` 繁中修訂字典，補齊協調器（Coordinator）角色面板、設定與多代理任務配置。
+  - 補齊 OAuth 授權碼備援登入提示、語音通話摘要（Summarizing call...）、歷史發言角色標記（Agent said / You said）與側邊提問指令（Ask /btw）。
+  - 全量掃描驗證 Antigravity v2.31.1 介面 2,296 條詞條，達 100% 完整中文化覆蓋。
+- 維護性與跨平台測試：
+  - 22 項跨平台自動化測試全數通過（macOS / Linux / Windows）。
+
 ## 3.3.3 — 2026-11-11
 
 - 補齊 Antigravity v2.30.0+ 登入與新手導覽（NUX Onboarding）中英夾雜漏譯：
