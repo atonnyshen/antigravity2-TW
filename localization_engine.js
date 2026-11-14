@@ -285,6 +285,31 @@ function generateJs() {
         return s.replace(/\\s+/g, ' ').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/…/g, '...').trim();
     }
 
+    function makeFlexibleRegex(str) {
+        if (!str) return null;
+        let s = '';
+        for (let i = 0; i < str.length; i++) {
+            const ch = str[i];
+            if (ch === "'" || ch === '’' || ch === '‘') {
+                s += "['’‘]";
+            } else if (ch === '"' || ch === '“' || ch === '”') {
+                s += '["“”]';
+            } else if (ch === '.' && str[i + 1] === '.' && str[i + 2] === '.') {
+                s += '(?:\\\\.\\\\.\\\\.|…)';
+                i += 2;
+            } else if (ch === '…') {
+                s += '(?:\\\\.\\\\.\\\\.|…)';
+            } else if (ch === ' ') {
+                s += '\\\\s+';
+            } else if ('-[]/{}()*+?.\\\\^$|'.indexOf(ch) !== -1) {
+                s += '\\\\' + ch;
+            } else {
+                s += ch;
+            }
+        }
+        return new RegExp(s, 'g');
+    }
+
     function translateWithShortcut(val) {
         if (!val) return null;
         const match = val.match(/^(.+?)\\s*\\(((?:Ctrl|Cmd|Alt|Shift|⌘|⌥|⇧|⌃)\\+?[^)]*|Enter|Escape|Esc|Space|Tab|Backspace|Delete|⏎|Aa|ab|\\.\\*|-|0|[a-zA-Z0-9])\\)$/i);
@@ -1039,8 +1064,23 @@ function generateJs() {
                     const cleanVal = isTruncated ? valNorm.replace(/(\\.\\.\\.|…)$/, '').trim().toLowerCase() : '';
                     for (const [key, translated] of longEntries) {
                         if (key.length <= valNorm.length && valNorm.includes(key)) {
-                            newVal = newVal.split(key).join(translated);
-                            break;
+                            if (newVal.includes(key)) {
+                                newVal = newVal.split(key).join(translated);
+                            } else {
+                                try {
+                                    const re = makeFlexibleRegex(key);
+                                    if (re && re.test(newVal)) {
+                                        newVal = newVal.replace(re, translated);
+                                    } else {
+                                        newVal = newVal.split(key).join(translated);
+                                    }
+                                } catch (e) {
+                                    newVal = newVal.split(key).join(translated);
+                                }
+                            }
+                            if (!newVal.includes(' ') || !/[a-zA-Z]{3,}/.test(newVal)) {
+                                break;
+                            }
                         } else if (isTruncated && cleanVal.length >= 30 && key.toLowerCase().startsWith(cleanVal)) {
                             newVal = translated;
                             break;

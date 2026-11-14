@@ -1,5 +1,16 @@
 # 更新紀錄
 
+## 3.3.5 — 2026-11-14
+
+- 深度修復引擎長句與特殊引號解析缺陷（`localization_engine.js`）：
+  - 引入 `makeFlexibleRegex` 動態正規編譯器，自動抹平 DOM 原始文字中印刷體彎引號（`’`、`‘`、`“`、`”`）、省略號（`...` 與 `…`）與任意空白格式差異，徹底根治 `We won’t show you ads` 與 `Antigravity’s agents...` 因引號型態不一致導致的替換脫落。
+  - 解除複合節點過早中斷（`break`）限制，支援同一文字節點內多個子句（如 `Help us improve Antigravity.` 與 `Allow Google to collect...`）連續替換，杜絕中英夾雜。
+- 完整補齊 NUX 登入新手導覽與條款全句繁中化：
+  - 納入完整句子與多種拆分形態（`Customize your experience... what Antigravity says.`、`Antigravity's agents are powerful...`、`Sign up for newsletters... about Antigravity.` 等），在單一節點或多節點情境下均能 100% 呈現道地繁體中文。
+- 全量清查並補齊官方 UI 基準中遺漏之 123 條介面詞條：
+  - 納入 `page_v231_patch.json`（涵蓋 Apply/Create、關閉分頁、主控台截圖、排隊發送訊息、專案/工作區搜尋、桌面/行動/PWA 模式標籤、常用按鍵等），官方基準 2,296 條詞條達 100.00% 繁中全覆蓋。
+- 測試套件擴充至 23 項跨平台自動化測試，全數通過。
+
 ## 3.3.4 — 2026-11-12
 
 - 適配 Antigravity v2.31.0 / v2.31.1 官方介面更新：

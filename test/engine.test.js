@@ -129,3 +129,36 @@ test('generated script includes Taiwan MCP sniffer messages in Traditional Chine
     assert.ok(js.includes('[Antigravity TW] 如需查看／匯出 JSON，可在主控台執行: copy(window.__exportMcpCatalog())'));
 });
 
+test('NUX onboarding and typographical quote variations are properly localized', () => {
+    const js = generateJs();
+    const prefix = js.slice(0, js.indexOf('    const observer = new MutationObserver'));
+    const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    // 1. Text node with typographical curly apostrophe (won’t)
+    const node1 = {
+        nodeType: 3,
+        nodeValue: "Customize your experience across the agent, plugins, and product from the settings and marketplace. We won’t show you ads or let advertisers influence what Antigravity says."
+    };
+    translateNode(node1);
+    assert.equal(node1.nodeValue, "從設定與市集中自訂您在代理、外掛程式及產品上的各項體驗。我們不會向您顯示廣告，也不會讓廣告主影響 Antigravity 的回應。");
+
+    // 2. Text node starting with Antigravity’s (curly apostrophe)
+    const node2 = {
+        nodeType: 3,
+        nodeValue: "Antigravity’s agents are powerful and will help you get a lot done better and faster than before, but still make sure to verify the actions taken by the agent."
+    };
+    translateNode(node2);
+    assert.equal(node2.nodeValue, "Antigravity 的代理功能強大，能協助您比以往更好、更快地完成大量工作，但仍請務必驗證代理所執行的操作。");
+
+    // 3. Composite text node with Help us improve and Allow Google
+    const node3 = {
+        nodeType: 3,
+        nodeValue: "Help us improve Antigravity. Allow Google to collect and use your Interactions data, subject to the"
+    };
+    translateNode(node3);
+    assert.equal(node3.nodeValue, "協助改善 Antigravity。允許 Google 收集並使用您的互動資料，但須遵守");
+});
+
+

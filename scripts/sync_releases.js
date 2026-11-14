@@ -19,6 +19,7 @@ for (const part of parts) {
 }
 
 const titles = {
+    '3.3.5': 'v3.3.5 — 深度修復印刷體引號與長句解析、NUX 導覽與官方基準 100% 繁中全覆蓋',
     '3.3.4': 'v3.3.4 — 適配 Antigravity v2.31.1+、協調器 (Coordinator) 與授權登入繁中化',
     '3.3.3': 'v3.3.3 — 登入引導 (NUX) 節點繁中補全與背景守護重啟隔離修復',
     '3.3.2': 'v3.3.2 — 適配 Antigravity v2.30.0+ 與 macOS Sequoia 相容性加固',
