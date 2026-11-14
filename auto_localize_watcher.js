@@ -467,7 +467,7 @@ function main() {
         if (!appInfo) { log('尚未找到 Antigravity，等待下次排程。'); return; }
         checkAndLocalizeApp(appInfo);
 
-        // 借鏡善解輸入法之輕量非同步遠端版本檢查（預設每 24 小時一次，絕不阻塞主執行緒）
+        // 輕量非同步遠端版本檢測（預設每 24 小時執行一次，不阻斷主流程）
         if (autoUpdater && typeof autoUpdater.checkUpdate === 'function') {
             const pkgPath = path.join(DIR, 'package.json');
             let currentVer = '3.3.5';

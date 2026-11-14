@@ -34,9 +34,9 @@ if %errorlevel% neq 0 (
 echo.
 echo [2/2] 繁體中文套用完成！
 echo.
-echo 🎉 提示: Antigravity 繁體中文化已成功注入。
-echo 💡 建議: 若希望日後官方更新或繁中字典升級時自動整合，
-echo    可執行專案內的「點兩下安裝Windows背景守護.bat」。
+echo 🎉 說明: Antigravity 繁體中文化已成功注入。
+echo 💡 提示: 若需在 Antigravity 官方更新或詞庫發布時自動維持繁中化，
+echo    可執行目錄內的「點兩下安裝Windows背景守護.bat」啟用背景服務。
 echo.
-echo 視窗將在 5 秒後自動關閉...
+echo 視窗將於 5 秒後自動關閉...
 timeout /t 5

@@ -38,9 +38,9 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "🎉 處理完成！"
-echo "💡 提示：若希望日後 Antigravity 官方升級或繁中詞庫發布時自動在背景維護更新，"
-echo "   可執行專案內的「點兩下安裝macOS背景守護.command」。"
+echo "🎉 繁體中文套件安裝完成。"
+echo "💡 說明：若需在 Antigravity 官方更新或詞庫發布時自動維持繁中化，"
+echo "   可執行目錄內的「點兩下安裝macOS背景守護.command」啟用背景服務。"
 echo ""
-echo "視窗將在 5 秒後自動關閉（或按任意鍵立即關閉）..."
+echo "視窗將於 5 秒後自動關閉（亦可按任意鍵立即離開）..."
 read -t 5 -n 1 -s
