@@ -9,7 +9,10 @@
   - 納入完整句子與多種拆分形態（`Customize your experience... what Antigravity says.`、`Antigravity's agents are powerful...`、`Sign up for newsletters... about Antigravity.` 等），在單一節點或多節點情境下均能 100% 呈現道地繁體中文。
 - 全量清查並補齊官方 UI 基準中遺漏之 123 條介面詞條：
   - 納入 `page_v231_patch.json`（涵蓋 Apply/Create、關閉分頁、主控台截圖、排隊發送訊息、專案/工作區搜尋、桌面/行動/PWA 模式標籤、常用按鍵等），官方基準 2,296 條詞條達 100.00% 繁中全覆蓋。
-- 測試套件擴充至 23 項跨平台自動化測試，全數通過。
+- 測試套件擴充至 25 項跨平台自動化測試，全數通過。
+- 借鏡「善解輸入法」架構，實作背景自動版本更新探針（`scripts/auto_updater.js`）：
+  - 整合至 `auto_localize_watcher.js`，每 24 小時定期檢查 GitHub 最新 Releases，當有新字典或引擎修復發布時，主動推播原生系統通知提醒升級。
+  - 在一次性安裝腳本（`點兩下安裝繁體中文.command` 與 `.bat`）尾部加入背景守護引導提示。
 
 ## 3.3.4 — 2026-11-12
 
