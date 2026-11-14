@@ -13,6 +13,11 @@ const ROOT = IS_MAC && typeof process.getuid === 'function' && process.getuid() 
 const SIGNATURE = '/* --- ANTIGRAVITY CHINESE LOCALIZATION START --- */';
 const NEEDLE = '命令選擇區';
 
+let autoUpdater = null;
+try {
+    autoUpdater = require(path.join(DIR, 'scripts', 'auto_updater.js'));
+} catch {}
+
 function stripQuarantine(target) {
     if (!IS_MAC) return;
     try {
@@ -461,6 +466,26 @@ function main() {
         const appInfo = getAppInfo();
         if (!appInfo) { log('尚未找到 Antigravity，等待下次排程。'); return; }
         checkAndLocalizeApp(appInfo);
+
+        // 借鏡善解輸入法之輕量非同步遠端版本檢查（預設每 24 小時一次，絕不阻塞主執行緒）
+        if (autoUpdater && typeof autoUpdater.checkUpdate === 'function') {
+            const pkgPath = path.join(DIR, 'package.json');
+            let currentVer = '3.3.5';
+            try {
+                currentVer = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || currentVer;
+            } catch {}
+            const stateDir = ensureAccessibleDir(path.join(DIR, '.watcher-state'));
+            const cacheFile = path.join(stateDir, 'update_check.json');
+            autoUpdater.checkUpdate({
+                currentVersion: currentVer,
+                cacheFilePath: cacheFile,
+                intervalMs: 24 * 60 * 60 * 1000
+            }).then(res => {
+                if (res && res.hasUpdate) {
+                    log(`發現繁中化新版本 ${res.tag} (目前: v${currentVer})，已推播系統通知。`);
+                }
+            }).catch(() => {});
+        }
     } catch (error) {
         log('自動繁中化失敗，稍後重試：' + (error.stack || error.message));
         if (IS_MAC && (error.code === 'EPERM' || (error.message && error.message.includes('EPERM')))) {
