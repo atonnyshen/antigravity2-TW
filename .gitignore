@@ -13,3 +13,10 @@ codex/
 
 # Proxy configuration & injection modules (local only)
 proxy_config/
+
+# Runtime / Build artifacts
+.watcher-state/
+autolocalize.log
+build_app/
+dist/
+*.zip

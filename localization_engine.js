@@ -812,4 +812,15 @@ function main() {
     }
 }
 
-main();
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        generateJs,
+        install20,
+        detectInstallationDir,
+        checkIfAppIsRunning,
+        closeAntigravityProcesses
+    };
+}
+
+if (require.main === module) main();
+

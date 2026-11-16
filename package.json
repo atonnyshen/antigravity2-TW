@@ -1,8 +1,16 @@
 {
-  "name": "antigravity2-cn",
+  "name": "antigravity2-tw",
+  "version": "3.4.0",
   "private": true,
+  "description": "Google Antigravity 台灣繁體中文中文化與背景更新守護",
   "scripts": {
-    "test": "node --test tests/*-regressions.cjs"
+    "test": "node --test test/*.test.js tests/installer-regressions.cjs"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "@electron/asar": "4.3.0"
   },
   "devDependencies": {
     "jsdom": "30.1.3"

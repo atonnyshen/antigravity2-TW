@@ -40,7 +40,7 @@
                 if (el.tagName === 'TEXTAREA') return true;
                 if (el.tagName === 'OPTION' && !el.hasAttribute('value')) return true;
             }
-            const active = document.activeElement;
+            const active = typeof document !== 'undefined' ? document.activeElement : null;
             if (active && (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active.getAttribute && active.getAttribute('data-lexical-editor') === 'true')) && (active === el || active.contains(el))) {
                 return true;
             }
@@ -61,6 +61,26 @@
     function norm(s) {
         if (!s) return '';
         return s.replace(/\s+/g, ' ').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/…/g, '...').trim();
+    }
+
+    function makeFlexibleRegex(str) {
+        let pattern = '';
+        for (let i = 0; i < str.length; i++) {
+            const ch = str[i];
+            if (ch === "'" || ch === '’' || ch === '‘') {
+                pattern += "['’‘]";
+            } else if (ch === '"' || ch === '“' || ch === '”') {
+                pattern += '["“”]';
+            } else if (str.substr(i, 3) === '...' || ch === '…') {
+                pattern += '(?:\.\.\.|…)';
+                if (str.substr(i, 3) === '...') i += 2;
+            } else if (/\s/.test(ch)) {
+                pattern += '\\s+';
+            } else {
+                pattern += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }
+        }
+        return new RegExp(pattern, 'g');
     }
 
     function translateWithShortcut(val) {
@@ -1172,13 +1192,15 @@
                         if (swarmComp !== null) {
                             newVal = swarmComp;
                         } else if (valNorm.length > 15 && valNorm.includes(' ')) {
-                            // 长句子串滑动替换与末尾截断智能匹配
+                            // 长句子串滑动替换与末尾截断智能匹配（动态正则兼容直弯引号/省略号与多子句连续替换）
                             const isTruncated = (valNorm.endsWith('...') || valNorm.endsWith('…')) && valNorm.length >= 35;
                             const cleanVal = isTruncated ? valNorm.replace(/(\.\.\.|…)$/, '').trim().toLowerCase() : '';
                             for (const [key, translated] of longEntries) {
                                 if (key.length <= valNorm.length && valNorm.includes(key)) {
-                                    newVal = newVal.split(key).join(translated);
-                                    break;
+                                    const flexRegex = makeFlexibleRegex(key);
+                                    if (flexRegex.test(newVal)) {
+                                        newVal = newVal.replace(flexRegex, translated);
+                                    }
                                 } else if (isTruncated && cleanVal.length >= 30 && key.toLowerCase().startsWith(cleanVal)) {
                                     newVal = translated;
                                     break;
