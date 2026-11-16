@@ -1,0 +1,536 @@
+const assert = require('node:assert/strict');
+const { test } = require('node:test');
+const { createDom, loadRuntime } = require('./helpers/runtime-loader.cjs');
+
+const settle = () => new Promise(resolve => setTimeout(resolve, 35));
+
+async function fixture(t, html, beforeInject) {
+    const dom = createDom(html);
+    t.after(() => dom.window.close());
+    beforeInject?.(dom.window);
+    dom.window.eval(loadRuntime());
+    await settle();
+    return dom.window;
+}
+
+test('File Viewer isolation survives translating its accessible name', async t => {
+    const w = await fixture(t, '<div aria-label="File Viewer"><span id="file">Settings</span></div><button id="ui">Settings</button>');
+    assert.equal(w.document.querySelector('#file').textContent, 'Settings');
+    assert.equal(w.document.querySelector('#ui').textContent, '设置');
+    const file = w.document.querySelector('#file');
+    file.textContent = 'Knowledge';
+    await settle();
+    assert.equal(file.textContent, 'Knowledge', 'subsequent mutations inside the file viewer must stay isolated');
+});
+
+test('textarea initial value and defaultValue are preserved while unfocused', async t => {
+    const w = await fixture(t, '<textarea id="draft">Settings</textarea><button>Settings</button>');
+    const draft = w.document.querySelector('#draft');
+    assert.equal(draft.value, 'Settings');
+    assert.equal(draft.defaultValue, 'Settings');
+    assert.equal(draft.textContent, 'Settings');
+    assert.equal(w.document.querySelector('button').textContent, '设置');
+});
+
+test('textarea dirty value and focused value survive initial and subsequent translation', async t => {
+    const w = await fixture(t, '<textarea id="draft">Settings</textarea>', window => {
+        const draft = window.document.querySelector('#draft');
+        draft.value = 'Knowledge';
+        draft.focus();
+    });
+    const draft = w.document.querySelector('#draft');
+    assert.equal(draft.value, 'Knowledge');
+    assert.equal(draft.defaultValue, 'Settings');
+    draft.blur();
+    draft.defaultValue = 'New Conversation';
+    await settle();
+    assert.equal(draft.value, 'Knowledge', 'changing the default must not overwrite the dirty draft');
+    assert.equal(draft.defaultValue, 'New Conversation');
+});
+
+test('input values and contenteditable drafts remain unmodified', async t => {
+    const w = await fixture(t, '<input id="input" value="Settings"><div contenteditable="true" id="editable">Knowledge</div><div contenteditable="plaintext-only" id="plain">Settings</div>');
+    const input = w.document.querySelector('#input');
+    assert.equal(input.value, 'Settings');
+    assert.equal(input.defaultValue, 'Settings');
+    assert.equal(w.document.querySelector('#editable').textContent, 'Knowledge');
+    assert.equal(w.document.querySelector('#plain').textContent, 'Settings');
+    input.value = 'Knowledge';
+    w.document.querySelector('#editable').textContent = 'New Conversation';
+    await settle();
+    assert.equal(input.value, 'Knowledge');
+    assert.equal(input.defaultValue, 'Settings');
+    assert.equal(w.document.querySelector('#editable').textContent, 'New Conversation');
+});
+
+test('user messages, AI responses, code and URI-marked previews remain isolated', async t => {
+    const w = await fixture(t, `
+      <div data-testid="user-input-step"><div data-quotable="true" id="user">Settings</div></div>
+      <div data-testid="planner-response-text" id="ai">Knowledge</div>
+      <pre id="pre">Settings</pre><code id="code">Knowledge</code>
+      <div data-file-uri="file:///example.txt" id="file">New Conversation</div>
+      <div data-uri="file:///example.txt" id="uri">Settings</div>
+      <div translate="no" id="no">Knowledge</div>
+      <div id="absolute">C:\\Settings\\New Conversation</div>
+      <div id="url">file:///Settings/Knowledge</div>
+      <button id="ui">Settings</button>
+    `);
+    for (const [id, expected] of [
+        ['user', 'Settings'], ['ai', 'Knowledge'], ['pre', 'Settings'], ['code', 'Knowledge'],
+        ['file', 'New Conversation'], ['uri', 'Settings'], ['no', 'Knowledge'],
+        ['absolute', 'C:\\Settings\\New Conversation'], ['url', 'file:///Settings/Knowledge'],
+    ]) {
+        assert.equal(w.document.getElementById(id).textContent, expected, id);
+    }
+    assert.equal(w.document.querySelector('#ui').textContent, '设置');
+});
+
+test('protected shadow hosts keep initial and dynamic descendants untouched', async t => {
+    let shadow;
+    const w = await fixture(t, '<div id="host" data-file-uri="file:///example.txt"></div>', window => {
+        shadow = window.document.querySelector('#host').attachShadow({ mode: 'open' });
+        shadow.innerHTML = '<span id="inside">Settings</span>';
+    });
+    assert.equal(shadow.querySelector('#inside').textContent, 'Settings');
+    shadow.querySelector('#inside').textContent = 'Knowledge';
+    const added = w.document.createElement('span');
+    added.textContent = 'New Conversation';
+    shadow.appendChild(added);
+    await settle();
+    assert.equal(shadow.querySelector('#inside').textContent, 'Knowledge');
+    assert.equal(added.textContent, 'New Conversation');
+});
+
+test('native select preserves implicit and explicit option values and selection', async t => {
+    const w = await fixture(t, '<form><select name="choice" id="pick"><option>Settings</option><option value="stable-id" selected>Knowledge</option></select></form>');
+    const pick = w.document.querySelector('#pick');
+    assert.equal(pick.options[0].value, 'Settings', 'an implicit value must not become a translated label');
+    assert.equal(pick.options[1].value, 'stable-id');
+    assert.equal(pick.options[1].defaultSelected, true);
+    assert.equal(pick.selectedIndex, 1);
+    assert.equal(pick.value, 'stable-id');
+    assert.equal(new w.FormData(w.document.querySelector('form')).get('choice'), 'stable-id');
+});
+
+test('dynamic native option updates preserve form submission values', async t => {
+    const w = await fixture(t, '<form><select name="choice" id="pick"><option>Settings</option></select></form>');
+    const pick = w.document.querySelector('#pick');
+    pick.options[0].textContent = 'Knowledge';
+    await settle();
+    assert.equal(pick.options[0].value, 'Knowledge');
+    assert.equal(new w.FormData(w.document.querySelector('form')).get('choice'), 'Knowledge');
+    const added = w.document.createElement('option');
+    added.textContent = 'New Conversation';
+    pick.appendChild(added);
+    pick.selectedIndex = 1;
+    await settle();
+    assert.equal(added.value, 'New Conversation');
+    assert.equal(new w.FormData(w.document.querySelector('form')).get('choice'), 'New Conversation');
+});
+
+test('input and textarea placeholders and titles are translated while values remain untouched', async t => {
+    const w = await fixture(t, '<input id="search" placeholder="Search tasks..." title="Search tasks..." value="Settings"><textarea id="draft" placeholder="Search conversations...">Settings</textarea>');
+    const search = w.document.querySelector('#search');
+    const draft = w.document.querySelector('#draft');
+    assert.equal(search.getAttribute('placeholder'), '搜索任务...');
+    assert.equal(search.getAttribute('title'), '搜索任务...');
+    assert.equal(search.value, 'Settings');
+    assert.equal(draft.getAttribute('placeholder'), '搜索会话...');
+    assert.equal(draft.value, 'Settings');
+});
+
+test('dynamic permission choices translate around commands without altering payloads or code blocks', async t => {
+    const cmd = `'$p="$HOME\\.gemini\\GEMINI.md"; Get-Content $p'`;
+    const w = await fixture(t, `
+        <h2 id="title">Allow running this command outside the sandbox?</h2>
+        <button id="conv"></button>
+        <button id="proj"></button>
+        <button id="unscoped"></button>
+        <button id="static-conv">Yes, and always allow in this conversation</button>
+        <pre id="code">Yes, and always allow 'command'</pre>
+    `, window => {
+        window.document.getElementById('conv').textContent = `Yes, and always allow ${cmd} in this conversation`;
+        window.document.getElementById('proj').textContent = `Yes, and always allow ${cmd} in this project`;
+        window.document.getElementById('unscoped').textContent = `Yes, and always allow echo run  in this conversation`;
+    });
+    assert.equal(w.document.getElementById('title').textContent, '是否允许在沙箱外运行此命令？');
+    assert.equal(w.document.getElementById('conv').textContent, `是，且在此会话中始终允许运行 ${cmd}`);
+    assert.equal(w.document.getElementById('proj').textContent, `是，且在此项目中始终允许运行 ${cmd}`);
+    assert.equal(w.document.getElementById('unscoped').textContent, '是，且始终允许运行 echo run  in this conversation');
+    assert.equal(w.document.getElementById('static-conv').textContent, '是，且在此会话中始终允许');
+    assert.equal(w.document.getElementById('code').textContent, "Yes, and always allow 'command'");
+});
+
+test('permission write-in translates reject label and placeholder while preserving input value', async t => {
+    const w = await fixture(t, '<label><input type="radio" value="__write_in__"><div><span id="reject">No</span><textarea id="answer" data-testid="ask-question-writein" placeholder="(tell the agent what to do instead)">No</textarea></div></label><span id="other">No</span>');
+    const answer = w.document.getElementById('answer');
+    assert.equal(w.document.getElementById('reject').textContent, '否');
+    assert.equal(answer.getAttribute('placeholder'), '（告诉智能体改做什么）');
+    assert.equal(answer.value, 'No');
+    assert.equal(w.document.getElementById('other').textContent, 'No');
+});
+
+test('Worked for / Thought for progress headers translate trailing update counts in SC and TC', async t => {
+    const html = `
+      <button id="worked-combined">Worked for 3m · 1 update</button>
+      <button id="thought-combined">Thought for 12s · 4 updates</button>
+      <button id="split-header"><span>Worked for 3m</span><span> · 1 update</span></button>
+      <span id="standalone-update">2 updates</span>
+    `;
+    const w = await fixture(t, html);
+    assert.equal(w.document.getElementById('worked-combined').textContent, '已工作 3 分钟 · 1 项更新');
+    assert.equal(w.document.getElementById('thought-combined').textContent, '已思考 12 秒 · 4 项更新');
+    assert.equal(w.document.getElementById('split-header').textContent, '已工作 3 分钟 · 1 项更新');
+    assert.equal(w.document.getElementById('standalone-update').textContent, '2 项更新');
+
+    const domTw = createDom(html);
+    t.after(() => domTw.window.close());
+    domTw.window.eval(loadRuntime({ traditional: true }));
+    await settle();
+    assert.equal(domTw.window.document.getElementById('worked-combined').textContent, '已工作 3 分鐘 · 1 項更新');
+    assert.equal(domTw.window.document.getElementById('thought-combined').textContent, '已思考 12 秒 · 4 項更新');
+    assert.equal(domTw.window.document.getElementById('split-header').textContent, '已工作 3 分鐘 · 1 項更新');
+    assert.equal(domTw.window.document.getElementById('standalone-update').textContent, '2 項更新');
+});
+
+test('Swarm sidecar UI translates chrome, onboarding, overview cards, graph replay, legend and filters while isolating board messages and roster IDs', async t => {
+    const swarmHtml = `
+      <div id="board" data-testid="swarm-board">
+        <header class="header">
+          <div class="header-row">
+            <h1 id="swarm-title" data-testid="swarm-title">PPT正式汇报四稿深析与技能学习机制</h1>
+            <span id="live" title="Updates automatically" data-testid="swarm-live"><span id="live-label">Live</span></span>
+          </div>
+          <nav class="tabs" aria-label="Swarm views" data-testid="swarm-tabs">
+            <button id="tab-ov" data-testid="swarm-tab-overview">Overview</button>
+            <button id="tab-feed" data-testid="swarm-tab-feed">Board<span id="cnt-feed">10</span></button>
+            <button id="tab-mem" data-testid="swarm-tab-members">Members<span id="cnt-mem">6</span></button>
+            <button id="tab-graph" data-testid="swarm-tab-graph">Graph</button>
+            <button id="tab-raw" data-testid="swarm-tab-raw">Raw</button>
+          </nav>
+        </header>
+        <section id="tab-overview">
+          <div class="o2">
+            <div class="o2-onb-h" id="onb-title">Your swarm is starting</div>
+            <div class="o2-progt" id="ov-progt"><b>3 of 10</b> tasks done</div>
+            <div class="o2-st" id="ov-blocked">Blocked</div>
+            <span class="o2-dot" id="ov-dot" aria-label="queued"></span>
+            <div class="o2-mnow" id="ov-quota">@worker-2 ran out of quota — Rate limit exceeded</div>
+          </div>
+          <div id="ov-notice">The narrator (<b>narrator-1</b>) was stopped. Ask the coordinator to add a new one (<code>@narrator-1</code>).</div>
+          <div id="ov-ack">Last change: “<button class="ref">#42</button>”</div>
+        </section>
+        <section id="tab-body-feed">
+          <input id="f-search" type="search" placeholder="Search" aria-label="Search posts">
+          <button id="f-toggle" title="Filters" aria-label="Filters"></button>
+          <select id="f-agent" aria-label="Filter by poster">
+            <option value="">From anyone</option>
+            <option value="coordinator">From coordinator</option>
+          </select>
+          <select id="f-mention" aria-label="Filter by recipient">
+            <option value="">To anyone</option>
+            <option value="@none">To no one</option>
+            <option value="@all">To @all</option>
+            <option value="critic-architect">To critic-architect</option>
+          </select>
+          <button id="chip-coord" title="coordinator · Coordinator · Active · 3 posts\nClick to hide from the board">
+            <span class="chip-name">coordinator (you)</span>
+          </button>
+          <button id="chip-idle" title="worker-2: No posts yet"></button>
+          <div class="divider" data-testid="swarm-unread-divider" id="unread-div">New</div>
+          <div class="msg-body md" id="post-body">@critic-architect Settings Overview Board Live Graph</div>
+          <span class="sys-text" id="sys-msg">created #design — Overview Board</span>
+        </section>
+        <section id="tab-body-graph">
+          <div class="player">
+            <button id="replay-play" title="Play / pause replay (space)" aria-label="Play replay"></button>
+            <button id="replay-live" title="Show everything and follow live">Live</button>
+            <span id="replay-label"><b>10</b> of 10 · #10 at 9:00 (+15m 25s)</span>
+            <label class="switch" title="Hide killed and inactive members from the graph"><span>Hide inactive</span></label>
+            <label class="switch" title="Draw @all as an edge to every member"><span>Expand @all</span></label>
+            <select id="replay-timing" aria-label="Replay pacing" title="Replay pacing">
+              <option value="even" selected>Even pacing</option>
+              <option value="real">Real-time gaps</option>
+            </select>
+          </div>
+          <svg id="graph" data-testid="swarm-graph" aria-label="Who @mentions whom">
+            <path class="edge"><title id="edge-tip">coordinator → critic-architect: 5 direct, 2 via @all</title></path>
+            <g class="node">
+              <title id="node-tip">coordinator · Coordinator · Active · 5 steps · 3 posts\nClick to open conversation</title>
+              <text class="node-label" id="node-coord">coordinator</text>
+            </g>
+          </svg>
+          <div class="graph-legend">
+            <span class="legend-item" id="lg-1">@mention, width = count</span>
+            <span class="legend-item" id="lg-2">via @all</span>
+            <span class="legend-item" id="lg-3">posted with no mention</span>
+            <span class="legend-item" id="lg-4">@all posts, drawn by Expand @all</span>
+          </div>
+        </section>
+        <section id="tab-body-raw">
+          <div class="raw-meta"><span class="path" id="raw-path">/Users/demo/board.jsonl</span><span class="size" id="raw-size">· 4.2 KB · 10 lines</span></div>
+          <pre id="raw" class="raw">{"agent":"coordinator","text":"Settings"}</pre>
+        </section>
+      </div>
+    `;
+    const w = await fixture(t, swarmHtml);
+    w.eval(loadRuntime());
+    await settle();
+
+    assert.equal(w.document.getElementById('live').getAttribute('title'), '自动更新');
+    assert.equal(w.document.getElementById('live-label').textContent, '实时');
+    assert.equal(w.document.getElementById('tab-ov').textContent, '概览');
+    assert.equal(w.document.getElementById('tab-feed').textContent, '看板10');
+    assert.equal(w.document.getElementById('tab-mem').textContent, '成员6');
+    assert.equal(w.document.getElementById('tab-graph').textContent, '关系图');
+    assert.equal(w.document.getElementById('tab-raw').textContent, '原始数据');
+    assert.equal(w.document.getElementById('onb-title').textContent, '你的 Swarm 正在启动');
+    assert.equal(w.document.getElementById('ov-progt').textContent, '3 / 10 项任务已完成');
+    assert.equal(w.document.getElementById('ov-blocked').textContent, '受阻');
+    assert.equal(w.document.getElementById('ov-dot').getAttribute('aria-label'), '排队中');
+    assert.equal(w.document.getElementById('ov-quota').textContent, '@worker-2 配额已耗尽 — Rate limit exceeded');
+    assert.equal(w.document.getElementById('ov-notice').textContent, '解说员 (narrator-1) 已停止。可让协调器新增一个 (@narrator-1)。');
+    assert.equal(w.document.getElementById('ov-ack').textContent, '上次变更：“#42”');
+    assert.equal(w.document.getElementById('f-search').getAttribute('placeholder'), '搜索');
+    assert.equal(w.document.getElementById('f-search').getAttribute('aria-label'), '搜索消息');
+    assert.equal(w.document.getElementById('f-toggle').getAttribute('title'), '筛选');
+    assert.equal(w.document.getElementById('f-agent').options[0].textContent, '来自任何人');
+    assert.equal(w.document.getElementById('f-agent').options[1].textContent, '来自 coordinator');
+    assert.equal(w.document.getElementById('f-agent').options[1].value, 'coordinator');
+    assert.equal(w.document.getElementById('f-mention').options[0].textContent, '发给任何人');
+    assert.equal(w.document.getElementById('f-mention').options[1].textContent, '未提及任何人');
+    assert.equal(w.document.getElementById('f-mention').options[2].textContent, '发给 @all');
+    assert.equal(w.document.getElementById('f-mention').options[3].textContent, '发给 critic-architect');
+    assert.equal(w.document.getElementById('chip-coord').getAttribute('title'), 'coordinator · 协调器 · 活跃 · 3 条消息\n点击在看板中隐藏');
+    assert.equal(w.document.querySelector('#chip-coord .chip-name').textContent, 'coordinator（你）');
+    assert.equal(w.document.getElementById('chip-idle').getAttribute('title'), 'worker-2：暂无消息');
+    assert.equal(w.document.getElementById('unread-div').textContent, '新消息');
+    assert.equal(w.document.getElementById('replay-label').textContent, '10 / 10 · #10 于 9:00 (+15 分钟 25 秒)');
+    w.document.getElementById('replay-label').innerHTML = '<b>10 posts</b> over 15m 25s';
+    await settle();
+    assert.equal(w.document.getElementById('replay-label').textContent, '10 条消息 · 历时 15 分钟 25 秒');
+    assert.equal(w.document.getElementById('replay-timing').options[0].textContent, '匀速回放');
+    assert.equal(w.document.getElementById('replay-timing').options[1].textContent, '按真实时间间隔');
+    assert.equal(w.document.getElementById('replay-timing').value, 'even');
+    assert.equal(w.document.getElementById('edge-tip').textContent, 'coordinator → critic-architect：5 次直接提及，2 次通过 @all');
+    assert.equal(w.document.getElementById('node-tip').textContent, 'coordinator · 协调器 · 活跃 · 5 步 · 3 条消息\n点击打开会话');
+    assert.equal(w.document.getElementById('node-coord').textContent, 'coordinator');
+    assert.equal(w.document.getElementById('lg-1').textContent, '@提及（线宽代表次数）');
+    assert.equal(w.document.getElementById('lg-2').textContent, '通过 @all 广播');
+    assert.equal(w.document.getElementById('lg-3').textContent, '未 @提及他人的发言');
+    assert.equal(w.document.getElementById('lg-4').textContent, '@all 广播消息（开启“展开 @all”时连线）');
+    assert.equal(w.document.getElementById('raw-path').textContent, '/Users/demo/board.jsonl');
+    assert.equal(w.document.getElementById('raw-size').textContent, '· 4.2 KB · 10 行');
+    assert.equal(w.document.getElementById('raw').textContent, '{"agent":"coordinator","text":"Settings"}');
+    assert.equal(w.document.getElementById('post-body').textContent, '@critic-architect Settings Overview Board Live Graph');
+    assert.equal(w.document.getElementById('sys-msg').textContent, 'created #design — Overview Board');
+
+    const nonSwarm = await fixture(t, '<div id="plain-board">Board</div><div id="plain-graph">Graph</div><div id="plain-raw">Raw</div>');
+    assert.equal(nonSwarm.document.getElementById('plain-board').textContent, 'Board');
+    assert.equal(nonSwarm.document.getElementById('plain-graph').textContent, 'Graph');
+    assert.equal(nonSwarm.document.getElementById('plain-raw').textContent, 'Raw');
+
+    const domTw = createDom(swarmHtml);
+    t.after(() => domTw.window.close());
+    domTw.window.eval(loadRuntime({ traditional: true }));
+    await settle();
+    assert.equal(domTw.window.document.getElementById('tab-graph').textContent, '關係圖');
+    assert.equal(domTw.window.document.getElementById('tab-raw').textContent, '原始資料');
+    assert.equal(domTw.window.document.getElementById('ov-progt').textContent, '3 / 10 項任務已完成');
+    assert.equal(domTw.window.document.getElementById('ov-blocked').textContent, '受阻');
+    assert.equal(domTw.window.document.getElementById('ov-dot').getAttribute('aria-label'), '排隊中');
+    assert.equal(domTw.window.document.getElementById('ov-quota').textContent, '@worker-2 配額已耗盡 — Rate limit exceeded');
+    assert.equal(domTw.window.document.getElementById('ov-notice').textContent, '解說員 (narrator-1) 已停止。可請協調器新增一個 (@narrator-1)。');
+    assert.equal(domTw.window.document.getElementById('ov-ack').textContent, '上次變更：「#42」');
+    assert.equal(domTw.window.document.getElementById('chip-idle').getAttribute('title'), 'worker-2：尚無訊息');
+    assert.equal(domTw.window.document.getElementById('unread-div').textContent, '新訊息');
+    assert.equal(domTw.window.document.getElementById('replay-label').textContent, '10 / 10 · #10 於 9:00 (+15 分鐘 25 秒)');
+    assert.equal(domTw.window.document.getElementById('replay-timing').options[0].textContent, '等速重播');
+    assert.equal(domTw.window.document.getElementById('lg-4').textContent, '@all 廣播訊息（開啟「展開 @all」時連線）');
+});
+
+test('subagent incoming message header and input placeholder translate in SC and TC', async t => {
+    const html = `
+      <div>
+        <button id="incoming-parent">Message from Parent Agent</button>
+        <button id="incoming-role">Message from Codebase Researcher</button>
+        <div id="placeholder-full">Message subagent, @ to mention, / for actions</div>
+        <div id="placeholder-short">Message subagent, @ to mention</div>
+      </div>
+    `;
+    const w = await fixture(t, html);
+    assert.equal(w.document.getElementById('incoming-parent').textContent, '来自父级智能体的消息');
+    assert.equal(w.document.getElementById('incoming-role').textContent, '来自 Codebase Researcher 的消息');
+    assert.equal(w.document.getElementById('placeholder-full').textContent, '向子代理发送消息，使用 @ 提及，/ 执行操作');
+    assert.equal(w.document.getElementById('placeholder-short').textContent, '向子代理发送消息，使用 @ 提及');
+
+    const domTw = createDom(html);
+    t.after(() => domTw.window.close());
+    domTw.window.eval(loadRuntime({ traditional: true }));
+    await settle();
+    assert.equal(domTw.window.document.getElementById('incoming-parent').textContent, '來自父級代理的訊息');
+    assert.equal(domTw.window.document.getElementById('placeholder-full').textContent, '向子代理傳送訊息，使用 @ 提及，/ 執行操作');
+    assert.equal(domTw.window.document.getElementById('placeholder-short').textContent, '向子代理傳送訊息，使用 @ 提及');
+});
+
+test('NUX onboarding split TextNodes and post-onboarding welcome tip translate without global single-word pollution', async t => {
+    const html = `
+      <div>
+        <span id="nux-card1">Customize your experience across the agent, plugins, and product from the settings and marketplace. We won\u2019t show you ads or let advertisers influence what Antigravity says.</span>
+        <span id="nux-card1-split">Customize your experience across the agent, plugins, and product from the settings and marketplace. We won\u2019t show you ads or let advertisers influence what <b>Antigravity</b> says.</span>
+        <span id="nux-card3"><b>Antigravity</b>\u2019s agents are powerful and will help you get a lot done better and faster than before, but still make sure to verify the actions taken by the agent.</span>
+        <span id="nux-terms-title">Help us improve Antigravity.</span>
+        <span id="nux-terms-desc">Allow Google to collect and use your Interactions data, subject to the <a href="#">Google <b>Antigravity</b> Terms of Service</a> and <a href="#">Google Privacy Policy</a>. You can control this from your settings at any point.</span>
+        <p id="nux-enterprise">For <b>your plan</b>, <b>Antigravity</b> does not collect any of your prompts, content, or model responses but will still collect general usage patterns (e.g., feature adoption, active user counts).</p>
+        <p id="nux-analytics"><b>Antigravity</b> does not collect any of your prompts, content, or model responses but does collect general usage patterns such as feature adoption and active user counts (\u201cproduct analytics\u201d). Telemetry data will be handled in accordance with the Google Privacy Policy.</p>
+        <li><a href="#">Privacy Notice</a> (excluding product analytics data)</li>
+        <p id="nux-news">Sign up for newsletters, tips and tricks, and other notifications about <b>Antigravity</b>.</p>
+        <p id="welcome-tip" data-testid="post-onboarding-welcome-tip"><span>Tip:</span> Press <kbd>⌘⇧A</kbd> to switch to the Gemini app. Your agents keep working in the background.</p>
+        <span id="random-says">says.</span>
+      </div>
+    `;
+    const w = await fixture(t, html);
+    assert.equal(w.document.getElementById('nux-card1-split').textContent, '从设置与市场中自定义您在智能体、插件及产品上的各项体验。我们不会向您展示广告，也不会让广告主影响 Antigravity 所说的内容。');
+    assert.equal(w.document.getElementById('nux-card3').textContent, 'Antigravity 的智能体功能强大，可帮助您比以往更好、更快地完成更多工作，但仍请务必核验智能体执行的操作。');
+    assert.equal(w.document.getElementById('nux-terms-title').textContent, '帮助改进 Antigravity。');
+    assert.equal(w.document.getElementById('nux-terms-desc').textContent, '允许 Google 收集并使用您的交互数据，但须遵守Google Antigravity服务条款以及Google 隐私政策。您可以随时在设置中控制此选项。');
+    assert.equal(w.document.getElementById('nux-enterprise').textContent, '对于 您的计划，Antigravity不会收集您的任何提示词、内容或模型响应，但仍会收集一般使用模式（例如功能采用率、活跃用户数）。');
+    assert.equal(w.document.getElementById('nux-analytics').textContent, 'Antigravity 不会收集您的任何提示词、内容或模型回复，但会收集功能采用率与活跃用户数等常规使用模式（“产品分析”）。遥测数据将按照 Google 隐私政策处理。');
+    assert.equal(w.document.querySelector('li').textContent, '隐私声明（不含产品分析数据）');
+    assert.equal(w.document.getElementById('nux-news').textContent, '订阅关于以下内容的新闻通讯、技巧提示及其他通知：Antigravity。');
+    assert.equal(w.document.getElementById('welcome-tip').textContent, '提示： 按 ⌘⇧A 即可切换至 Gemini 应用。您的智能体会在后台继续运行。');
+    assert.equal(w.document.getElementById('random-says').textContent, 'says.');
+
+    const reactCard3 = w.document.createElement('span');
+    reactCard3.append(
+        w.document.createTextNode('Antigravity'),
+        w.document.createTextNode('\u2019s agents are powerful and will help you get a lot done better and faster than before, but still make sure to verify the actions taken by the agent.')
+    );
+    w.document.body.appendChild(reactCard3);
+    await settle();
+    assert.equal(reactCard3.textContent, 'Antigravity 的智能体功能强大，可帮助您比以往更好、更快地完成更多工作，但仍请务必核验智能体执行的操作。');
+
+    const domTw = createDom(html);
+    t.after(() => domTw.window.close());
+    domTw.window.eval(loadRuntime({ traditional: true }));
+    await settle();
+    assert.equal(domTw.window.document.getElementById('nux-card1-split').textContent, '從設定與市集中自訂您在代理、外掛程式及產品上的各項體驗。我們不會向您顯示廣告，也不會讓廣告客戶影響 Antigravity 所說的內容。');
+    assert.equal(domTw.window.document.getElementById('nux-card3').textContent, 'Antigravity 的代理功能強大，能協助您比以往更好、更快地完成更多工作，但仍請務必驗證代理執行的操作。');
+    assert.equal(domTw.window.document.getElementById('welcome-tip').textContent, '提示： 按 ⌘⇧A 即可切換至 Gemini 應用程式。您的代理會在背景繼續執行。');
+    assert.equal(domTw.window.document.getElementById('random-says').textContent, 'says.');
+});
+
+test('v2.32.1 SSH, macOS permissions, multi-agent layout, draft capsule and plugin credentials translate without single-word pollution', async t => {
+    const html = `
+      <div>
+        <div id="ssh-err" data-testid="ssh-connect-error"><span id="ssh-err-title">Couldn\u2019t connect to </span></div>
+        <p id="ssh-empty">No hosts in ~/.ssh/config yet. Type one above.</p>
+        <div id="ssh-cfg-title">SSH Config (~/.ssh/config)</div>
+        <button id="ssh-hidden">3 hidden hosts</button>
+        <div id="ssh-connecting">Connecting to devbox\u2026</div>
+        <span id="perm-badge-miss" data-testid="computer-permissions-badge-accessibility">Missing</span>
+        <span id="perm-badge-ok" data-testid="computer-permissions-badge-screenRecording">Granted \u2713</span>
+        <span id="perm-tip">Click <strong>Open \u2197</strong> to open macOS Privacy &amp; Security.</span>
+        <div id="layout-bar" data-agy-layout-bar="">
+          <span id="layout-label">Layout</span>
+          <div id="layout-select" aria-label="Layout" data-agy-layout="stage">
+            <span id="opt-stage" data-agy-layout-option="stage">Stage</span>
+            <span id="opt-desktop" data-agy-layout-option="desktop">Desktop</span>
+            <span id="opt-grid" data-agy-layout-option="grid">Grid</span>
+          </div>
+        </div>
+        <button id="tile-focus" title="Codebase \u00b7 worker-1 (Focus this tile)">Codebase</button>
+        <button id="tile-back" title="Codebase \u00b7 worker-1 (Back to all agents)">Back to all agents</button>
+        <div id="icon-rg" role="radiogroup" aria-label="Icon"></div>
+        <div id="color-rg" role="radiogroup" aria-label="Color"></div>
+        <button id="draft-btn" aria-label="Resume 2 comment drafts"><span>2 Drafts</span></button>
+        <p id="plugin-creds">Sign-ins to GitHub, Linear are kept in the cloud with your account. Other credentials stay on this machine. Credentials are only sent to the domains listed.</p>
+        <p id="sandbox-warn-two">Default and Auto need the terminal sandbox, which isn't available on this host.</p>
+        <p id="sandbox-warn-one">Default needs the terminal sandbox, which isn't available on this host.</p>
+        <span id="org-managed" title="managed by your organization">managed by your organization</span>
+        <span id="msg-ing">Messaging Codebase Researcher</span>
+        <span id="msg-ed">Messaged Codebase Researcher</span>
+        <p id="msg-prose">Messaging other services over HTTP requires valid credentials.</p>
+        <div id="save-err">Failed to save project settings: Network error</div>
+
+        <span id="plain-click">Click</span>
+        <span id="plain-missing">Missing</span>
+        <span id="plain-layout">Layout</span>
+        <span id="plain-stage">Stage</span>
+        <span id="plain-design">Design</span>
+        <div id="plain-icon" aria-label="Icon">Icon</div>
+        <div id="plain-color" aria-label="Color">Color</div>
+      </div>
+    `;
+    const w = await fixture(t, html);
+    w.document.getElementById('ssh-err-title').appendChild(w.document.createTextNode('devbox'));
+    w.document.getElementById('ssh-empty').textContent = '';
+    w.document.getElementById('ssh-empty').append(
+        w.document.createTextNode('No hosts in '),
+        w.document.createTextNode('~/.ssh/config'),
+        w.document.createTextNode(' yet. Type one above.')
+    );
+    await settle();
+
+    assert.equal(w.document.getElementById('ssh-err-title').textContent, '无法连接到 devbox');
+    assert.equal(w.document.getElementById('ssh-empty').textContent, '在 ~/.ssh/config 中暂未配置主机，请在上方直接输入。');
+    assert.equal(w.document.getElementById('ssh-cfg-title').textContent, 'SSH 配置 (~/.ssh/config)');
+    assert.equal(w.document.getElementById('ssh-hidden').textContent, '3 个已隐藏的主机');
+    assert.equal(w.document.getElementById('ssh-connecting').textContent, '正在连接到 devbox...');
+    assert.equal(w.document.getElementById('perm-badge-miss').textContent, '未授权');
+    assert.equal(w.document.getElementById('perm-badge-ok').textContent, '已授权 ✓');
+    assert.equal(w.document.getElementById('perm-tip').textContent, '点击 打开 ↗ 以打开 macOS“隐私与安全性”。');
+    assert.equal(w.document.getElementById('layout-label').textContent, '布局');
+    assert.equal(w.document.getElementById('layout-select').getAttribute('aria-label'), '布局');
+    assert.equal(w.document.getElementById('opt-stage').textContent, '舞台');
+    assert.equal(w.document.getElementById('opt-desktop').textContent, '桌面');
+    assert.equal(w.document.getElementById('opt-grid').textContent, '网格');
+    assert.equal(w.document.getElementById('tile-focus').getAttribute('title'), 'Codebase · worker-1（聚焦此视图）');
+    assert.equal(w.document.getElementById('tile-back').getAttribute('title'), 'Codebase · worker-1（返回全部智能体）');
+    assert.equal(w.document.getElementById('icon-rg').getAttribute('aria-label'), '图标');
+    assert.equal(w.document.getElementById('color-rg').getAttribute('aria-label'), '颜色');
+    assert.equal(w.document.getElementById('draft-btn').getAttribute('aria-label'), '恢复 2 条评论草稿');
+    assert.equal(w.document.getElementById('draft-btn').textContent, '2 条草稿');
+    assert.equal(w.document.getElementById('plugin-creds').textContent, 'GitHub, Linear 的登录信息会随您的账户保存在云端。其他凭据保留在本机上。凭据仅会发送至所列出的域名。');
+    assert.equal(w.document.getElementById('sandbox-warn-two').textContent, '默认 (Default) 和 自动 (Auto) 需要终端沙盒，但此主机不可用。');
+    assert.equal(w.document.getElementById('sandbox-warn-one').textContent, '默认 (Default) 需要终端沙盒，但此主机不可用。');
+    assert.equal(w.document.getElementById('org-managed').textContent, '由您的组织管理');
+    assert.equal(w.document.getElementById('org-managed').getAttribute('title'), '由您的组织管理');
+    assert.equal(w.document.getElementById('msg-ing').textContent, '正在向 Codebase Researcher 发送消息');
+    assert.equal(w.document.getElementById('msg-ed').textContent, '已向 Codebase Researcher 发送消息');
+    assert.equal(w.document.getElementById('msg-prose').textContent, 'Messaging other services over HTTP requires valid credentials.');
+    assert.equal(w.document.getElementById('save-err').textContent, '保存项目设置失败：Network error');
+
+    assert.equal(w.document.getElementById('plain-click').textContent, 'Click');
+    assert.equal(w.document.getElementById('plain-missing').textContent, 'Missing');
+    assert.equal(w.document.getElementById('plain-layout').textContent, 'Layout');
+    assert.equal(w.document.getElementById('plain-stage').textContent, 'Stage');
+    assert.equal(w.document.getElementById('plain-design').textContent, 'Design');
+    assert.equal(w.document.getElementById('plain-icon').getAttribute('aria-label'), 'Icon');
+    assert.equal(w.document.getElementById('plain-color').getAttribute('aria-label'), 'Color');
+
+    const domTw = createDom(html);
+    t.after(() => domTw.window.close());
+    domTw.window.eval(loadRuntime({ traditional: true }));
+    await settle();
+    assert.equal(domTw.window.document.getElementById('perm-badge-miss').textContent, '未授權');
+    assert.equal(domTw.window.document.getElementById('perm-tip').textContent, '按一下 開啟 ↗ 以開啟 macOS「隱私權與安全性」。');
+    assert.equal(domTw.window.document.getElementById('layout-label').textContent, '版面配置');
+    assert.equal(domTw.window.document.getElementById('layout-select').getAttribute('aria-label'), '版面配置');
+    assert.equal(domTw.window.document.getElementById('opt-grid').textContent, '網格');
+    assert.equal(domTw.window.document.getElementById('tile-focus').getAttribute('title'), 'Codebase · worker-1（聚焦此窗格）');
+    assert.equal(domTw.window.document.getElementById('icon-rg').getAttribute('aria-label'), '圖示');
+    assert.equal(domTw.window.document.getElementById('color-rg').getAttribute('aria-label'), '顏色');
+    assert.equal(domTw.window.document.getElementById('draft-btn').getAttribute('aria-label'), '恢復 2 則評論草稿');
+    assert.equal(domTw.window.document.getElementById('draft-btn').textContent, '2 則草稿');
+    assert.equal(domTw.window.document.getElementById('plugin-creds').textContent, 'GitHub, Linear 的登入資訊會隨您的帳戶保存在雲端。其他憑證保留在本機上。憑證僅會傳送至所列出的網域。');
+    assert.equal(domTw.window.document.getElementById('sandbox-warn-two').textContent, '預設 (Default) 與 自動 (Auto) 需要終端機沙箱，但此主機無法使用。');
+    assert.equal(domTw.window.document.getElementById('sandbox-warn-one').textContent, '預設 (Default) 需要終端機沙箱，但此主機無法使用。');
+    assert.equal(domTw.window.document.getElementById('org-managed').textContent, '由您的組織管理');
+    assert.equal(domTw.window.document.getElementById('msg-ing').textContent, '正在傳送訊息給 Codebase Researcher');
+    assert.equal(domTw.window.document.getElementById('msg-ed').textContent, '已傳送訊息給 Codebase Researcher');
+    assert.equal(domTw.window.document.getElementById('save-err').textContent, '儲存專案設定失敗：Network error');
+    assert.equal(domTw.window.document.getElementById('plain-click').textContent, 'Click');
+    assert.equal(domTw.window.document.getElementById('plain-missing').textContent, 'Missing');
+    assert.equal(domTw.window.document.getElementById('plain-design').textContent, 'Design');
+});

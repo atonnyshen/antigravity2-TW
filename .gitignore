@@ -1,12 +1,7 @@
 scratch/
+AgentWork/
 _temp_asar/
-_staging_app/
-build_app/
-autolocalize.log
 node_modules/
-.watcher-state/
-.env
-dist/
 .DS_Store
 AGENTS.md
 
@@ -18,3 +13,10 @@ codex/
 
 # Proxy configuration & injection modules (local only)
 proxy_config/
+
+# Runtime / Build artifacts
+.watcher-state/
+autolocalize.log
+build_app/
+dist/
+*.zip

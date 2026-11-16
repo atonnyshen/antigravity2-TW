@@ -1,5 +1,17 @@
 # 更新紀錄
 
+## 3.4.0 — 2026-11-16
+
+- 適配 Google Antigravity v2.32.1 官方最新介面：
+  - 納入 SSH 遠端連線主機（Remote SSH Host）、草稿膠囊（Draft Capsule）、多代理視圖佈局（Stage / Desktop / Grid / Multi-Agent Layout）等新介面繁中化。
+  - 補齊終端機沙箱邊界說明、雲端憑證存取提醒、macOS 隱私跳轉與自訂外掛預算提示，繁體中文字典總量擴充至 3,721 條，100% 繁中對齊覆蓋。
+- 架構重構與引擎現代化解耦：
+  - 核心運行時解耦拆分為模組化架構（`src/preload_runtime.js`、`src/main_patches.js`、`src/asar_patcher.js`），大幅精簡程式碼體積。
+  - 引入純原生 Node.js ASAR 解析與修補引擎（`patchAsarArchive` / `validateAsarCandidate`），徹底擺脫外部 `asar` CLI 工具與第三方相依，支援直接記憶體流二進制修補與 SHA-256 完整性校驗。
+  - 強化 `src/preload_runtime.js` 中的 `isCodeOrEditor` 安全防護，增強非瀏覽器環境容錯，並保留 `makeFlexibleRegex` 直彎引號動態模糊相容與多子句連續替換機制。
+- 測試套件擴充與綠燈通過：
+  - 整合上游回歸測試（`installer-regressions.cjs`）與繁中專屬單元測試套件，涵蓋 28 項跨平台自動化測試（macOS / Linux / Windows），全數通過。
+
 ## 3.3.5 — 2026-11-14
 
 - 深度修復引擎長句與特殊引號解析缺陷（`localization_engine.js`）：

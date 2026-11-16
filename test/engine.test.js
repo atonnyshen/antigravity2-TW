@@ -7,7 +7,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { spawnSync } = require('node:child_process');
 process.argv.push('--tw');
-const { generateJs, runAsar } = require('../localization_engine');
+const { generateJs } = require('../localization_engine');
+const { readAsarLayout } = require('../src/asar_patcher');
 const repo = path.resolve(__dirname, '..');
 
 test('all translation dictionaries parse and contain string values', () => {
@@ -58,14 +59,13 @@ test('real asar CLI: paths with spaces, injection, unpacked data, repeatability'
     for (let i = 0; i < 2; i++) {
         const run = spawnSync(process.execPath, [path.join(repo, 'localization_engine.js'), '--tw', '--staging', '--no-kill', '--install-dir', resources], { encoding: 'utf8', timeout: 30000 });
         assert.equal(run.status, 0, run.stdout + run.stderr);
-        const extracted = path.join(root, 'extracted-' + i);
-        const result = runAsar('extract', archive, extracted);
-        assert.equal(result.success, true, result.stderr);
-        const preload = fs.readFileSync(path.join(extracted, 'dist', 'preload.js'), 'utf8');
+        const layout = readAsarLayout(archive);
+        const preload = layout.files.get('dist/preload.js').body.toString('utf8');
         assert.equal(preload.split('ANTIGRAVITY CHINESE LOCALIZATION START').length - 1, 1);
         assert.ok(preload.includes('命令選擇區'));
         new vm.Script(preload);
-        assert.equal(fs.readFileSync(path.join(extracted, 'resource.txt'), 'utf8'), 'unpacked-resource');
+        assert.ok(layout.files.has('resource.txt'));
+        assert.equal(layout.files.get('resource.txt').unpacked, true);
         assert.deepEqual(fs.readFileSync(archive + '.bak'), original);
     }
 });
@@ -123,10 +123,10 @@ test('FastPick and split text nodes are properly localized', () => {
     assert.equal(splitText2.nodeValue, ' 個...');
 });
 
-test('generated script includes Taiwan MCP sniffer messages in Traditional Chinese', () => {
+test('generated script includes Taiwan dynamic rules and prompts in Traditional Chinese', () => {
     const js = generateJs();
-    assert.ok(js.includes('[Antigravity TW] 已自動捕獲 '));
-    assert.ok(js.includes('[Antigravity TW] 如需查看／匯出 JSON，可在主控台執行: copy(window.__exportMcpCatalog())'));
+    assert.ok(js.includes('此 MCP 伺服器中的所有工具'));
+    assert.ok(js.includes('超出自訂項預算，並已從上下文中排除'));
 });
 
 test('NUX onboarding and typographical quote variations are properly localized', () => {
