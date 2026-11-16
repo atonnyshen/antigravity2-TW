@@ -25,6 +25,12 @@
 | **未配置計劃任務** | **未設定排程任務** | 修正排程與設定語意搭配（Scheduled Tasks） |
 | **終端命令** | **終端機指令** | 對齊 macOS 終端機標準用法（Terminal Commands） |
 | **本地** | **本機** | Local 對應本機規範 |
+| **配置 / 配置文件** | **設定 / 設定檔** | Configuration / Config File 台灣標準體例 |
+| **插件** | **外掛程式** | Plugin 標準中文用法 |
+| **快捷鍵** | **快速鍵** | Shortcut 標準台灣體例 |
+| **保存** | **儲存** | Save 標準台灣體例 |
+| **重啓** | **重新啟動** | Restart 繁體標準用法 |
+| **訪問策略** | **存取原則** | Access Policy 資訊安全標準體例 |
 | **Token 預算超限** | **Token 預算額度已超限** | 語意精準完整 |
 | **可復用** | **可重複使用** | 自然中文語序 |
 | **暫無會話** | **尚無對話記錄** | 語意明確 |
@@ -96,17 +102,16 @@ Google Antigravity 發展歷程中包含不同產品形態，本專案的支援�
 
 ---
 
-## 💻 關於 VS Code 擴充套件的停止支援說明
+## 💻 關於擴充套件（Extensions / Plugins）與 VS Code 舊外掛說明
 
-若您先前曾在 Visual Studio Code 中安裝過本專案的擴充套件中文化：
+許多使用者詢問「擴充套件是否支援中文化？」以及「為什麼在新版中找不到 VS Code 外掛修改腳本？」，說明如下：
 
-1. **停止支援原因**：
-   - Antigravity VS Code 擴充套件核心對話介面與設定面板，底層係由 Google 本機執行檔（`~/.gemini/bin/agy`）透過動態 HTTP 服務及 iframe 渲染，受限於同源安全政策無法達成真正全介面繁中化。
-   - 雙重背景服務與帳號切換外掛（例如 Cockpit）可能造成 Token 遺失或觸發 WebSocket 連線逾時，增加使用不穩定性。
-2. **還原官方英文方法**：
-   - **macOS 使用者**：點兩下執行 **`點兩下還原VSCode擴充官方英文.command`**（或於終端機執行 `node localize_vscode_extension.js --restore`）。
-   - **Windows 使用者**：點兩下執行 **`點兩下還原VSCode擴充官方英文.bat`**（或於命令提示字元執行 `node localize_vscode_extension.js --restore`）。
-   - 執行後將還原官方原版 `package.json` 與 `extension.js`，重啟 VS Code 即可乾淨復原。
+1. **Antigravity 2.0 獨立桌面端外掛介面已全量繁中化**：
+   - 在 Antigravity 2.0 獨立桌面軟體中，內建的**擴充功能清單、外掛程式市集（Plugins / Marketplace）、伴生側邊欄（Sidecar）以及 MCP 工具管理介面**，本套件均已 100% 深度繁中化，使用者安裝本套件後即可直接享受完整中文外掛體驗，不需要也不存在單獨的外掛補丁。
+2. **早期外部 VS Code 擴充外掛腳本已正式下線退役**：
+   - 早期專案曾針對「微軟一般 VS Code 裡安裝的 Antigravity 擴充套件」提供實驗性補丁腳本（`localize_vscode_extension.js`）。
+   - 由於 Google 官方已全面將開發重心轉移至 Antigravity 2.0 獨立桌面版，所有新一代功能（如多代理人並行、終端機沙箱、SSH 遠端連線等）皆僅在獨立桌面版中提供；一般 VS Code 擴充版功能已與獨立版分道揚鑣，且微軟插件市集之保護機制容易引發背景連線異常。
+   - 為維持套件精簡與極致穩定度，自 **v3.4.0** 起，上游與本專案已全面移除舊版 `localize_vscode_extension.js` 及其配套還原腳本，全力聚焦深耕獨立桌面端。
 
 ---
 
