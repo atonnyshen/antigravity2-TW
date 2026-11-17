@@ -1,5 +1,22 @@
 # 更新紀錄
 
+## 3.5.0 — 2026-11-17
+
+- 主行程（Main Process）原生彈窗繁中化：
+  - 納入 DOM 無法觸及的原生對話框，新增 `patchMainJs()`、`patchIpcHandlersJs()`、`patchRemoteManagerJs()` 與 `patchSshPromptsJs()` 注入引擎。
+  - 覆蓋退出確認彈窗（「確定要結束嗎？可能仍有代理人或背景任務在執行中。」）、WSL 環境與核心依賴錯誤、IPC 工作區資料夾選取器、SSH 終端終止確認與安全性金鑰觸碰提示。
+- 根治初次啟動快取延遲：
+  - 重構 `cleanElectronCache()`，改為遞迴深度掃描並清除 `Partitions/hub-browser-*/Code Cache` 內之 V8 編譯位元碼，解決應用升級或更新後初次啟動殘留舊版快取（顯示英文或舊翻譯）的問題。
+  - 調整守護服務快取清理邏輯，確保更新套用後即刻載入最新繁體中文字串。
+- 動態使用者問候語片段匹配修復：
+  - 針對 React 在首頁將動態使用者名稱與問候語切割為多個獨立文字節點的結構（`Hey {name}, what should we build today?`），強化 `src/preload_runtime.js` 之後綴片段規則與上下文父節點匹配，完整呈現「嗨 {name}，今天我們要打造什麼？」。
+- macOS 背景守護服務（LaunchAgent）校準：
+  - 修復 `install_macos_autowatcher.sh` 與守護服務模組同步邏輯，確保 `src/` 模組目錄正確複製並納入監聽。
+- 字典與文件專名校準：
+  - 補齊 `Global Permissions`（全域權限）等介面詞條；登入介面標題校準為「歡迎使用 Antigravity」並更新最新截圖；全面整理軟體專有名詞體例。
+- 測試套件擴充：
+  - 單元測試擴充至 30 項跨平台自動化測試（涵蓋主行程原生彈窗注入與動態問候語分詞場景），全數通過。
+
 ## 3.4.0 — 2026-11-16
 
 - 適配 Google Antigravity v2.32.1 官方最新介面：
