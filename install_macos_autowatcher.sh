@@ -184,6 +184,11 @@ PLIST_EOF
     /bin/launchctl enable "system/$LABEL"
     /bin/launchctl bootstrap system "$PLIST"
     /bin/launchctl print "system/$LABEL"
+    for old_rt in "$BASE"/runtime.*; do
+        if [ -d "$old_rt" ] && [ "$old_rt" != "$RUNTIME" ]; then
+            /bin/rm -rf "$old_rt" 2>/dev/null || true
+        fi
+    done
     echo "🎉 LaunchDaemon 系統級守護服務已成功安裝並啟動！"
     echo "日誌路徑：$LOG_DIR/autolocalize.log"
 else

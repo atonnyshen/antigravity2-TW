@@ -526,7 +526,7 @@ function main() {
         // 輕量非同步遠端版本檢測（預設每 24 小時執行一次，不阻斷主流程）
         if (autoUpdater && typeof autoUpdater.checkUpdate === 'function') {
             const pkgPath = path.join(DIR, 'package.json');
-            let currentVer = '3.6.0';
+            let currentVer = '3.6.1';
             try {
                 currentVer = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || currentVer;
             } catch {}

@@ -1,5 +1,12 @@
 # 更新紀錄
 
+## 3.6.1 — 2026-11-18
+
+- 單次安裝腳本防呆補強：
+  - `點兩下安裝繁體中文.command` 新增偵測機制：若本機原本已啟用舊版 macOS 背景守護（`LaunchDaemon` 或 `LaunchAgent`），安裝完成後會自動將該守護同步升級至最新版本，避免舊版守護於 30 秒後將手動升級好的繁中套件覆寫回舊版；同時補齊 Homebrew / `/usr/local/bin` 的 `PATH` 搜尋路徑。
+  - `install_macos_autowatcher.sh` 在系統級 `LaunchDaemon` 升級完成後，自動清理已汰換的舊 `runtime.*` 殘留目錄。
+  - `點兩下安裝繁體中文.bat` 偵測到已註冊的 Windows 排程 `AntigravityAutoLocalize` 時，於完成畫面主動提示同步更新背景守護。
+
 ## 3.6.0 — 2026-11-18
 
 - 同步上游 Swarm Sidecar 修復（`upstream/main` `f4f2005`）：
