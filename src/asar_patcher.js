@@ -137,10 +137,21 @@ function patchAsarArchive(sourceAsarPath, destAsarPath, modifierMap) {
     return modifiedFiles;
 }
 
-function validateAsarCandidate(sourcePath, candidatePath, signatureStart) {
+function validateAsarCandidate(sourcePath, candidatePath, signatureStart, customAllowed) {
     const before = readAsarLayout(sourcePath);
     const after = readAsarLayout(candidatePath);
-    const allowed = new Set(['dist/preload.js', 'dist/utils.js', 'dist/menu.js', 'dist/tray.js', 'dist/loadingOverlay.js', 'dist/updater.js']);
+    const allowed = customAllowed || new Set([
+        'dist/preload.js',
+        'dist/utils.js',
+        'dist/menu.js',
+        'dist/tray.js',
+        'dist/loadingOverlay.js',
+        'dist/updater.js',
+        'dist/main.js',
+        'dist/ipcHandlers.js',
+        'dist/remote/remoteManager.js',
+        'dist/remote/sshPrompts.js'
+    ]);
     if (before.files.size !== after.files.size) throw new Error('ASAR file list changed');
     for (const [name, original] of before.files) {
         const candidate = after.files.get(name);

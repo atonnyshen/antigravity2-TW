@@ -465,6 +465,8 @@
 
         // 问候语与语音交互
         [/^Hey\s+(.+?),\s+what should we build today\??$/i, (m, name) => name.trim().toLowerCase() === 'there' ? (USE_TW ? "嗨，今天我們要打造什麼？" : "嗨，今天我们要构建什么？") : (USE_TW ? ("嗨 " + name.trim() + "，今天我們要打造什麼？") : ("嗨 " + name.trim() + "，今天我们要构建什么？"))],
+        [/^,?\s*what should we build today\??$/i, () => USE_TW ? "，今天我們要打造什麼？" : "，今天我们要构建什么？"],
+        [/^what should we build today\??$/i, () => USE_TW ? "今天我們要打造什麼？" : "今天我们要构建什么？"],
         [/^Welcome back,\s*(.+?)\.\s*Where should we pick up\??$/i, (m, name) => USE_TW ? ("歡迎回來，" + name.trim() + "。我們從哪裡繼續？") : ("欢迎回来，" + name.trim() + "。我们从哪里继续？")],
         [/^Welcome back\.\s*Where should we pick up\??$/i, () => USE_TW ? "歡迎回來。我們從哪裡繼續？" : "欢迎回来。我们从哪里继续？"],
         [/^Good to see you,\s*(.+?)\.\s*What's next\??$/i, (m, name) => USE_TW ? ("很高興見到您，" + name.trim() + "。接下來做什麼？") : ("很高兴见到您，" + name.trim() + "。接下来做什么？")],
@@ -754,6 +756,12 @@
             if (valNorm === 'or') return " 或 ";
             if (valNorm.startsWith('), use an external SSH session')) return valNorm.replace(/^\), use an external SSH session/i, USE_TW ? "），請使用外部 SSH 工作階段" : "），请使用外部 SSH 会话");
             if (valNorm.startsWith('. For non-corp passwords')) return USE_TW ? "。對於非公司密碼或 SSH 密碼複雜密碼，請允許下一次提示並重新執行指令。" : "。对于非公司密码或 SSH 密码短语，请允许下一次提示并重新运行命令。";
+        }
+        if (pText.includes('what should we build today') || pText.includes('今天我們要打造什麼') || pText.includes('今天我们要构建什么')) {
+            if (valNorm === 'Hey') return USE_TW ? "嗨" : "嗨";
+            if (/^,?\s*what should we build today\??$/i.test(valNorm)) {
+                return USE_TW ? "，今天我們要打造什麼？" : "，今天我们要构建什么？";
+            }
         }
         if ((valNorm === 'Type' || valNorm === 'and select') && ((typeof p.closest === 'function' && p.closest('[data-testid="plan-command-fyi-alert"]')) || pText.includes('generate a plan'))) {
             return valNorm === 'Type' ? (USE_TW ? "輸入" : "输入") : (USE_TW ? "並選取" : "并选择");

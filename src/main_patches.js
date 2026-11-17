@@ -444,11 +444,90 @@ function patchUpdaterJs(updaterContent, useTw) {
     return out;
 }
 
+function patchMainJs(mainContent, useTw) {
+    console.log(`[修改] 正在向 main.js 注入退出對話框與系統提示漢化...`);
+    let out = mainContent;
+
+    const targetQuit = `buttons: ['Cancel', 'Quit'],
+        defaultId: 1,
+        cancelId: 0,
+        title: 'Confirm Quit',
+        message: 'Are you sure you want to quit?',
+        detail: 'There may be agents or background tasks running.',`;
+
+    const replacementQuit = useTw ? `buttons: ['取消', '結束'],
+        defaultId: 1,
+        cancelId: 0,
+        title: '確認結束',
+        message: '您確定要結束 Antigravity 嗎？',
+        detail: '目前可能仍有代理人或背景任務正在執行。',` : `buttons: ['取消', '退出'],
+        defaultId: 1,
+        cancelId: 0,
+        title: '确认退出',
+        message: '您确定要退出 Antigravity 吗？',
+        detail: '目前可能仍有智能体或后台任务正在运行。',`;
+
+    if (out.includes(targetQuit)) {
+        out = out.replace(targetQuit, replacementQuit);
+    } else {
+        out = out.replace(/title:\s*'Confirm Quit'/g, useTw ? "title: '確認結束'" : "title: '确认退出'")
+                 .replace(/message:\s*'Are you sure you want to quit\?'/g, useTw ? "message: '您確定要結束 Antigravity 嗎？'" : "message: '您确定要退出 Antigravity 吗？'")
+                 .replace(/detail:\s*'There may be agents or background tasks running\.'/g, useTw ? "detail: '目前可能仍有代理人或背景任務正在執行。'" : "detail: '目前可能仍有智能体或后台任务正在运行。'")
+                 .replace(/buttons:\s*\['Cancel',\s*'Quit'\]/g, useTw ? "buttons: ['取消', '結束']" : "buttons: ['取消', '退出']");
+    }
+
+    out = out.replace(/dialog\.showErrorBox\('Binary not found'/g, useTw ? "dialog.showErrorBox('找不到執行檔'" : "dialog.showErrorBox('未找到可执行文件'")
+             .replace(/dialog\.showErrorBox\('WSL setup failed'/g, useTw ? "dialog.showErrorBox('WSL 設定失敗'" : "dialog.showErrorBox('WSL 设置失败'")
+             .replace(/dialog\.showErrorBox\('Startup failed'/g, useTw ? "dialog.showErrorBox('啟動失敗'" : "dialog.showErrorBox('启动失败'")
+             .replace(/title:\s*'WSL distro not found'/g, useTw ? "title: '找不到 WSL 發行版'" : "title: '未找到 WSL 发行版'")
+             .replace(/detail:\s*'Antigravity opened on Windows instead\.'/g, useTw ? "detail: 'Antigravity 已改在 Windows 上開啟。'" : "detail: 'Antigravity 已改为在 Windows 上打开。'");
+
+    console.log(`[修改] 主行程對話框漢化注入成功！`);
+    return out;
+}
+
+function patchIpcHandlersJs(ipcContent, useTw) {
+    console.log(`[修改] 正在向 ipcHandlers.js 注入原生資料夾對話框漢化...`);
+    let out = ipcContent;
+    out = out.replace(/dialog\.showErrorBox\('Cannot open folder'/g, useTw ? "dialog.showErrorBox('無法開啟資料夾'" : "dialog.showErrorBox('无法打开文件夹'")
+             .replace(/message:\s*'Folder is on the Windows filesystem'/g, useTw ? "message: '資料夾位於 Windows 檔案系統'" : "message: '文件夹位于 Windows 文件系统'")
+             .replace(/title:\s*'Open workspace'/g, useTw ? "title: '開啟工作區'" : "title: '打开工作区'");
+    console.log(`[修改] 原生資料夾對話框漢化注入成功！`);
+    return out;
+}
+
+function patchRemoteManagerJs(rmContent, useTw) {
+    console.log(`[修改] 正在向 remoteManager.js 注入遠端伺服器對話框漢化...`);
+    let out = rmContent;
+    out = out.replace(/buttons:\s*\['Stop Server',\s*'Cancel'\]/g, useTw ? "buttons: ['停止伺服器', '取消']" : "buttons: ['停止服务器', '取消']")
+             .replace(/title:\s*'Stop SSH server'/g, useTw ? "title: '停止 SSH 伺服器'" : "title: '停止 SSH 服务器'")
+             .replace(/Stop the Antigravity server on \${entry\.label}\?/g, useTw ? "停止 ${entry.label} 上的 Antigravity 伺服器？" : "停止 ${entry.label} 上的 Antigravity 服务器？")
+             .replace(/Agents running on this host will stop and its window will close\. The server starts again the next time you connect\./g, useTw ? "此主機上執行的代理人將停止，其視窗也將關閉。下次連線時伺服器將重新啟動。" : "此主机上运行的智能体将停止，其窗口也将关闭。下次连接时服务器将重新启动。")
+             .replace(/buttons:\s*\['Sign In',\s*'Cancel'\]/g, useTw ? "buttons: ['登入', '取消']" : "buttons: ['登录', '取消']")
+             .replace(/title:\s*'Sign in'/g, useTw ? "title: '登入'" : "title: '登录'")
+             .replace(/Sign in to your organization for \${entry\.label}\?/g, useTw ? "登入 ${entry.label} 的機構帳戶？" : "登录 ${entry.label} 的组织账户？");
+    console.log(`[修改] 遠端伺服器對話框漢化注入成功！`);
+    return out;
+}
+
+function patchSshPromptsJs(spContent, useTw) {
+    console.log(`[修改] 正在向 sshPrompts.js 注入 SSH 驗證提示漢化...`);
+    let out = spContent;
+    out = out.replace(/'Touch your security key'/g, useTw ? "'請輕觸您的安全性金鑰'" : "'请轻触您的安全密钥'")
+             .replace(/buttons:\s*confirm\s*\?\s*\['Yes',\s*'No'\]\s*:\s*\['Cancel'\]/g, useTw ? "buttons: confirm ? ['是', '否'] : ['取消']" : "buttons: confirm ? ['是', '否'] : ['取消']");
+    console.log(`[修改] SSH 驗證提示漢化注入成功！`);
+    return out;
+}
+
 module.exports = {
     patchPreloadJs,
     patchUtilsJs,
     patchMenuJs,
     patchTrayJs,
     patchLoadingOverlayJs,
-    patchUpdaterJs
+    patchUpdaterJs,
+    patchMainJs,
+    patchIpcHandlersJs,
+    patchRemoteManagerJs,
+    patchSshPromptsJs
 };

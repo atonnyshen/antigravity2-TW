@@ -11,7 +11,11 @@ const {
     patchMenuJs,
     patchTrayJs,
     patchLoadingOverlayJs,
-    patchUpdaterJs
+    patchUpdaterJs,
+    patchMainJs,
+    patchIpcHandlersJs,
+    patchRemoteManagerJs,
+    patchSshPromptsJs
 } = require('./src/main_patches');
 
 // macOS 环境下自动补全 PATH，确保 codesign 等工具能被顺利找到
@@ -366,7 +370,7 @@ function runCommandSync(cmd) {
 }
 
 function cleanElectronCache() {
-    let appSupportDir = "";
+    let appSupportDirs = [];
     if (process.platform === 'darwin') {
         let userHome = os.homedir();
         if (process.env.SUDO_USER && process.env.SUDO_USER !== 'root') {
@@ -375,29 +379,53 @@ function cleanElectronCache() {
                 userHome = sudoHome;
             }
         }
-        appSupportDir = path.join(userHome, 'Library', 'Application Support', 'Antigravity');
+        appSupportDirs.push(
+            path.join(userHome, 'Library', 'Application Support', 'Antigravity'),
+            path.join(userHome, 'Library', 'Application Support', 'Antigravity IDE')
+        );
     } else if (process.platform === 'win32') {
         const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-        appSupportDir = path.join(appData, 'Antigravity');
+        appSupportDirs.push(
+            path.join(appData, 'Antigravity'),
+            path.join(appData, 'Antigravity IDE')
+        );
     } else {
-        appSupportDir = path.join(os.homedir(), '.config', 'Antigravity');
+        appSupportDirs.push(
+            path.join(os.homedir(), '.config', 'Antigravity'),
+            path.join(os.homedir(), '.config', 'Antigravity IDE')
+        );
     }
 
-    if (!fs.existsSync(appSupportDir)) return;
-
-    const cacheDirs = ['Cache', 'Code Cache', 'GPUCache', 'DawnWebGPUCache', 'DawnGraphiteCache'];
+    const toDeleteNames = new Set(['Code Cache', 'GPUCache', 'DawnGraphiteCache', 'GraphiteDawnCache', 'DawnWebGPUCache', 'ScriptCache']);
     let cleanedCount = 0;
-    for (const c of cacheDirs) {
-        const p = path.join(appSupportDir, c);
-        if (fs.existsSync(p)) {
-            try {
-                fs.rmSync(p, { recursive: true, force: true });
-                cleanedCount++;
-            } catch (e) {}
-        }
+
+    function purgeDir(dir, depth = 0) {
+        if (depth > 4 || !fs.existsSync(dir)) return;
+        try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory()) {
+                    const full = path.join(dir, entry.name);
+                    if (toDeleteNames.has(entry.name)) {
+                        try {
+                            fs.rmSync(full, { recursive: true, force: true });
+                            cleanedCount++;
+                        } catch (e) {}
+                    } else if (entry.name === 'Partitions' || entry.name.startsWith('hub-browser') || entry.name === 'Service Worker') {
+                        purgeDir(full, depth + 1);
+                    }
+                }
+            }
+        } catch (e) {}
     }
+
+    for (const appSupportDir of appSupportDirs) {
+        if (!fs.existsSync(appSupportDir)) continue;
+        purgeDir(appSupportDir, 0);
+    }
+
     if (cleanedCount > 0) {
-        console.log(`[缓存] 已自动清理 ${cleanedCount} 个应用缓存目录，避免新旧版本字节码冲突。`);
+        console.log(`[快取] 已自動清理 ${cleanedCount} 個應用快取目錄（含多分區 Code Cache），避免新舊版本位元碼衝突。`);
     }
 }
 
@@ -536,7 +564,11 @@ function install20(resourcesDir, noKill = false) {
             ['dist/menu.js', content => patchMenuJs(content, USE_TW)],
             ['dist/tray.js', content => patchTrayJs(content, USE_TW)],
             ['dist/loadingOverlay.js', content => patchLoadingOverlayJs(content, USE_TW)],
-            ['dist/updater.js', content => patchUpdaterJs(content, USE_TW)]
+            ['dist/updater.js', content => patchUpdaterJs(content, USE_TW)],
+            ['dist/main.js', content => patchMainJs(content, USE_TW)],
+            ['dist/ipcHandlers.js', content => patchIpcHandlersJs(content, USE_TW)],
+            ['dist/remote/remoteManager.js', content => patchRemoteManagerJs(content, USE_TW)],
+            ['dist/remote/sshPrompts.js', content => patchSshPromptsJs(content, USE_TW)]
         ]);
 
         console.log(`[打包] 正在使用原生引擎生成并校验汉化候选包...`);
@@ -579,9 +611,7 @@ function install20(resourcesDir, noKill = false) {
                 console.warn(`[提示] 临时目录已保留: ${buildDir}`);
             }
         }
-        if (!(noKill && wasAppRunning)) {
-            cleanElectronCache();
-        }
+        cleanElectronCache();
         resignAppOnMac(resourcesDir);
         console.log(`[√] Antigravity 2.0 汉化部署完成！`);
         return true;

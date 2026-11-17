@@ -1550,6 +1550,7 @@
   "Incomplete / Gave up": "半途而废 / 未完成",
   "Indexed CEL helper functions": "已索引的 CEL 辅助函数",
   "Inherit Editor": "继承编辑器设置",
+  "Global Permissions": "全局权限",
   "Inherit Global": "继承全局",
   "Inherits from ": "继承自 ",
   "Inherits your General settings when working in these conversations.": "在此类会话中工作时继承您的通用设置。",

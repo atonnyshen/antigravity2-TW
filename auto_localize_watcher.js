@@ -179,6 +179,60 @@ function acquireLock(lockPath, targetUid, targetGid) {
     return () => fs.rmSync(lockPath, { recursive: true, force: true });
 }
 
+function cleanElectronCache(targetUid) {
+    try {
+        const appSupportDirs = [];
+        if (IS_MAC) {
+            let home = os.homedir();
+            if (ROOT && targetUid && targetUid !== 0) {
+                try {
+                    const uEntry = execFileSync('/usr/bin/id', ['-un', String(targetUid)], { encoding: 'utf8' }).trim();
+                    if (uEntry) home = path.join('/Users', uEntry);
+                } catch {}
+            }
+            appSupportDirs.push(
+                path.join(home, 'Library', 'Application Support', 'Antigravity'),
+                path.join(home, 'Library', 'Application Support', 'Antigravity IDE')
+            );
+        } else if (process.platform === 'win32') {
+            const appData = process.env.APPDATA || '';
+            if (appData) {
+                appSupportDirs.push(
+                    path.join(appData, 'Antigravity'),
+                    path.join(appData, 'Antigravity IDE')
+                );
+            }
+        } else {
+            appSupportDirs.push(
+                path.join(os.homedir(), '.config', 'Antigravity'),
+                path.join(os.homedir(), '.config', 'Antigravity IDE')
+            );
+        }
+
+        const toDeleteNames = new Set(['Code Cache', 'GPUCache', 'DawnGraphiteCache', 'GraphiteDawnCache', 'DawnWebGPUCache', 'ScriptCache']);
+        function purgeDir(dir, depth = 0) {
+            if (depth > 4 || !fs.existsSync(dir)) return;
+            try {
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (entry.isDirectory()) {
+                        const full = path.join(dir, entry.name);
+                        if (toDeleteNames.has(entry.name)) {
+                            try { fs.rmSync(full, { recursive: true, force: true }); } catch {}
+                        } else if (entry.name === 'Partitions' || entry.name.startsWith('hub-browser') || entry.name === 'Service Worker') {
+                            purgeDir(full, depth + 1);
+                        }
+                    }
+                }
+            } catch {}
+        }
+
+        for (const dir of appSupportDirs) {
+            if (fs.existsSync(dir)) purgeDir(dir, 0);
+        }
+    } catch {}
+}
+
 function getAppInfo() {
     let candidates;
     if (IS_MAC) {
@@ -429,6 +483,7 @@ function checkAndLocalizeApp(appInfo, {
             } catch {}
         }
         safeReplaceFile(stateTmp, statePath, 0o644, sourceStat.uid, sourceStat.gid);
+        cleanElectronCache(sourceStat ? sourceStat.uid : null);
         log('繁中套件已套用並驗證；已開啟的視窗須重新啟動後載入。');
         return true;
     } catch (error) {

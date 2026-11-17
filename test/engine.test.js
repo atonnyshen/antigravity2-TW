@@ -161,4 +161,83 @@ test('NUX onboarding and typographical quote variations are properly localized',
     assert.equal(node3.nodeValue, "協助改善 Antigravity。允許 Google 收集並使用您的互動資料，但須遵守");
 });
 
+test('main process and native dialog patches localize quit, IPC and SSH dialogs', () => {
+    const {
+        patchMainJs,
+        patchIpcHandlersJs,
+        patchRemoteManagerJs,
+        patchSshPromptsJs
+    } = require('../src/main_patches');
+
+    const fakeMain = `const options = {
+        buttons: ['Cancel', 'Quit'],
+        title: 'Confirm Quit',
+        message: 'Are you sure you want to quit?',
+        detail: 'There may be agents or background tasks running.'
+    };
+    dialog.showErrorBox('Binary not found', msg);
+    dialog.showErrorBox('Startup failed', msg);`;
+    const patchedMain = patchMainJs(fakeMain, true);
+    assert.ok(patchedMain.includes("title: '確認結束'"));
+    assert.ok(patchedMain.includes("message: '您確定要結束 Antigravity 嗎？'"));
+    assert.ok(patchedMain.includes("buttons: ['取消', '結束']"));
+    assert.ok(patchedMain.includes("dialog.showErrorBox('找不到執行檔'"));
+
+    const fakeIpc = `dialog.showErrorBox('Cannot open folder', t.error);
+    void dialog.showMessageBox({ message: 'Folder is on the Windows filesystem' });
+    const r = await dialog.showOpenDialog({ title: 'Open workspace' });`;
+    const patchedIpc = patchIpcHandlersJs(fakeIpc, true);
+    assert.ok(patchedIpc.includes("dialog.showErrorBox('無法開啟資料夾'"));
+    assert.ok(patchedIpc.includes("message: '資料夾位於 Windows 檔案系統'"));
+    assert.ok(patchedIpc.includes("title: '開啟工作區'"));
+
+    const fakeRm = `dialog.showMessageBox(win, {
+        buttons: ['Stop Server', 'Cancel'],
+        title: 'Stop SSH server',
+        message: \`Stop the Antigravity server on \${entry.label}?\`
+    });`;
+    const patchedRm = patchRemoteManagerJs(fakeRm, true);
+    assert.ok(patchedRm.includes("title: '停止 SSH 伺服器'"));
+    assert.ok(patchedRm.includes("buttons: ['停止伺服器', '取消']"));
+
+    const fakeSp = `dialog.showMessageBox(parent, {
+        message: 'Touch your security key',
+        buttons: confirm ? ['Yes', 'No'] : ['Cancel']
+    });`;
+    const patchedSp = patchSshPromptsJs(fakeSp, true);
+    assert.ok(patchedSp.includes("message: '請輕觸您的安全性金鑰'"));
+    assert.ok(patchedSp.includes("buttons: confirm ? ['是', '否'] : ['取消']"));
+});
+
+test('user greeting handles dynamic user name and fragmented DOM nodes', () => {
+    const js = generateJs();
+    const prefix = js.slice(0, js.indexOf('    const observer = new MutationObserver'));
+    const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    // Case A: Full text node with real user name
+    const singleNode = {
+        nodeType: 3,
+        nodeValue: 'Hey 馬紹安, what should we build today?'
+    };
+    translateNode(singleNode);
+    assert.equal(singleNode.nodeValue, '嗨 馬紹安，今天我們要打造什麼？');
+
+    // Case B: Fragmented text nodes inside parent
+    const parent = {
+        nodeType: 1,
+        textContent: 'Hey 馬紹安, what should we build today?',
+        closest: () => false,
+        getRootNode: () => ({})
+    };
+    const fragNode1 = { nodeType: 3, nodeValue: 'Hey', parentElement: parent };
+    const fragNode2 = { nodeType: 3, nodeValue: ', what should we build today?', parentElement: parent };
+    translateNode(fragNode1);
+    translateNode(fragNode2);
+    assert.equal(fragNode1.nodeValue, '嗨');
+    assert.equal(fragNode2.nodeValue, '，今天我們要打造什麼？');
+});
+
+
 
