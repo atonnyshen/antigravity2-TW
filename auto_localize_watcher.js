@@ -203,11 +203,11 @@ function getAppInfo() {
 
 function recipeHash() {
     const files = ['package.json', 'package-lock.json', 'localization_engine.js', 'auto_localize_watcher.js'];
-    for (const folder of ['dicts', 'dicts_tw']) {
+    for (const folder of ['dicts', 'dicts_tw', 'src']) {
         const folderPath = path.join(DIR, folder);
         if (fs.existsSync(folderPath)) {
             for (const name of fs.readdirSync(folderPath).sort()) {
-                if (name.endsWith('.json')) files.push(path.join(folder, name));
+                if (name.endsWith('.json') || name.endsWith('.js')) files.push(path.join(folder, name));
             }
         }
     }

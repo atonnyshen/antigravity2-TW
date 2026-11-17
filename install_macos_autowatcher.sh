@@ -138,7 +138,7 @@ if [ "$IS_DAEMON" -eq 1 ]; then
     for file in auto_localize_watcher.js localization_engine.js package.json package-lock.json; do
         /usr/bin/install -o root -g wheel -m 644 "$DIR/$file" "$RUNTIME/$file"
     done
-    for folder in dicts dicts_tw node_modules; do
+    for folder in dicts dicts_tw node_modules src; do
         /bin/cp -R "$DIR/$folder" "$RUNTIME/$folder"
     done
     if [ -d "$DIR/scripts" ]; then
@@ -210,7 +210,7 @@ else
     for file in auto_localize_watcher.js localization_engine.js package.json package-lock.json; do
         cp "$DIR/$file" "$RUNTIME/$file"
     done
-    for folder in dicts dicts_tw node_modules; do
+    for folder in dicts dicts_tw node_modules src; do
         cp -R "$DIR/$folder" "$RUNTIME/$folder"
     done
     if [ -d "$DIR/scripts" ]; then
