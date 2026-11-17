@@ -15,7 +15,11 @@ const {
     patchMainJs,
     patchIpcHandlersJs,
     patchRemoteManagerJs,
-    patchSshPromptsJs
+    patchSshPromptsJs,
+    patchDeviceChooserJs,
+    patchWebauthnJs,
+    patchWebviewPopupSecurityJs,
+    patchProvisionSplashJs
 } = require('./src/main_patches');
 
 // macOS 环境下自动补全 PATH，确保 codesign 等工具能被顺利找到
@@ -396,7 +400,7 @@ function cleanElectronCache() {
         );
     }
 
-    const toDeleteNames = new Set(['Code Cache', 'GPUCache', 'DawnGraphiteCache', 'GraphiteDawnCache', 'DawnWebGPUCache', 'ScriptCache']);
+    const toDeleteNames = new Set(['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'GraphiteDawnCache', 'DawnWebGPUCache', 'ScriptCache']);
     let cleanedCount = 0;
 
     function purgeDir(dir, depth = 0) {
@@ -532,7 +536,7 @@ function replaceFileWithRetry(srcPath, destPath) {
     }
 }
 
-function install20(resourcesDir, noKill = false) {
+function install20(resourcesDir, noKill = false, staging = false) {
     const asarPath = path.join(resourcesDir, "app.asar");
     const bakPath = path.join(resourcesDir, "app.asar.bak");
 
@@ -568,7 +572,11 @@ function install20(resourcesDir, noKill = false) {
             ['dist/main.js', content => patchMainJs(content, USE_TW)],
             ['dist/ipcHandlers.js', content => patchIpcHandlersJs(content, USE_TW)],
             ['dist/remote/remoteManager.js', content => patchRemoteManagerJs(content, USE_TW)],
-            ['dist/remote/sshPrompts.js', content => patchSshPromptsJs(content, USE_TW)]
+            ['dist/remote/sshPrompts.js', content => patchSshPromptsJs(content, USE_TW)],
+            ['dist/deviceChooser.js', content => patchDeviceChooserJs(content, USE_TW)],
+            ['dist/webauthn.js', content => patchWebauthnJs(content, USE_TW)],
+            ['dist/webviewPopupSecurity.js', content => patchWebviewPopupSecurityJs(content, USE_TW)],
+            ['dist/provisionSplash.js', content => patchProvisionSplashJs(content, USE_TW)]
         ]);
 
         console.log(`[打包] 正在使用原生引擎生成并校验汉化候选包...`);
@@ -611,8 +619,10 @@ function install20(resourcesDir, noKill = false) {
                 console.warn(`[提示] 临时目录已保留: ${buildDir}`);
             }
         }
-        cleanElectronCache();
-        resignAppOnMac(resourcesDir);
+        if (!staging) {
+            cleanElectronCache();
+            resignAppOnMac(resourcesDir);
+        }
         console.log(`[√] Antigravity 2.0 汉化部署完成！`);
         return true;
     } catch (error) {
@@ -730,6 +740,7 @@ function main() {
     let huifu = false;
     let manualDir = "";
     let noKill = false;
+    let staging = false;
 
     const args = process.argv.slice(2);
     for (let i = 0; i < args.length; i++) {
@@ -740,6 +751,8 @@ function main() {
             i++;
         } else if (args[i] === '--no-kill') {
             noKill = true;
+        } else if (args[i] === '--staging') {
+            staging = true;
         } else if (args[i] === '--brand-title') {
             i++;
         }
@@ -792,7 +805,7 @@ function main() {
         }
     } else {
         console.log("====== 正在安装 Antigravity 中文汉化 ======");
-        success = install20(resourcesDir, noKill);
+        success = install20(resourcesDir, noKill, staging);
         if (success) {
             injectProxyIfNeeded(installDir);
         }

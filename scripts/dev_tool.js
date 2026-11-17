@@ -249,7 +249,8 @@ async function cmdDumpMcp(args = []) {
     if (fs.existsSync(dictPath)) {
         try {
             const dict = JSON.parse(fs.readFileSync(dictPath, 'utf8'));
-            const missing = plugins.filter(p => !dict[p.description]);
+            const dictNormSet = new Set(Object.keys(dict).map(k => normalizeUiText(k)));
+            const missing = plugins.filter(p => !dict[p.description] && !dictNormSet.has(normalizeUiText(p.description)));
             console.log('\n------------------ 词典汉化覆盖率检查 ------------------');
             if (missing.length === 0) {
                 console.log(`[√] 完美！当前全量 ${plugins.length} 个 MCP 描述均已全部收录在中文词典中！`);

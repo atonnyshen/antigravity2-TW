@@ -61,13 +61,8 @@ if [ -z "$NODE_BIN" ]; then
     exit 1
 fi
 
-# 依賴安裝
-if [ ! -f "$DIR/node_modules/@electron/asar/bin/asar.mjs" ]; then
-    echo "安裝鎖定依賴..."
-    npm ci --ignore-scripts --no-audit --no-fund
-fi
-
 LABEL="com.antigravity.autolocalize"
+SYSTEM_PLIST="/Library/LaunchDaemons/$LABEL.plist"
 ACTUAL_USER="${SUDO_USER:-$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || echo "$USER")}"
 CURRENT_UID="$(id -u)"
 
@@ -90,8 +85,8 @@ if [ "$MODE" = "daemon" ]; then
 elif [ "$MODE" = "user" ]; then
     IS_DAEMON=0
 else
-    # auto mode
-    if [ "$EUID" -eq 0 ]; then
+    # auto mode：若已存在系統級 LaunchDaemon，預設沿用並升級該服務，避免新舊雙服務同時覆寫 app.asar
+    if [ "$EUID" -eq 0 ] || [ -f "$SYSTEM_PLIST" ]; then
         IS_DAEMON=1
     elif sudo -n true 2>/dev/null; then
         IS_DAEMON=1
@@ -138,12 +133,11 @@ if [ "$IS_DAEMON" -eq 1 ]; then
     for file in auto_localize_watcher.js localization_engine.js package.json package-lock.json; do
         /usr/bin/install -o root -g wheel -m 644 "$DIR/$file" "$RUNTIME/$file"
     done
-    for folder in dicts dicts_tw node_modules src; do
-        /bin/cp -R "$DIR/$folder" "$RUNTIME/$folder"
+    for folder in dicts dicts_tw node_modules src scripts; do
+        if [ -d "$DIR/$folder" ]; then
+            /bin/cp -R "$DIR/$folder" "$RUNTIME/$folder"
+        fi
     done
-    if [ -d "$DIR/scripts" ]; then
-        /bin/cp -R "$DIR/scripts" "$RUNTIME/scripts"
-    fi
     /usr/sbin/chown -R root:wheel "$RUNTIME"
     /bin/chmod -R go-w "$RUNTIME"
     
@@ -194,6 +188,12 @@ PLIST_EOF
     echo "日誌路徑：$LOG_DIR/autolocalize.log"
 else
     echo "👤 安裝為使用者級 LaunchAgent 守護服務..."
+    if [ -f "$SYSTEM_PLIST" ]; then
+        echo "⚡ 偵測到舊版系統級 LaunchDaemon ($SYSTEM_PLIST)，正在停止並移除以避免雙服務衝突..."
+        sudo /bin/launchctl bootout "system/$LABEL" 2>/dev/null || true
+        sudo /bin/mv "$SYSTEM_PLIST" "$SYSTEM_PLIST.disabled-$(date +%Y%m%d%H%M%S)"
+    fi
+
     USER_HOME="$HOME"
     TARGET_DIR="$USER_HOME/Library/LaunchAgents"
     PLIST="$TARGET_DIR/$LABEL.plist"
@@ -210,12 +210,12 @@ else
     for file in auto_localize_watcher.js localization_engine.js package.json package-lock.json; do
         cp "$DIR/$file" "$RUNTIME/$file"
     done
-    for folder in dicts dicts_tw node_modules src; do
-        cp -R "$DIR/$folder" "$RUNTIME/$folder"
+    for folder in dicts dicts_tw node_modules src scripts; do
+        rm -rf "$RUNTIME/$folder"
+        if [ -d "$DIR/$folder" ]; then
+            cp -R "$DIR/$folder" "$RUNTIME/$folder"
+        fi
     done
-    if [ -d "$DIR/scripts" ]; then
-        cp -R "$DIR/scripts" "$RUNTIME/scripts"
-    fi
     
     PLIST_TMP="$(mktemp "$BASE/launchd.XXXXXX")"
     cat > "$PLIST_TMP" <<PLIST_EOF

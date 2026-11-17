@@ -1,5 +1,21 @@
 # 更新紀錄
 
+## 3.6.0 — 2026-11-18
+
+- 同步上游 Swarm Sidecar 修復（`upstream/main` `f4f2005`）：
+  - 在 `src/main_patches.js` 的 Sidecar 注入檢查中放行 `plugin://` 協定（支援 `plugin://swarm-auth/...` 等子框架），同步補齊 `tests/installer-regressions.cjs` 驗證案例。
+- 根治 macOS 背景守護雙服務互打與安裝腳本缺陷：
+  - 修復 `install_macos_autowatcher.sh` 未處理系統級 `LaunchDaemon`（`/Library/LaunchDaemons/com.antigravity.autolocalize.plist`）與使用者級 `LaunchAgent` 並存的問題：自動模式偵測到舊系統級服務時優先接管升級；指定 `--user` 時自動停用舊系統級服務，杜絕新舊服務每 30 秒互相覆寫 `app.asar` 導致介面版本跳動與舊版譯文殘留。
+  - 修復使用者模式 `cp -R` 在目標資料夾已存在時產生巢狀目錄的問題。
+  - 移除一鍵安裝腳本與守護安裝腳本中對執行期無關的強制 `npm ci` 下載步驟，實現真正零依賴、可離線安裝；同步將 `@electron/asar` 移至 `devDependencies` 並重新校準 `package-lock.json` 與移除跨檔重複鍵值 `"Global Permissions"`，修復 GitHub Actions CI 驗證失敗。
+  - `localization_engine.js` 正式支援 `--staging` 參數，跳過暫存階段重複清快取與對暫存目錄誤報重簽名警告；`cleanElectronCache()` 補回 `'Cache'` 目錄清理，更完整消除更新後快取殘留。
+- 補齊 v2.32.1 遺漏翻譯與原生 Electron 彈窗：
+  - 補強 `dicts/` 與 `dicts_tw/` 靜態缺失詞條（`Authentication required`、`SSH host`、`Reading terminal:`、`Read terminal:` 與無內部連結版 Best of N 說明），並統一 `src/main_patches.js` 繁中術語為「代理」。
+  - `src/preload_runtime.js` 新增 40+ 項即時介面動態模板規則（語音選擇標題、麥克風權限提示、瀏覽器下載／導覽封鎖提醒、外掛與技能捷徑、MCP 設定提示、資料夾建立／錯誤彈窗、自動化任務提示、遠端視窗與專案儲存錯誤訊息等）。
+  - 主行程原生彈窗新增覆蓋 `dist/deviceChooser.js`、`dist/webauthn.js`、`dist/webviewPopupSecurity.js`、`dist/provisionSplash.js`，並修復 `dist/remote/remoteManager.js` 多行字串拼接導致的漏譯與補齊 `dist/main.js` Dock 選單、`dist/ipcHandlers.js` 複數工作區／下載資料夾對話框、`dist/remote/sshPrompts.js` HTML 提示。
+- 測試套件擴充：
+  - 自動化單元測試增至 31 項，`node scripts/compare_dicts.js` 與全部回歸測試 100% 通過。
+
 ## 3.5.0 — 2026-11-17
 
 - 主行程（Main Process）原生彈窗繁中化：

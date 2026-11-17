@@ -92,7 +92,7 @@ function patchUtilsJs(utilsContent, signatureStart, signatureEnd) {
             const mainFrame = hubContents.mainFrame;
             if (!mainFrame || frame === mainFrame || frame.parent !== mainFrame) return;
             const frameUrl = String(frame.url || '');
-            if (!/^https?:\\/\\//i.test(frameUrl)) return;
+            if (!/^(?:https?|plugin):\\/\\//i.test(frameUrl)) return;
             const frameOrigin = String(frame.origin || '');
             if (!frameOrigin || frameOrigin === 'null') return;
             const script = getSidecarLocalizationScript();
@@ -460,7 +460,7 @@ function patchMainJs(mainContent, useTw) {
         cancelId: 0,
         title: '確認結束',
         message: '您確定要結束 Antigravity 嗎？',
-        detail: '目前可能仍有代理人或背景任務正在執行。',` : `buttons: ['取消', '退出'],
+        detail: '目前可能仍有代理或背景任務正在執行。',` : `buttons: ['取消', '退出'],
         defaultId: 1,
         cancelId: 0,
         title: '确认退出',
@@ -472,11 +472,13 @@ function patchMainJs(mainContent, useTw) {
     } else {
         out = out.replace(/title:\s*'Confirm Quit'/g, useTw ? "title: '確認結束'" : "title: '确认退出'")
                  .replace(/message:\s*'Are you sure you want to quit\?'/g, useTw ? "message: '您確定要結束 Antigravity 嗎？'" : "message: '您确定要退出 Antigravity 吗？'")
-                 .replace(/detail:\s*'There may be agents or background tasks running\.'/g, useTw ? "detail: '目前可能仍有代理人或背景任務正在執行。'" : "detail: '目前可能仍有智能体或后台任务正在运行。'")
+                 .replace(/detail:\s*'There may be agents or background tasks running\.'/g, useTw ? "detail: '目前可能仍有代理或背景任務正在執行。'" : "detail: '目前可能仍有智能体或后台任务正在运行。'")
                  .replace(/buttons:\s*\['Cancel',\s*'Quit'\]/g, useTw ? "buttons: ['取消', '結束']" : "buttons: ['取消', '退出']");
     }
 
-    out = out.replace(/dialog\.showErrorBox\('Binary not found'/g, useTw ? "dialog.showErrorBox('找不到執行檔'" : "dialog.showErrorBox('未找到可执行文件'")
+    out = out.replace(/(dockMenu\s*=\s*electron_1\.Menu\.buildFromTemplate\(\[\s*\{\s*label:\s*)'New Window'/g,
+                      useTw ? "$1'開新視窗'" : "$1'新建窗口'")
+             .replace(/dialog\.showErrorBox\('Binary not found'/g, useTw ? "dialog.showErrorBox('找不到執行檔'" : "dialog.showErrorBox('未找到可执行文件'")
              .replace(/dialog\.showErrorBox\('WSL setup failed'/g, useTw ? "dialog.showErrorBox('WSL 設定失敗'" : "dialog.showErrorBox('WSL 设置失败'")
              .replace(/dialog\.showErrorBox\('Startup failed'/g, useTw ? "dialog.showErrorBox('啟動失敗'" : "dialog.showErrorBox('启动失败'")
              .replace(/title:\s*'WSL distro not found'/g, useTw ? "title: '找不到 WSL 發行版'" : "title: '未找到 WSL 发行版'")
@@ -491,7 +493,9 @@ function patchIpcHandlersJs(ipcContent, useTw) {
     let out = ipcContent;
     out = out.replace(/dialog\.showErrorBox\('Cannot open folder'/g, useTw ? "dialog.showErrorBox('無法開啟資料夾'" : "dialog.showErrorBox('无法打开文件夹'")
              .replace(/message:\s*'Folder is on the Windows filesystem'/g, useTw ? "message: '資料夾位於 Windows 檔案系統'" : "message: '文件夹位于 Windows 文件系统'")
-             .replace(/title:\s*'Open workspace'/g, useTw ? "title: '開啟工作區'" : "title: '打开工作区'");
+             .replace(/title:\s*'Open workspace'/g, useTw ? "title: '開啟工作區'" : "title: '打开工作区'")
+             .replace(/title:\s*'Open workspaces'/g, useTw ? "title: '開啟工作區'" : "title: '打开工作区'")
+             .replace(/title:\s*'Select Download Folder'/g, useTw ? "title: '選取下載資料夾'" : "title: '选择下载文件夹'");
     console.log(`[修改] 原生資料夾對話框漢化注入成功！`);
     return out;
 }
@@ -499,13 +503,22 @@ function patchIpcHandlersJs(ipcContent, useTw) {
 function patchRemoteManagerJs(rmContent, useTw) {
     console.log(`[修改] 正在向 remoteManager.js 注入遠端伺服器對話框漢化...`);
     let out = rmContent;
-    out = out.replace(/buttons:\s*\['Stop Server',\s*'Cancel'\]/g, useTw ? "buttons: ['停止伺服器', '取消']" : "buttons: ['停止服务器', '取消']")
+    out = out.replace(/title:\s*'Choose an SSH config file'/g, useTw ? "title: '選擇 SSH 設定檔'" : "title: '选择 SSH 配置文件'")
+             .replace(/title:\s*'SSH connection failed'/g, useTw ? "title: 'SSH 連線失敗'" : "title: 'SSH 连接失败'")
+             .replace(/buttons:\s*\['Stop Server',\s*'Cancel'\]/g, useTw ? "buttons: ['停止伺服器', '取消']" : "buttons: ['停止服务器', '取消']")
              .replace(/title:\s*'Stop SSH server'/g, useTw ? "title: '停止 SSH 伺服器'" : "title: '停止 SSH 服务器'")
-             .replace(/Stop the Antigravity server on \${entry\.label}\?/g, useTw ? "停止 ${entry.label} 上的 Antigravity 伺服器？" : "停止 ${entry.label} 上的 Antigravity 服务器？")
-             .replace(/Agents running on this host will stop and its window will close\. The server starts again the next time you connect\./g, useTw ? "此主機上執行的代理人將停止，其視窗也將關閉。下次連線時伺服器將重新啟動。" : "此主机上运行的智能体将停止，其窗口也将关闭。下次连接时服务器将重新启动。")
+             .replace(/Stop the Antigravity server on \$\{entry\.label\}\?/g, useTw ? "停止 ${entry.label} 上的 Antigravity 伺服器？" : "停止 ${entry.label} 上的 Antigravity 服务器？")
+             .replace(/'Agents running on this host will stop and its window will close\.\s*'\s*\+\s*'The server starts again the next time you connect\.'/g,
+                      useTw ? "'此主機上執行的代理將停止，其視窗也將關閉。下次連線時伺服器將重新啟動。'" : "'此主机上运行的智能体将停止，其窗口也将关闭。下次连接时服务器将重新启动。'")
+             .replace(/Agents running on this host will stop and its window will close\. The server starts again the next time you connect\./g,
+                      useTw ? "此主機上執行的代理將停止，其視窗也將關閉。下次連線時伺服器將重新啟動。" : "此主机上运行的智能体将停止，其窗口也将关闭。下次连接时服务器将重新启动。")
+             .replace(/message:\s*`Not connected to \$\{label\}`/g, useTw ? "message: `尚未連線至 ${label}`" : "message: `未连接到 ${label}`")
+             .replace(/detail:\s*'Reconnect first, then stop its server\.'/g, useTw ? "detail: '請先重新連線，再停止其伺服器。'" : "detail: '请先重新连接，再停止其服务器。'")
              .replace(/buttons:\s*\['Sign In',\s*'Cancel'\]/g, useTw ? "buttons: ['登入', '取消']" : "buttons: ['登录', '取消']")
              .replace(/title:\s*'Sign in'/g, useTw ? "title: '登入'" : "title: '登录'")
-             .replace(/Sign in to your organization for \${entry\.label}\?/g, useTw ? "登入 ${entry.label} 的機構帳戶？" : "登录 ${entry.label} 的组织账户？");
+             .replace(/Sign in to your organization for \$\{entry\.label\}\?/g, useTw ? "登入 ${entry.label} 的機構帳戶？" : "登录 ${entry.label} 的组织账户？")
+             .replace(/'Continue only if you just chose to sign in with your organization '\s*\+\s*`in this window\. \$\{entry\.label\} will get access to your `\s*\+\s*"organization's Google Cloud account\.\\n"/g,
+                      useTw ? "`僅在您剛才於此視窗中選擇透過機構登入時才繼續。${entry.label} 將取得您機構的 Google Cloud 帳戶存取權限。\\n`" : "`仅在您刚才于此窗口中选择通过组织登录时才继续。${entry.label} 将获取您组织的 Google Cloud 账户访问权限。\\n`");
     console.log(`[修改] 遠端伺服器對話框漢化注入成功！`);
     return out;
 }
@@ -513,9 +526,54 @@ function patchRemoteManagerJs(rmContent, useTw) {
 function patchSshPromptsJs(spContent, useTw) {
     console.log(`[修改] 正在向 sshPrompts.js 注入 SSH 驗證提示漢化...`);
     let out = spContent;
-    out = out.replace(/'Touch your security key'/g, useTw ? "'請輕觸您的安全性金鑰'" : "'请轻触您的安全密钥'")
+    out = out.replace(/Asked again: your last answer may not have worked\./g, useTw ? '再次詢問：您上次的輸入可能未通過驗證。' : '再次询问：您上次的输入可能未通过验证。')
+             .replace(/That's too long\./g, useTw ? '輸入內容過長。' : '输入内容过长。')
+             .replace(/<button id="cancel">Cancel<\/button><button id="continue">Continue<\/button>/g, useTw ? '<button id="cancel">取消</button><button id="continue">繼續</button>' : '<button id="cancel">取消</button><button id="continue">继续</button>')
+             .replace(/`\$\{label\} asks:`/g, useTw ? '`${label} 請求確認：`' : '`${label} 请求确认：`')
+             .replace(/'Touch your security key'/g, useTw ? "'請輕觸您的安全性金鑰'" : "'请轻触您的安全密钥'")
              .replace(/buttons:\s*confirm\s*\?\s*\['Yes',\s*'No'\]\s*:\s*\['Cancel'\]/g, useTw ? "buttons: confirm ? ['是', '否'] : ['取消']" : "buttons: confirm ? ['是', '否'] : ['取消']");
     console.log(`[修改] SSH 驗證提示漢化注入成功！`);
+    return out;
+}
+
+function patchDeviceChooserJs(dcContent, useTw) {
+    console.log(`[修改] 正在向 deviceChooser.js 注入裝置選擇對話框漢化...`);
+    const out = dcContent
+        .replace(/title:\s*'Connect a device'/g, useTw ? "title: '連線至裝置'" : "title: '连接到设备'")
+        .replace(/message:\s*`\$\{origin\} wants to connect to a \$\{KIND_NOUNS\[kind\]\}`/g, useTw ? "message: `${origin} 想要連線至 ${KIND_NOUNS[kind]}`" : "message: `${origin} 想要连接到 ${KIND_NOUNS[kind]}`")
+        .replace(/'Select a device:'/g, useTw ? "'請選擇裝置：'" : "'请选择设备：'")
+        .replace(/'No compatible devices found\.'/g, useTw ? "'找不到相容的裝置。'" : "'未找到兼容设备。'")
+        .replace(/buttons:\s*\[\.\.\.snapshot\.map\(\(\{\s*label\s*\}\)\s*=>\s*label\),\s*'Cancel'\]/g, useTw ? "buttons: [...snapshot.map(({ label }) => label), '取消']" : "buttons: [...snapshot.map(({ label }) => label), '取消']");
+    console.log(`[修改] 裝置選擇對話框漢化注入成功！`);
+    return out;
+}
+
+function patchWebauthnJs(waContent, useTw) {
+    console.log(`[修改] 正在向 webauthn.js 注入通行金鑰對話框漢化...`);
+    const out = waContent
+        .replace(/title:\s*'Choose a Passkey'/g, useTw ? "title: '選擇通行金鑰'" : "title: '选择通行密钥'")
+        .replace(/message:\s*`Sign in to \$\{rpLabel\}`/g, useTw ? "message: `登入 ${rpLabel}`" : "message: `登录 ${rpLabel}`")
+        .replace(/detail:\s*'Select a passkey account to continue:'/g, useTw ? "detail: '請選擇通行金鑰帳戶以繼續：'" : "detail: '请选择通行密钥账户以继续：'")
+        .replace(/buttons:\s*\[\.\.\.accountLabels,\s*'Cancel'\]/g, useTw ? "buttons: [...accountLabels, '取消']" : "buttons: [...accountLabels, '取消']");
+    console.log(`[修改] 通行金鑰對話框漢化注入成功！`);
+    return out;
+}
+
+function patchWebviewPopupSecurityJs(wpsContent, useTw) {
+    console.log(`[修改] 正在向 webviewPopupSecurity.js 注入連線資訊對話框漢化...`);
+    const out = wpsContent
+        .replace(/label:\s*'Connection info…'/g, useTw ? "label: '連線資訊…'" : "label: '连接信息…'")
+        .replace(/title:\s*'Connection info'/g, useTw ? "title: '連線資訊'" : "title: '连接信息'")
+        .replace(/buttons:\s*\['OK'\]/g, useTw ? "buttons: ['確定']" : "buttons: ['确定']");
+    console.log(`[修改] 連線資訊對話框漢化注入成功！`);
+    return out;
+}
+
+function patchProvisionSplashJs(psContent, useTw) {
+    console.log(`[修改] 正在向 provisionSplash.js 注入 WSL 啟動畫面漢化...`);
+    const out = psContent
+        .replace(/<div>Setting up WSL: \$\{escapeHtml\(distro\)\}<\/div>/g, useTw ? '<div>正在設定 WSL：${escapeHtml(distro)}</div>' : '<div>正在配置 WSL：${escapeHtml(distro)}</div>');
+    console.log(`[修改] WSL 啟動畫面漢化注入成功！`);
     return out;
 }
 
@@ -529,5 +587,9 @@ module.exports = {
     patchMainJs,
     patchIpcHandlersJs,
     patchRemoteManagerJs,
-    patchSshPromptsJs
+    patchSshPromptsJs,
+    patchDeviceChooserJs,
+    patchWebauthnJs,
+    patchWebviewPopupSecurityJs,
+    patchProvisionSplashJs
 };

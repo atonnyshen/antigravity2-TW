@@ -150,7 +150,11 @@ function validateAsarCandidate(sourcePath, candidatePath, signatureStart, custom
         'dist/main.js',
         'dist/ipcHandlers.js',
         'dist/remote/remoteManager.js',
-        'dist/remote/sshPrompts.js'
+        'dist/remote/sshPrompts.js',
+        'dist/deviceChooser.js',
+        'dist/webauthn.js',
+        'dist/webviewPopupSecurity.js',
+        'dist/provisionSplash.js'
     ]);
     if (before.files.size !== after.files.size) throw new Error('ASAR file list changed');
     for (const [name, original] of before.files) {

@@ -2,5 +2,5 @@
 set -e
 cd "$(dirname "$0")"
 bash install_macos_autowatcher.sh
-echo "服務安裝完成；可查看 /Library/Logs/Antigravity2TW/autolocalize.log。"
+echo "背景自動更新守護服務安裝完成。"
 read -t 5 -n 1 -s || true

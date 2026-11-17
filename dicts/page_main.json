@@ -1550,7 +1550,6 @@
   "Incomplete / Gave up": "半途而废 / 未完成",
   "Indexed CEL helper functions": "已索引的 CEL 辅助函数",
   "Inherit Editor": "继承编辑器设置",
-  "Global Permissions": "全局权限",
   "Inherit Global": "继承全局",
   "Inherits from ": "继承自 ",
   "Inherits your General settings when working in these conversations.": "在此类会话中工作时继承您的通用设置。",
@@ -3719,6 +3718,12 @@
   "• Always Proceed - Agent never asks for confirmation before executing terminal commands (except those in the Deny list). This provides the Agent with the maximum ability to operate over long periods without intervention, but also has the highest risk of an Agent executing an unsafe terminal command.\n\t\t\t\t• Request Review - Agent always asks for confirmation before executing terminal commands (except those in the Allow list).\n\n\t\t\t\tNote: A change to this setting will only apply to new messages sent to Agent. In-progress responses will use the previous setting value.\n\t\t\t\t": "• 始终继续 - 执行终端命令前从不请求确认（黑名单除外）。这赋予了智能体最高效的免干预持续运行能力，但执行高危命令的风险也最高。\n• 请求审查 - 执行终端命令之前总是请求确认（白名单除外）。\n\n注意：对此项设置的更改，仅对之后新发送给智能体的消息生效。正在进行中的响应将沿用此前的设置规则。",
   "✓ Target set": "✓ 已设置目标",
   "✓ macOS permissions granted": "✓ macOS 权限已授予",
+  "Authentication required": "需要身份验证",
+  "SSH host": "SSH 主机",
+  "Reading terminal:": "正在读取终端：",
+  "Read terminal:": "已读取终端：",
+  "Give each Best of N fork a full clone of your workspace, including its local commit history. Choosing a winner then gives your workspace that fork's state, so the commits it made are kept. Forks take longer to create than the default CitC clone.": "为每个 Best of N 分支提供工作区的完整克隆（包含本地提交历史）。选出最佳方案后，工作区将直接采用该分支状态并保留其提交记录。创建分支耗时更长。",
+  "Give each Best of N fork its own clone of your Git repository instead of a copy-on-write overlay. Each fork is then a real repository, so commits it makes are kept when you choose it as the winner. Forks take longer to create, and the wait grows with the size of your repository.": "为每个 Best of N 分支提供独立的 Git 仓库克隆，而非写时复制 (Copy-on-Write) 叠加层。这样每个分支都是真实的独立仓库，当您选定其作为胜出方案时，它所做的提交会被完整保留。创建分支耗时更长，等待时间随仓库体积增加。",
   "对话 Log": "对话记录",
   "项目 options": "项目选项"
 }

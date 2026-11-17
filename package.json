@@ -1,6 +1,6 @@
 {
   "name": "antigravity2-tw",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "private": true,
   "description": "Google Antigravity 台灣繁體中文中文化與背景更新守護",
   "scripts": {
@@ -9,10 +9,8 @@
   "engines": {
     "node": ">=22.12.0"
   },
-  "dependencies": {
-    "@electron/asar": "4.3.0"
-  },
   "devDependencies": {
+    "@electron/asar": "4.3.0",
     "jsdom": "30.1.3"
   }
 }

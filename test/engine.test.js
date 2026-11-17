@@ -161,52 +161,129 @@ test('NUX onboarding and typographical quote variations are properly localized',
     assert.equal(node3.nodeValue, "協助改善 Antigravity。允許 Google 收集並使用您的互動資料，但須遵守");
 });
 
-test('main process and native dialog patches localize quit, IPC and SSH dialogs', () => {
+test('main process and native dialog patches localize quit, IPC, SSH, device chooser, webauthn, popup security and splash', () => {
     const {
         patchMainJs,
         patchIpcHandlersJs,
         patchRemoteManagerJs,
-        patchSshPromptsJs
+        patchSshPromptsJs,
+        patchDeviceChooserJs,
+        patchWebauthnJs,
+        patchWebviewPopupSecurityJs,
+        patchProvisionSplashJs
     } = require('../src/main_patches');
 
-    const fakeMain = `const options = {
+    const fakeMain = `const dockMenu = electron_1.Menu.buildFromTemplate([{ label: 'New Window', click: () => {} }]);
+    const options = {
         buttons: ['Cancel', 'Quit'],
+        defaultId: 1,
+        cancelId: 0,
         title: 'Confirm Quit',
         message: 'Are you sure you want to quit?',
-        detail: 'There may be agents or background tasks running.'
+        detail: 'There may be agents or background tasks running.',
     };
     dialog.showErrorBox('Binary not found', msg);
     dialog.showErrorBox('Startup failed', msg);`;
     const patchedMain = patchMainJs(fakeMain, true);
+    assert.ok(patchedMain.includes("label: '開新視窗'"));
     assert.ok(patchedMain.includes("title: '確認結束'"));
     assert.ok(patchedMain.includes("message: '您確定要結束 Antigravity 嗎？'"));
+    assert.ok(patchedMain.includes("detail: '目前可能仍有代理或背景任務正在執行。'"));
     assert.ok(patchedMain.includes("buttons: ['取消', '結束']"));
     assert.ok(patchedMain.includes("dialog.showErrorBox('找不到執行檔'"));
+    assert.equal(patchMainJs(patchedMain, true), patchedMain);
 
     const fakeIpc = `dialog.showErrorBox('Cannot open folder', t.error);
     void dialog.showMessageBox({ message: 'Folder is on the Windows filesystem' });
-    const r = await dialog.showOpenDialog({ title: 'Open workspace' });`;
+    const r = await dialog.showOpenDialog({ title: 'Open workspace' });
+    const r2 = await dialog.showOpenDialog({ title: 'Open workspaces' });
+    const r3 = await dialog.showOpenDialog({ title: 'Select Download Folder' });`;
     const patchedIpc = patchIpcHandlersJs(fakeIpc, true);
     assert.ok(patchedIpc.includes("dialog.showErrorBox('無法開啟資料夾'"));
     assert.ok(patchedIpc.includes("message: '資料夾位於 Windows 檔案系統'"));
     assert.ok(patchedIpc.includes("title: '開啟工作區'"));
+    assert.ok(patchedIpc.includes("title: '選取下載資料夾'"));
 
-    const fakeRm = `dialog.showMessageBox(win, {
+    const fakeRm = `dialog.showOpenDialog(parent, { title: 'Choose an SSH config file' });
+    dialog.showMessageBox(win, {
         buttons: ['Stop Server', 'Cancel'],
         title: 'Stop SSH server',
-        message: \`Stop the Antigravity server on \${entry.label}?\`
-    });`;
+        message: \`Stop the Antigravity server on \${entry.label}?\`,
+        detail: 'Agents running on this host will stop and its window will close. ' +
+            'The server starts again the next time you connect.',
+    });
+    this.showSheet(win, { title: 'Stop SSH server', message: \`Not connected to \${label}\`, detail: 'Reconnect first, then stop its server.' });`;
     const patchedRm = patchRemoteManagerJs(fakeRm, true);
+    assert.ok(patchedRm.includes("title: '選擇 SSH 設定檔'"));
     assert.ok(patchedRm.includes("title: '停止 SSH 伺服器'"));
     assert.ok(patchedRm.includes("buttons: ['停止伺服器', '取消']"));
+    assert.ok(patchedRm.includes('此主機上執行的代理將停止，其視窗也將關閉。下次連線時伺服器將重新啟動。'));
+    assert.ok(patchedRm.includes("message: `尚未連線至 ${label}`"));
 
-    const fakeSp = `dialog.showMessageBox(parent, {
-        message: 'Touch your security key',
+    const fakeSp = `<div id="retry" hidden>Asked again: your last answer may not have worked.</div>
+    <div id="long" hidden>That's too long.</div>
+    <div class="buttons"><button id="cancel">Cancel</button><button id="continue">Continue</button></div>
+    dialog.showMessageBox(parent, {
+        message: confirm ? \`\${label} asks:\` : 'Touch your security key',
         buttons: confirm ? ['Yes', 'No'] : ['Cancel']
     });`;
     const patchedSp = patchSshPromptsJs(fakeSp, true);
-    assert.ok(patchedSp.includes("message: '請輕觸您的安全性金鑰'"));
+    assert.ok(patchedSp.includes('再次詢問：您上次的輸入可能未通過驗證。'));
+    assert.ok(patchedSp.includes('<button id="cancel">取消</button><button id="continue">繼續</button>'));
+    assert.ok(patchedSp.includes("`${label} 請求確認：`"));
+    assert.ok(patchedSp.includes("Touch your security key") === false);
     assert.ok(patchedSp.includes("buttons: confirm ? ['是', '否'] : ['取消']"));
+
+    const fakeDc = `showMessageBox(win, { title: 'Connect a device', message: \`\${origin} wants to connect to a \${KIND_NOUNS[kind]}\`, detail: cancelId ? 'Select a device:' : 'No compatible devices found.', buttons: [...snapshot.map(({ label }) => label), 'Cancel'] });`;
+    const patchedDc = patchDeviceChooserJs(fakeDc, true);
+    assert.ok(patchedDc.includes("title: '連線至裝置'"));
+    assert.ok(patchedDc.includes("'請選擇裝置：'"));
+    assert.ok(patchedDc.includes("'取消']"));
+
+    const fakeWa = `showMessageBox(win, { title: 'Choose a Passkey', message: \`Sign in to \${rpLabel}\`, detail: 'Select a passkey account to continue:', buttons: [...accountLabels, 'Cancel'] });`;
+    const patchedWa = patchWebauthnJs(fakeWa, true);
+    assert.ok(patchedWa.includes("title: '選擇通行金鑰'"));
+    assert.ok(patchedWa.includes("detail: '請選擇通行金鑰帳戶以繼續：'"));
+
+    const fakeWps = `{ label: 'Connection info…', click: () => dialog.showMessageBox(window, { title: 'Connection info', buttons: ['OK'] }) }`;
+    const patchedWps = patchWebviewPopupSecurityJs(fakeWps, true);
+    assert.ok(patchedWps.includes("label: '連線資訊…'"));
+    assert.ok(patchedWps.includes("title: '連線資訊'"));
+    assert.ok(patchedWps.includes("buttons: ['確定']"));
+
+    const fakePs = `<div>Setting up WSL: \${escapeHtml(distro)}</div>`;
+    const patchedPs = patchProvisionSplashJs(fakePs, true);
+    assert.ok(patchedPs.includes('<div>正在設定 WSL：${escapeHtml(distro)}</div>'));
+});
+
+test('v2.32.1 template rules and newly added dict keys localize UI strings accurately', () => {
+    const js = generateJs();
+    const prefix = js.slice(0, js.indexOf('    const observer = new MutationObserver'));
+    const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    const cases = [
+        ["Choose Antigravity's Voice", '選擇 Antigravity 的聲音'],
+        ["Choose Jetski's Voice", '選擇 Jetski 的聲音'],
+        ['Microphone blocked. Allow in System Settings.', '麥克風已封鎖，請在 System Settings 中允許存取。'],
+        ['Agent needs permission to act on example.com', '代理需要權限才能對 example.com 執行操作'],
+        ['Blocked navigation to "https://example.com"', '已封鎖導覽至「https://example.com」'],
+        ['Created automation "daily-sync".', '已建立自動化任務「daily-sync」。'],
+        ['Stop 2 agents?', '停止 2 個代理？'],
+        ['3 files changed', '3 個檔案已變更'],
+        ['System default (MacBook Pro Mic)', '系統預設 (MacBook Pro Mic)'],
+        ['Unfold lines 10-25', '展開第 10-25 行'],
+        ['Authentication required', '需要身分驗證'],
+        ['SSH host', 'SSH 主機'],
+        ['Reading terminal:', '正在讀取終端機：'],
+        ['Global Permissions', '全域權限']
+    ];
+    for (const [input, expected] of cases) {
+        const node = { nodeType: 3, nodeValue: input };
+        translateNode(node);
+        assert.equal(node.nodeValue, expected, input);
+    }
 });
 
 test('user greeting handles dynamic user name and fragmented DOM nodes', () => {

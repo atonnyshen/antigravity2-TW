@@ -1,4 +1,4 @@
-# Antigravity Windows 背景自動更新守護排程 安裝腳本
+﻿# Antigravity Windows 背景自動更新守護排程 安裝腳本
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -39,11 +39,6 @@ if (Test-Path "./auto_localize_watcher.js") {
 }
 
 $watcherScript = Join-Path $workDir "auto_localize_watcher.js"
-Push-Location $workDir
-try {
-    npm ci --ignore-scripts --no-audit --no-fund
-    if ($LASTEXITCODE -ne 0) { throw "安裝鎖定依賴失敗" }
-} finally { Pop-Location }
 $taskName = "AntigravityAutoLocalize"
 
 # 3. 建立 Windows 工作排程（每 5 分鐘執行一次）
