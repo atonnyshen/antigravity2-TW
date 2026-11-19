@@ -65,6 +65,20 @@ jobs:
           set -euo pipefail
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid tag"; exit 1; }
           [[ "$ENGINE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid engine version"; exit 1; }
+          # GitHub-generated Source code (zip) is derived from this tag.
+          # Require exactly the source commit tested by this workflow, or
+          # a safe translation asset could be paired with old executable code.
+          git fetch --no-tags origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          tag_sha="$(git rev-parse "${TAG}^{commit}")"
+          [[ "$tag_sha" == "$GITHUB_SHA" ]] || {
+            echo "Release tag does not point to the tested source commit"
+            exit 1
+          }
+          local_engine="$(node -p "require('./package.json').version")"
+          [[ "$local_engine" == "$ENGINE_VERSION" ]] || {
+            echo "Engine version input differs from the tested package.json"
+            exit 1
+          }
           asset="antigravity2-TW-translations-${TAG}.zip"
           target="$RUNNER_TEMP/ag2tw-release-preflight"
           mkdir -p "$target"

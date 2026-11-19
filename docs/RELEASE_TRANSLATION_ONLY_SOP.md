@@ -15,7 +15,7 @@
 
 1. 確認最新程式版本、字典、相容性範圍和完整回歸測試。
 2. 使用 `node scripts/build_translation_pack.js --version X.Y.Z --min-engine X.Y.Z --max-engine X.Y.Z --output dist/antigravity2-TW-translations-vX.Y.Z.zip` 產生純翻譯資料包。請根據**實測過的**引擎版本指定 min/max，勿自動假定所有新版引擎相容。
-3. 確認對應的 Git 標籤包含可手動安裝的完整原始碼，並先進行隔離解壓與最小手動安裝測試。
+3. 確認對應的 Git 標籤包含可手動安裝的完整原始碼，並先進行隔離解壓與最小手動安裝測試。**Release 標籤必須指向本次 Actions 回歸測試實際檢查的相同 commit**，否則可能出現「純翻譯資產安全，但 GitHub Source code (zip) 仍是舊版程式」的漏洞。翻譯資料版號可以高於引擎版號，但 Actions 的 `engine_version` 必須與受測來源的 `package.json.version` 完全一致。
 4. 使用 `gh release create vX.Y.Z --draft --title ... --notes-file ... dist/antigravity2-TW-translations-vX.Y.Z.zip` 建立未公開草稿。正式版號與內容須先獲人工批准。
 5. **發布前閘門**：先把新版流程合併到 GitHub 預設分支，再從 Actions 手動執行 `Draft release preflight (never publishes)`，指定 `tag=vX.Y.Z`、`engine_version=X.Y.Z`。確認兩個工作階段全數通過，才允許進入人工發布程序。此工作流程**只讀取與下載檢查，不會發布或修改 Release**。由於 GitHub 的草稿只對具有 push 權限的主體可見，檢查草稿的工作階段必須具備 `contents: write` API 權限，但其腳本沒有任何寫入 Release 的命令。
 
@@ -29,7 +29,7 @@
        --engine-version X.Y.Z
    ```
 
-   檢查器拒絕：非 draft、版本錯誤、非唯一純翻譯 ZIP、SHA-256 digest 缺失、未上傳完成、空檔、GitHub 與本機 ZIP 雜湊不符、ZIP 混入程式碼、字典格式錯誤、引擎版本不相容。它核對的是 GitHub API 的**實際 Release 資產清單**與**本機實際 ZIP 內容**，不是單憑檔名驗收。`--engine-version` 必須指定已測試的目標引擎版本；不同引擎若需支援，應分別測試。
+   檢查器拒絕：非 draft、版本錯誤、非唯一純翻譯 ZIP、SHA-256 digest 缺失、未上傳完成、空檔、GitHub 與本機 ZIP 雜湊不符、ZIP 混入程式碼、字典格式錯誤、引擎版本不相容。它核對的是 GitHub API 的**實際 Release 資產清單**與**本機實際 ZIP 內容**，不是單憑檔名驗收。Actions 另核對 Release 標籤 SHA 等於受測的 `GITHUB_SHA`。**本機等價指令未代替這一步；若只用本機指令，須先自行用 `git rev-parse 'vX.Y.Z^{commit}'` 與受測 commit 對帳。** `--engine-version` 必須指定已測試的目標引擎版本；不同引擎若需支援，應分別測試。
 6. 上一步已核對 GitHub API `assets[].digest` 與實際 ZIP 的 SHA-256，仍須人工核對 Source code (zip) 的安裝方式及 Release Notes。**Actions 工作流程已加入候選原始碼，待合併到預設分支後才能手動啟動。通過紀錄是發布前的證據，但 Repository 管理者仍可從 GitHub 網站繞過這道流程直接發布，不能宣稱平台已設定無法繞過的政策閘門。**
 7. 經人工核准後才以 `gh release edit vX.Y.Z --draft=false` 發布，並立即唯讀重新核對發布後的資產清單。不得因為檢查器通過，就省略人工發布核准。
 

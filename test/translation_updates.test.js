@@ -320,6 +320,81 @@ test('successful child exit without new deployed translation is treated as failu
         execReapplyFn: () => { reapplyCalls++; },
         verifyReapplyFn: () => false
     }), /app.asar 未載入新版翻譯/);
-    assert.equal(reapplyCalls, 1);
+    assert.equal(reapplyCalls, 2, 'failed postcondition retries previous translation only after pointer rollback');
     assert.equal(JSON.parse(fs.readFileSync(stateFile, 'utf8')).version, '3.7.4');
+});
+
+test('independent mismatch reproduction: a clean child exit is recovered to old ASAR and pointer', async t => {
+    const root = fixture(t);
+    const stateDir = path.join(root, '.watcher-state');
+    fs.mkdirSync(stateDir);
+    const stateFile = path.join(stateDir, 'active_translation.json');
+    const asarFile = path.join(root, 'isolated-app.asar');
+    fs.writeFileSync(stateFile, JSON.stringify({ version: '3.7.4' }));
+    fs.writeFileSync(asarFile, 'translationVersion 3.7.4');
+    const previousEnv = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
+    t.after(() => {
+        if (previousEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = previousEnv;
+    });
+    let reapplications = 0;
+    await assert.rejects(watcher.refreshTranslationsAndReapply({
+        targetDir: root, stateDir, currentVersion: '3.7.1',
+        updater: {
+            readActiveTranslation: () => ({ version: '3.7.4' }),
+            checkUpdate: async () => ({ hasUpdate: true, tag: 'v3.7.5', release: { tag: 'v3.7.5' } }),
+            installTranslationUpdate: async () => {
+                fs.writeFileSync(stateFile, JSON.stringify({ version: '3.7.5' }));
+                return { updated: true, newVersion: '3.7.5' };
+            }
+        },
+        execReapplyFn: () => {
+            reapplications++;
+            const pointer = JSON.parse(fs.readFileSync(stateFile, 'utf8')).version;
+            fs.writeFileSync(asarFile, 'translationVersion ' + (reapplications === 1 ? '3.7.99' : pointer));
+        },
+        verifyReapplyFn: version => fs.readFileSync(asarFile, 'utf8') === 'translationVersion ' + version
+    }), /app.asar 未載入新版翻譯/);
+    assert.equal(reapplications, 2);
+    assert.equal(JSON.parse(fs.readFileSync(stateFile, 'utf8')).version, '3.7.4');
+    assert.equal(fs.readFileSync(asarFile, 'utf8'), 'translationVersion 3.7.4');
+});
+
+test('failed secondary recovery never falsely claims successful translation update', async t => {
+    const root = fixture(t);
+    const stateDir = path.join(root, '.watcher-state');
+    fs.mkdirSync(stateDir);
+    const stateFile = path.join(stateDir, 'active_translation.json');
+    const asarFile = path.join(root, 'isolated-app.asar');
+    fs.writeFileSync(stateFile, JSON.stringify({ version: '3.7.4' }));
+    fs.writeFileSync(asarFile, 'translationVersion 3.7.4');
+    const previousEnv = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
+    t.after(() => {
+        if (previousEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = previousEnv;
+    });
+    let reapplications = 0;
+    await assert.rejects(watcher.refreshTranslationsAndReapply({
+        targetDir: root, stateDir, currentVersion: '3.7.1',
+        updater: {
+            readActiveTranslation: () => ({ version: '3.7.4' }),
+            checkUpdate: async () => ({ hasUpdate: true, tag: 'v3.7.5', release: { tag: 'v3.7.5' } }),
+            installTranslationUpdate: async () => {
+                fs.writeFileSync(stateFile, JSON.stringify({ version: '3.7.5' }));
+                return { updated: true, newVersion: '3.7.5' };
+            }
+        },
+        execReapplyFn: () => {
+            reapplications++;
+            fs.writeFileSync(asarFile, 'translationVersion 3.7.99');
+        },
+        verifyReapplyFn: version => fs.readFileSync(asarFile, 'utf8') === 'translationVersion ' + version
+    }), /app.asar 未載入新版翻譯/);
+    assert.equal(reapplications, 2);
+    assert.equal(JSON.parse(fs.readFileSync(stateFile, 'utf8')).version, '3.7.4');
+    assert.equal(fs.readFileSync(asarFile, 'utf8'), 'translationVersion 3.7.99');
+    // The mismatch remains, but unlike the previous implementation it is
+    // explicitly reported and the caller receives a non-success outcome.
 });

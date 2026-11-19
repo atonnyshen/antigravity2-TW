@@ -906,16 +906,18 @@ async function refreshTranslationsAndReapply({
     }
     if (updateRes && updateRes.updated) {
         log(`純翻譯資料包已更新至 v${updateRes.newVersion}，使用原有引擎重新套用繁體中文...`);
+        let reapplyExitedSuccessfully = false;
         try {
             execReapplyFn(targetDir);
+            reapplyExitedSuccessfully = true;
             if (!verifyReapplyFn(updateRes.newVersion)) {
                 throw new Error('守護程序執行完畢，但 app.asar 未載入新版翻譯，不能宣稱套用成功。');
             }
         } catch (error) {
-            // A valid dictionary can still fail when patching an unfamiliar
-            // upstream application. Undo the active-data pointer so that
-            // the next watcher run uses the previous known version.
+            // Restoring only the pointer is not sufficient: a child can
+            // exit successfully while leaving an unexpected ASAR version.
             const rollbackLock = acquireLock(path.join(stateDir, 'run.lock'));
+            let restoredPointer = false;
             if (rollbackLock) {
                 try {
                     const statePath = path.join(stateDir, 'active_translation.json');
@@ -930,6 +932,7 @@ async function refreshTranslationsAndReapply({
                         } else {
                             fs.unlinkSync(statePath);
                         }
+                        restoredPointer = true;
                         log('套用新版翻譯失敗，已恢復前一版翻譯指標。');
                     }
                 } catch (rollbackError) {
@@ -939,6 +942,31 @@ async function refreshTranslationsAndReapply({
                 }
             } else {
                 log('新版翻譯套用失敗，但無法取得回復鎖定，下一輪須檢查版本狀態。');
+            }
+            if (restoredPointer) {
+                const previousVersion = active ? active.version : currentVersion;
+                let previousAsarVerified = false;
+                try { previousAsarVerified = Boolean(verifyReapplyFn(previousVersion)); }
+                catch (verifyError) {
+                    log('無法核對 ASAR 的舊翻譯版本：' + verifyError.message);
+                }
+                // Only retry an apparently successful child that failed the
+                // *postcondition*. If the child itself threw, its own atomic
+                // ASAR rollback should have run; avoid a second blind write.
+                if (!previousAsarVerified && reapplyExitedSuccessfully) {
+                    try {
+                        log('ASAR 與已回復的翻譯指標不一致，嘗試以原有引擎重套舊版翻譯...');
+                        execReapplyFn(targetDir);
+                        previousAsarVerified = Boolean(verifyReapplyFn(previousVersion));
+                    } catch (recoveryError) {
+                        log('重套舊版翻譯失敗：' + recoveryError.message);
+                    }
+                }
+                if (previousAsarVerified) {
+                    log('已核對 ASAR 與舊翻譯版本一致。');
+                } else {
+                    log('警告：僅恢復翻譯指標，尚未證實 app.asar 已恢復；需人工核對或等待下一輪修復。');
+                }
             }
             throw error;
         }

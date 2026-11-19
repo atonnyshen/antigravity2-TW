@@ -36,6 +36,8 @@
 ## 最後四條獨立紅隊 Lane（不可只轉述先前測試）
 1. **P0 發布安全**：攻擊 `scripts/check_release_assets.js` 及 `.github/workflows/release-preflight.yml`。測試正確檔名卻混入 JS、ZIP Slip、CRC 或解壓異常、digest 不符、內容與引擎不相容、重複或額外資產、Release 非草稿、API 未授權、偽造 tag。以正式 v3.7.1 更新器逆向重現任意 ZIP 行為。核查 Actions 草稿查詢**必須具有 push 級可見性**、兩工作階段權限隔離、沒有自動發布。若尚無真正草稿，僅能評為「本機／虛擬通過；實際發布草稿未驗證」。
 2. **P0 翻譯回退**：測試 `test/translation_updates.test.js` 與 `test/watcher.test.js` 的正負路徑。涵蓋下載或驗證失敗、指標變更後 ASAR 失敗、子程序成功但版本未變、原子 rename 遭 `EPERM` 或 `EXDEV` 拒絕、簽署失敗、回退本身遭拒絕、收據寫入前中斷與下次重啟恢復。逐一核對 `app.asar` SHA、`app.asar.bak`、`active_translation.json`、私人 `recovery-*/previous-app.asar`、排程 exit code 與日誌，不能只檢查指標。**若回退也失敗，應明確回報需要人工恢復，不可判成完全回退成功。**
+   - **新反例**：前輪紅隊宣稱指標與 ASAR「完全連動」，但曾重現指標已回復 `3.7.4`、ASAR 仍是錯誤 `3.7.99`。本輪補上子程序成功但版本錯誤後的受控舊版重套與再核對。請重新攻擊「第二次重套仍失敗」「指標已被其他進程更改」「ASAR 同時受到官方更新」三種情境；不得僅憑測試數量宣布完全復原。
+   - **發布程式碼一致性**：驗證 `.github/workflows/release-preflight.yml` 中 Git 標籤 SHA 必須等於本次受測 `GITHUB_SHA`，以及輸入的引擎版號必須等於受測 `package.json.version`。翻譯資料版號可以高於引擎版號。若 SHA 不符，必須拒絕發布前驗收，避免 GitHub 原生 Source code (zip) 下載到舊程式。
 3. **P1 macOS**：用 Apple `launchd` 官方規格比對 `install_macos_autowatcher.sh` 的 LaunchAgent 與 LaunchDaemon plist。對 `RunAtLoad`、`StartInterval=300`、`ThrottleInterval=30`、`ProgramArguments`、使用者／系統權限、雙守護互斥、舊副本遷移、卸載作反證。無法在隔離系統啟動真正 LaunchDaemon 時，將 plist 解析及沙盒測試標為虛擬驗證。
 4. **P1 Windows**：依 Microsoft Task Scheduler `RunLevel` 與 UAC 規範檢查工作排程 XML 必為 `LeastPrivilege`、`PT5M`。以模擬 `EPERM`、`EACCES`、唯讀 `Program Files`、工作已安裝但套用失敗、權限不足登錄、卸載後不再執行測試失敗處理。真實 Windows ACL 測試若不可得，不可視為實機 PASS。
 
