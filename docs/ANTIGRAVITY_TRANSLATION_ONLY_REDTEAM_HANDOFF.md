@@ -1,7 +1,7 @@
 # antigravity2-TW｜翻譯資料自動更新架構：Antigravity 獨立紅隊驗收提示詞
 
 ## 任務與唯一標的
-請擔任獨立紅隊審計官，對 `/Users/atonny/工作區/antigravity2-TW` 的 `fix/v3.7.1-redteam-hardening` 分支執行對抗式審查。以發布標籤 `v3.7.1` 為基線，實際閱讀 `git diff v3.7.1...HEAD` 和完整程式碼。不可把既有測試「59/59 通過」視為放行證據。
+請擔任獨立紅隊審計官，對 `/Users/atonny/工作區/antigravity2-TW` 的 `fix/v3.7.1-redteam-hardening` 分支執行對抗式審查。以發布標籤 `v3.7.1` 為基線，實際閱讀 `git diff v3.7.1...HEAD` 和完整程式碼。必須重新核對 HEAD 與當期測試數字；不可沿用舊報告的 `cad5238`、`14dc109` 或「65/65」「69/69」當成最新狀態。
 
 ## 已裁決的產品政策（不可擅自改回複雜設定）
 1. 使用者只需要選擇「是否安裝背景守護程序」。啟用守護即明確同意每五分鐘檢查官方 Antigravity 更新，且約每 24 小時自動檢查、下載並套用相容的**純翻譯資料**。
@@ -20,16 +20,26 @@
 - 在 macOS 真實 launchd 與 Windows 工作排程的條件可用時進行隔離測試，包含一般使用者權限、`Program Files` 權限不足情境。不可把模擬測試冒充實機驗證。
 - **更正上一輪紅隊過度推論**：macOS 安裝腳本在官方 App 不可寫時仍可能明確呼叫 `sudo` 安裝 LaunchDaemon，不能宣稱一般使用者一律使用 LaunchAgent。Windows `LeastPrivilege` 排程即使由管理員註冊，也不保證可修改 `Program Files`。需以真實權限測試區分安全性與自動重套可用性。
 - **新增回退驗收**：純翻譯包下載成功後，如重新套用 ASAR 失敗，應恢復先前有效的 `active_translation.json`（或刪除首次更新指標），不能將「通過字典格式驗證」誤當成「已成功套用與可完整回退」。再檢查最終 ASAR 與備份狀態。
+- **原子性與災難恢復**：背景套用正式 `app.asar` 不得退回直接 copy/truncate 覆寫；當原子 rename 被拒絕時必須完整保留原檔。如果套用後簽署失敗，回復也只能原子置換；如回復本身失敗，必須保留原始 ASAR 復原副本，回報人工恢復需求，不得宣稱完全復原。另模擬寫入收據前中斷，以及子程序成功退出但翻譯版號未實際改變。
+- **發布檢查必須可執行**：新版 `.github/workflows/release-preflight.yml` 在候選分支不等於已經在 GitHub 預設分支啟用。以 `workflow_dispatch` 手動執行前，確認檔案已合併至 default branch；審查 GitHub API 對草稿的存取權限、Release 資產內容驗證、唯讀下載操作、正負測試，並確認沒有任何自動 publish 指令。不能稱它是無法繞過的 GitHub 平台發布政策。
 
 ## P0：既有 v3.7.1 安裝的發布遷移風險
 正式 v3.7.1 的舊守護程序仍能選取新 Release 內的完整 ZIP，進而自動更新程式碼。請檢查：
 - 只修改新分支不會停止舊版守護程序的舊行為。
 - 若新 Release 仍附加完整程式 ZIP，舊版使用者可能在未理解新政策前自動升級程式功能。
-- 提出**不破壞舊讀者、可人工下載完整程式、但舊守護程序不會取得並執行新程式碼**的實際發布方案。**注意正式 v3.7.1 有兩層 ZIP 篩選：`/^antigravity2-TW-.*\.zip$/i` 與後備 `/\.zip$/i`。把完整程式命名為 `antigravity2-TW-manual-setup-vX.Y.Z.zip` 或任何其他 ZIP 並上傳至 Release Assets，都不能規避舊版自動下載。** GitHub 自動產生的 Source code (ZIP) 可供手動安裝，且不在 `assets[]` 中。所有新發布應先建立 draft，並以 `gh api repos/atonnyshen/antigravity2-TW/releases/tags/vX.Y.Z | node scripts/check_release_assets.js vX.Y.Z --file dist/antigravity2-TW-translations-vX.Y.Z.zip --engine-version X.Y.Z` 驗證，通過後仍需人工批准才能公開。詳見 `docs/RELEASE_TRANSLATION_ONLY_SOP.md`。另以隔離測試驗證舊程式遇到純翻譯 ZIP 時確實 fail closed，不能只宣稱規避成功。
+- 提出**不破壞舊讀者、可人工下載完整程式、但舊守護程序不會取得並執行新程式碼**的實際發布方案。**注意正式 v3.7.1 有兩層 ZIP 篩選：`/^antigravity2-TW-.*\.zip$/i` 與後備 `/\.zip$/i`。把完整程式命名為 `antigravity2-TW-manual-setup-vX.Y.Z.zip` 或任何其他 ZIP 並上傳至 Release Assets，都不能規避舊版自動下載。** GitHub 自動產生的 Source code (ZIP) 可供手動安裝，且不在 `assets[]` 中。所有新發布應先建立 draft，依 `docs/RELEASE_TRANSLATION_ONLY_SOP.md` 使用具備草稿讀取權限的 Release 清單 API 與實際翻譯 ZIP 檢查（切勿以僅描述已發布版的 `releases/tags/{tag}` API 當成草稿驗收）。通過後仍需人工批准才能公開。另以隔離測試驗證舊程式遇到純翻譯 ZIP 時確實 fail closed，不能只宣稱規避成功。
 - 必須核對 `assets[].digest` 提供 SHA-256；如缺少 digest，新守護程序不得自動下載。
 
 ## 驗證命令與界線
 必跑：`git diff v3.7.1...HEAD`、`node scripts/compare_dicts.js`、`npm test`、`node --check`、macOS `bash -n`。實際版本分支需先確認。可在系統暫存資料夾建立隔離測試套件；**不可修改 /Applications/Antigravity.app、正式守護程序、系統排程或現有 GitHub Release。不可 push、merge、tag、發布或安裝正式環境。** 發現缺陷時先記錄最小修正提案與反證測試，不要擴展成新的設定架構。
+
+## 最後四條獨立紅隊 Lane（不可只轉述先前測試）
+1. **P0 發布安全**：攻擊 `scripts/check_release_assets.js` 及 `.github/workflows/release-preflight.yml`。測試正確檔名卻混入 JS、ZIP Slip、CRC 或解壓異常、digest 不符、內容與引擎不相容、重複或額外資產、Release 非草稿、API 未授權、偽造 tag。以正式 v3.7.1 更新器逆向重現任意 ZIP 行為。核查 Actions 草稿查詢**必須具有 push 級可見性**、兩工作階段權限隔離、沒有自動發布。若尚無真正草稿，僅能評為「本機／虛擬通過；實際發布草稿未驗證」。
+2. **P0 翻譯回退**：測試 `test/translation_updates.test.js` 與 `test/watcher.test.js` 的正負路徑。涵蓋下載或驗證失敗、指標變更後 ASAR 失敗、子程序成功但版本未變、原子 rename 遭 `EPERM` 或 `EXDEV` 拒絕、簽署失敗、回退本身遭拒絕、收據寫入前中斷與下次重啟恢復。逐一核對 `app.asar` SHA、`app.asar.bak`、`active_translation.json`、私人 `recovery-*/previous-app.asar`、排程 exit code 與日誌，不能只檢查指標。**若回退也失敗，應明確回報需要人工恢復，不可判成完全回退成功。**
+3. **P1 macOS**：用 Apple `launchd` 官方規格比對 `install_macos_autowatcher.sh` 的 LaunchAgent 與 LaunchDaemon plist。對 `RunAtLoad`、`StartInterval=300`、`ThrottleInterval=30`、`ProgramArguments`、使用者／系統權限、雙守護互斥、舊副本遷移、卸載作反證。無法在隔離系統啟動真正 LaunchDaemon 時，將 plist 解析及沙盒測試標為虛擬驗證。
+4. **P1 Windows**：依 Microsoft Task Scheduler `RunLevel` 與 UAC 規範檢查工作排程 XML 必為 `LeastPrivilege`、`PT5M`。以模擬 `EPERM`、`EACCES`、唯讀 `Program Files`、工作已安裝但套用失敗、權限不足登錄、卸載後不再執行測試失敗處理。真實 Windows ACL 測試若不可得，不可視為實機 PASS。
+
+官方規範：<https://docs.github.com/en/rest/releases/releases>、<https://docs.github.com/en/rest/releases/assets>、<https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow>、<https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html>、<https://learn.microsoft.com/en-us/windows/win32/taskschd/security-contexts-for-running-tasks>。
 
 ## 應交付的報告
 用繁體中文列出：P0/P1/P2、具體檔案行號、失敗條件、實際重現或尚缺證據、修復建議；分別裁決「使用者知情選擇」「只更新翻譯」「版本相容與快照」「跨平台守護權限」「發布遷移」。最終只使用 PASS、FAIL、CONDITIONAL PASS，另標示未驗證部分。切勿以測試項數或原專案自述替代結論。

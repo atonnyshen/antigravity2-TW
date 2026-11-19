@@ -78,6 +78,78 @@ test('signing failure rolls back bytes and does not record success', t => {
     assert.deepEqual(fs.readdirSync(f.stateDir), []);
 });
 
+test('failed atomic rollback preserves original ASAR in recovery directory and reports failure', t => {
+    const f = fixture(t);
+    const originalRename = fs.renameSync;
+    fs.renameSync = (source, destination) => {
+        if (destination === f.asarPath && path.basename(source) === 'rollback.asar') {
+            const error = new Error('simulated rollback write denial');
+            error.code = 'EPERM';
+            throw error;
+        }
+        return originalRename(source, destination);
+    };
+    try {
+        assert.throws(() => f.run({ sign() { throw new Error('simulated signing failure'); } }),
+            /simulated signing failure/);
+    } finally {
+        fs.renameSync = originalRename;
+    }
+    const recoveryDirs = fs.readdirSync(f.stateDir).filter(name => name.startsWith('recovery-'));
+    assert.equal(recoveryDirs.length, 1);
+    assert.equal(fs.readFileSync(path.join(f.stateDir, recoveryDirs[0], 'previous-app.asar'), 'utf8'), 'official-v1');
+    assert.equal(fs.existsSync(path.join(f.stateDir, digest(f.appInfo.appPath) + '.json')), false);
+});
+
+test('live ASAR refuses non-atomic copy fallback when rename is denied', t => {
+    const f = fixture(t);
+    fs.writeFileSync(f.asarPath + '.bak', 'official-v1');
+    const originalRename = fs.renameSync;
+    const originalCopy = fs.copyFileSync;
+    let unsafeCopies = 0;
+    fs.renameSync = (source, destination) => {
+        if (destination === f.asarPath) {
+            const error = new Error('Simulated EPERM replacing live ASAR');
+            error.code = 'EPERM';
+            throw error;
+        }
+        return originalRename(source, destination);
+    };
+    fs.copyFileSync = (source, destination, ...rest) => {
+        if (destination === f.asarPath) unsafeCopies++;
+        return originalCopy(source, destination, ...rest);
+    };
+    try {
+        assert.throws(() => f.run(), /無法以原子置換更新 app\.asar/);
+        assert.equal(unsafeCopies, 0);
+        assert.equal(f.read(), 'official-v1');
+        assert.equal(fs.readFileSync(f.asarPath + '.bak', 'utf8'), 'official-v1');
+        assert.deepEqual(fs.readdirSync(f.stateDir), []);
+    } finally {
+        fs.renameSync = originalRename;
+        fs.copyFileSync = originalCopy;
+    }
+});
+
+test('interrupted receipt update is safely reconciled on next isolated watcher run', t => {
+    const f = fixture(t);
+    const idempotentBuild = stage => {
+        const archive = path.join(stage, 'app.asar');
+        if (!fs.readFileSync(archive, 'utf8').includes('命令選擇區')) {
+            fs.appendFileSync(archive, '\n命令選擇區');
+        }
+    };
+    assert.equal(f.run({ build: idempotentBuild }), true);
+    const modified = f.read();
+    const receipt = path.join(f.stateDir, digest(f.appInfo.appPath) + '.json');
+    fs.rmSync(receipt);
+    assert.equal(f.run({ build: idempotentBuild }), true);
+    assert.equal(f.read(), modified);
+    assert.equal(fs.readFileSync(f.asarPath + '.bak', 'utf8'), 'official-v1');
+    assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).output,
+        digest(fs.readFileSync(f.asarPath)));
+});
+
 test('update during signing is never overwritten by rollback', t => {
     const f = fixture(t);
     assert.throws(() => f.run({ sign() {

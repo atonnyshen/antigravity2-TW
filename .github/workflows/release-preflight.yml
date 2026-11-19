@@ -1,0 +1,84 @@
+name: Draft release preflight (never publishes)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing draft tag (vX.Y.Z)'
+        required: true
+        type: string
+      engine_version:
+        description: 'Engine version verified for this translation pack (X.Y.Z)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-preflight-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Install test dependencies
+        run: npm ci
+      - name: Verify source regression
+        run: |
+          node scripts/compare_dicts.js
+          npm test
+
+  check-draft:
+    needs: regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # GitHub only exposes draft Releases to principals with push access.
+    # This job performs GET/download actions only. Do not add package
+    # installation, untrusted shell code, or a publish command to this job.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Verify actual GitHub draft and downloaded translation ZIP
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          ENGINE_VERSION: ${{ inputs.engine_version }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid tag"; exit 1; }
+          [[ "$ENGINE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Invalid engine version"; exit 1; }
+          asset="antigravity2-TW-translations-${TAG}.zip"
+          target="$RUNNER_TEMP/ag2tw-release-preflight"
+          mkdir -p "$target"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"${TAG}\")" > "$target/release.json"
+          test -s "$target/release.json" || { echo "Draft unavailable to audit identity"; exit 1; }
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "$asset" --dir "$target"
+          node scripts/check_release_assets.js "$TAG" \
+            --file "$target/$asset" --engine-version "$ENGINE_VERSION" < "$target/release.json"
+          echo "Verified draft metadata, exact asset SHA-256 and safe translation content."
+
+# Intentional: this workflow does not create, edit, publish, or delete Releases.
+# The draft-inspection job needs push-level API visibility, but only makes
+# read/download requests; direct UI publication can bypass this workflow.
+# A repository administrator can still manually bypass this workflow; require
+# its passing run as a release procedure before a separate human publish.

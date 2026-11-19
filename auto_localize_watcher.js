@@ -408,12 +408,18 @@ function notifyMacUser(title, message) {
     } catch {}
 }
 
-function safeReplaceFile(src, dst, mode, uid, gid) {
+function safeReplaceFile(src, dst, mode, uid, gid, { atomicRequired = false } = {}) {
     stripQuarantine(src);
     stripQuarantine(dst);
     try {
         fs.renameSync(src, dst);
     } catch (error) {
+        // The live ASAR must never fall back to an in-place copy/truncate.
+        // A crash or ENOSPC during those operations could corrupt the
+        // installed application without leaving a recoverable archive.
+        if (atomicRequired) {
+            throw new Error('無法以原子置換更新 app.asar，保留現有程式；需人工檢查應用程式寫入權限。', { cause: error });
+        }
         if (error.code === 'EPERM' || error.code === 'EXDEV' || error.code === 'EACCES') {
             let replaced = false;
             // 1. Try copyFileSync
@@ -605,7 +611,7 @@ function checkAndLocalizeApp(appInfo, {
             }
         }
         if (digest(fs.readFileSync(asarPath)) !== originalHash) throw new Error('置換前官方包已更新，取消套用。');
-        safeReplaceFile(candidate, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid);
+        safeReplaceFile(candidate, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid, { atomicRequired: true });
         replaced = true;
         sign(appPath, sourceStat);
         const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
@@ -631,11 +637,23 @@ function checkAndLocalizeApp(appInfo, {
                 if (ROOT) {
                     try { fs.chownSync(rollback, sourceStat.uid, sourceStat.gid); } catch {}
                 }
-                safeReplaceFile(rollback, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid);
+                safeReplaceFile(rollback, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid, { atomicRequired: true });
                 sign(appPath, sourceStat);
                 log('套用未通過，已還原原始 app.asar。');
             } catch (rollbackError) {
-                log('還原／重新簽署失敗：' + rollbackError.message);
+                // If the rollback itself is denied, preserve the original
+                // application bytes in the private watcher state directory.
+                // Do not claim success or discard the only recovery source.
+                let recoveryPath = '';
+                try {
+                    const recoveryDir = fs.mkdtempSync(path.join(stateDir, 'recovery-'));
+                    recoveryPath = path.join(recoveryDir, 'previous-app.asar');
+                    fs.writeFileSync(recoveryPath, original, { flag: 'wx', mode: 0o600 });
+                } catch (saveError) {
+                    log('無法保留復原副本：' + saveError.message);
+                }
+                log('還原／重新簽署失敗，應用程式可能無法正常啟動：' + rollbackError.message +
+                    (recoveryPath ? '；原始檔案保留於 ' + recoveryPath : '；需要人工從有效備份恢復。'));
             }
         }
         throw error;
@@ -968,6 +986,9 @@ async function main() {
         // 安裝守護即同意翻譯資料自動更新；程式碼升級仍由使用者手動處理。
         await refreshTranslationsAndReapply().catch(err => {
             log('翻譯資料更新失敗，保留目前版本：' + (err && err.message ? err.message : err));
+            // Do not report scheduler success after a failed translation
+            // install/reapply. The next scheduled run still retries safely.
+            process.exitCode = 1;
         });
     } catch (error) {
         log('自動繁中化失敗，稍後重試：' + (error.stack || error.message));

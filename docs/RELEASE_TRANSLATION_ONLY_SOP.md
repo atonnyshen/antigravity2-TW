@@ -17,17 +17,20 @@
 2. 使用 `node scripts/build_translation_pack.js --version X.Y.Z --min-engine X.Y.Z --max-engine X.Y.Z --output dist/antigravity2-TW-translations-vX.Y.Z.zip` 產生純翻譯資料包。請根據**實測過的**引擎版本指定 min/max，勿自動假定所有新版引擎相容。
 3. 確認對應的 Git 標籤包含可手動安裝的完整原始碼，並先進行隔離解壓與最小手動安裝測試。
 4. 使用 `gh release create vX.Y.Z --draft --title ... --notes-file ... dist/antigravity2-TW-translations-vX.Y.Z.zip` 建立未公開草稿。正式版號與內容須先獲人工批准。
-5. **發布前閘門**：執行以下指令（`vX.Y.Z` 換成草稿標籤），只有退出碼為 0 才能繼續：
+5. **發布前閘門**：先把新版流程合併到 GitHub 預設分支，再從 Actions 手動執行 `Draft release preflight (never publishes)`，指定 `tag=vX.Y.Z`、`engine_version=X.Y.Z`。確認兩個工作階段全數通過，才允許進入人工發布程序。此工作流程**只讀取與下載檢查，不會發布或修改 Release**。由於 GitHub 的草稿只對具有 push 權限的主體可見，檢查草稿的工作階段必須具備 `contents: write` API 權限，但其腳本沒有任何寫入 Release 的命令。
+
+   若改從本機執行等價檢查，請在有 Repository 推送權限的已登入帳號下執行：
 
    ```bash
-   gh api repos/atonnyshen/antigravity2-TW/releases/tags/vX.Y.Z |
+   gh api --paginate 'repos/atonnyshen/antigravity2-TW/releases?per_page=100' \
+     --jq '.[] | select(.tag_name == "vX.Y.Z")' |
      node scripts/check_release_assets.js vX.Y.Z \
        --file dist/antigravity2-TW-translations-vX.Y.Z.zip \
        --engine-version X.Y.Z
    ```
 
    檢查器拒絕：非 draft、版本錯誤、非唯一純翻譯 ZIP、SHA-256 digest 缺失、未上傳完成、空檔、GitHub 與本機 ZIP 雜湊不符、ZIP 混入程式碼、字典格式錯誤、引擎版本不相容。它核對的是 GitHub API 的**實際 Release 資產清單**與**本機實際 ZIP 內容**，不是單憑檔名驗收。`--engine-version` 必須指定已測試的目標引擎版本；不同引擎若需支援，應分別測試。
-6. 上一步已核對 GitHub API `assets[].digest` 與本機 ZIP 的 SHA-256，仍須人工核對 Source code (zip) 的安裝方式及 Release Notes。**注意這是 SOP 中要求手動執行的發布前檢查，目前沒有接進 GitHub Actions 的自動發布管線，不能宣稱 CI 保證放行。**
+6. 上一步已核對 GitHub API `assets[].digest` 與實際 ZIP 的 SHA-256，仍須人工核對 Source code (zip) 的安裝方式及 Release Notes。**Actions 工作流程已加入候選原始碼，待合併到預設分支後才能手動啟動。通過紀錄是發布前的證據，但 Repository 管理者仍可從 GitHub 網站繞過這道流程直接發布，不能宣稱平台已設定無法繞過的政策閘門。**
 7. 經人工核准後才以 `gh release edit vX.Y.Z --draft=false` 發布，並立即唯讀重新核對發布後的資產清單。不得因為檢查器通過，就省略人工發布核准。
 
 ## 不符合即停止發布
@@ -35,7 +38,7 @@
 - 發現任何非純翻譯 ZIP 資產。
 - 舊版自動更新器能成功通過完整程式套件驗證。
 - 缺少 GitHub SHA-256 digest，或本機雜湊不一致。
-- 原生 macOS／Windows 隔離測試或官方版本重套驗證尚未達要求。
+- 尚未完成可重現的 macOS／Windows 隔離測試或依 Apple、Microsoft 官方執行規則的虛擬驗證。若實機不可得，須在 Release Notes 明示「實機尚未驗證」，標出已知的 `Program Files` 最低權限限制與手動安裝替代方式；經人工評估接受後，才可視為有條件放行，**不能把虛擬測試寫成實機 PASS**。
 - README 的手動下載說明仍指向只能給背景守護使用的純翻譯 ZIP。
 
-此流程可減少舊版守護誤升級的風險，但不能改寫已在用戶電腦上執行的 v3.7.1；其行為須由隔離重現證明。
+此流程可減少舊版守護誤升級的風險，但不能改寫已在用戶電腦上執行的 v3.7.1；其行為須由隔離重現證明。注意 GitHub REST `/releases/tags/{tag}` 文件描述的是已發布版本，**草稿請用 Releases 清單查詢**，不可把查詢發布版的接口當成草稿驗收證據。
