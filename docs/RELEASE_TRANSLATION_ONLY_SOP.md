@@ -2,6 +2,16 @@
 
 **狀態：候選流程。未通過完整驗收前不得發布。**
 
+## P0 安全修復驗收（必要）
+
+正式背景守護的 ASAR 替換必須使用原生保留舊檔的原子操作：macOS `renamex_np(RENAME_SWAP)`（經 `scripts/atomic_asar_exchange.rb` 呼叫）、Windows `ReplaceFileW`（經 `scripts/atomic_asar_replace.ps1` 呼叫）；Linux 測試使用 `renameat2(RENAME_EXCHANGE)`。**不能降級為先算雜湊再盲目 `renameSync`**，因為 Google 官方 ShipIt 可能在兩步之間更新正式檔案。
+
+- 建立或更新 `app.asar.bak` 必須採原子寫入，並且重新讀取確認 SHA-256 完整一致；備份失敗、磁碟空間不足或同步失敗一律中止套用
+- 原子交換後必須核對被替換的 ASAR；若與原先雜湊不同，代表官方更新競爭，應優先恢復被置換的官方 ASAR，或保留其原始位元組與明確的人工修復提示，不能宣稱成功
+- 官方更新與回退同時發生也必須接受反證測試；不能只驗證建置期間的雜湊
+- 此設計只能在系統原生交換及儲存裝置正常運作時保證其對應的原子性。斷電、硬體故障與未支援的權限／檔案系統仍有殘餘風險，不可聲稱絕對可回復
+- 發布前必跑 `npm test`、`node scripts/compare_dicts.js`、macOS Ruby helper 的隔離原生測試，以及 Windows GitHub Actions 回歸測試（含 PowerShell 原生替換）；不能以 Mac 虛擬 Windows 測試代替 Windows CI
+
 ## 不可違反的發布規則
 
 公開 `v3.7.1` 的守護程式可能從 GitHub Release Assets 選取**任意 ZIP**，並嘗試完整程式自我升級：優先匹配 `/^antigravity2-TW-.*\.zip$/i`，找不到時後備匹配 `/\.zip$/i`。因此，**把完整程式 ZIP 改名為 `manual-setup.zip` 完全不能規避舊版行為**。

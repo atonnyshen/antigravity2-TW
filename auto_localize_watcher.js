@@ -418,7 +418,10 @@ function safeReplaceFile(src, dst, mode, uid, gid, { atomicRequired = false } = 
         // A crash or ENOSPC during those operations could corrupt the
         // installed application without leaving a recoverable archive.
         if (atomicRequired) {
-            throw new Error('無法以原子置換更新 app.asar，保留現有程式；需人工檢查應用程式寫入權限。', { cause: error });
+            const denied = new Error('無法以原子置換更新 ' + path.basename(dst) +
+                '，保留現有檔案；需人工檢查寫入權限或磁碟空間。', { cause: error });
+            denied.code = error.code;
+            throw denied;
         }
         if (error.code === 'EPERM' || error.code === 'EXDEV' || error.code === 'EACCES') {
             let replaced = false;
@@ -474,6 +477,107 @@ function safeReplaceFile(src, dst, mode, uid, gid, { atomicRequired = false } = 
     }
 }
 
+function fsyncFile(file) {
+    const fd = fs.openSync(file, 'r');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
+function fsyncDirectory(dir) {
+    // Win32 ReplaceFileW supplies its own replacement semantics and directory
+    // handles cannot be opened with Node's normal read mode on Windows.
+    if (process.platform === 'win32') return;
+    const fd = fs.openSync(dir, 'r');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
+// Replace the live archive AND retain the exact displaced archive. Merely
+// hashing before fs.renameSync has a TOCTOU hole: ShipIt can replace the
+// destination between the hash check and rename. Never fall back to a blind
+// rename/copy of app.asar when native exchange is unavailable.
+function exchangeAsar(candidate, live, previousPath) {
+    ensureRegularTarget(candidate);
+    ensureRegularTarget(live);
+    if (fs.existsSync(previousPath)) throw new Error('原子置換的前版保留路徑已存在。');
+    if (fs.statSync(candidate).dev !== fs.statSync(live).dev) {
+        throw new Error('app.asar 原子置換要求同一個檔案系統。');
+    }
+    if (process.platform === 'win32') {
+        execFileSync('powershell.exe', [
+            '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+            '-File', path.join(DIR, 'scripts', 'atomic_asar_replace.ps1'),
+            '-Replacement', candidate, '-Live', live, '-Previous', previousPath
+        ], { stdio: 'pipe', timeout: 30000 });
+        if (!fs.existsSync(previousPath)) throw new Error('ReplaceFileW 未保留原本的 app.asar。');
+        return previousPath;
+    }
+    if (process.platform === 'darwin' || process.platform === 'linux') {
+        execFileSync(process.platform === 'darwin' ? '/usr/bin/ruby' : 'ruby', [
+            path.join(DIR, 'scripts', 'atomic_asar_exchange.rb'), candidate, live
+        ], { stdio: 'pipe', timeout: 30000 });
+        return candidate; // RENAME_SWAP / RENAME_EXCHANGE retains displaced bytes here.
+    }
+    throw new Error('本平台沒有已驗證的 app.asar 原子交換能力，拒絕覆寫。');
+}
+
+// A single atomic exchange retains the overwritten bytes for forensic
+// verification. If ShipIt swapped in newer bytes just before the exchange,
+// exchange them BACK rather than discarding them. Any unresolved version is
+// kept in a recovery file and the operation fails closed.
+function exchangeCheckedAsar(candidate, live, previousPath, expectedHash, replacementHash,
+    exchangeFn = exchangeAsar) {
+    if (digest(fs.readFileSync(live)) !== expectedHash) {
+        throw new Error('原子交換前官方 app.asar 已更新，取消本輪套用。');
+    }
+    let displaced;
+    try {
+        displaced = exchangeFn(candidate, live, previousPath);
+    } catch (error) {
+        // A native API may report failure after modifying one or more paths,
+        // especially on Windows. Do not delete the only possible recovery
+        // bytes if the target or backup suggests a partial replacement.
+        let changed = false;
+        try { changed = digest(fs.readFileSync(live)) === replacementHash; } catch {}
+        if (changed || fs.existsSync(previousPath)) {
+            error.concurrentRecovery = fs.existsSync(previousPath) ? previousPath : candidate;
+        }
+        throw error;
+    }
+    let priorHash;
+    try { priorHash = digest(fs.readFileSync(displaced)); }
+    catch (cause) {
+        const error = new Error('原子交換後無法驗證被替換的官方 ASAR，保留候選目錄。', { cause });
+        error.concurrentRecovery = displaced;
+        throw error;
+    }
+    if (priorHash === expectedHash) return { displaced, changed: true };
+
+    let recoverPath = displaced;
+    // We did exchange successfully, so preserve all displaced files even if
+    // a subsequent official update makes restoring immediately impossible.
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const liveHash = digest(fs.readFileSync(live));
+        if (liveHash !== replacementHash) break; // Another writer already replaced live.
+        const undoPrevious = path.join(path.dirname(previousPath),
+            'concurrent-' + process.pid + '-' + attempt + '.asar');
+        try {
+            recoverPath = exchangeFn(recoverPath, live, undoPrevious);
+        } catch (cause) {
+            const error = new Error('官方 ASAR 競爭時自動回復失敗，已保留官方原檔供人工復原。', { cause });
+            error.concurrentRecovery = recoverPath;
+            throw error;
+        }
+        priorHash = digest(fs.readFileSync(recoverPath));
+        if (priorHash === replacementHash) {
+            const error = new Error('原子置換期間官方 ASAR 已更新，已恢復較新官方檔案。');
+            error.concurrentUpdateRecovered = true;
+            throw error;
+        }
+    }
+    const error = new Error('原子置換遭遇多次官方更新；已保留被替換的原始 ASAR，須人工復原。');
+    error.concurrentRecovery = recoverPath;
+    throw error;
+}
+
 function buildArchive(stageDir) {
     execFileSync(process.execPath, [
         path.join(DIR, 'localization_engine.js'), '--tw', '--brand-title', 'english',
@@ -502,7 +606,7 @@ function signApp(appPath, sourceStat) {
 function checkAndLocalizeApp(appInfo, {
     stateDir = path.join(DIR, '.watcher-state'), build = buildArchive,
     sign = signApp, wait = waitForStableFile, recipe = recipeHash(),
-    currentVersion = getLocalPackageVersion()
+    currentVersion = getLocalPackageVersion(), exchange = exchangeAsar
 } = {}) {
     const { appPath, asarPath } = appInfo;
     ensureRegularTarget(asarPath);
@@ -550,6 +654,7 @@ function checkAndLocalizeApp(appInfo, {
     let replacementDir;
     let replaced = false;
     let resultHash;
+    let retainReplacementDir = false;
     try {
         stageDir = fs.mkdtempSync(path.join(stateDir, 'stage-'));
         const stageAsar = path.join(stageDir, 'app.asar');
@@ -584,36 +689,50 @@ function checkAndLocalizeApp(appInfo, {
 
         const candidate = path.join(replacementDir, 'app.asar');
         fs.writeFileSync(candidate, result, { mode: sourceStat.mode & 0o777, flag: 'wx' });
+        fsyncFile(candidate);
         if (ROOT) {
             try { fs.chownSync(candidate, sourceStat.uid, sourceStat.gid); } catch {}
         }
         if (!localized) {
             let needBackup = true;
-            try {
-                if (fs.existsSync(asarPath + '.bak')) {
-                    const existingBak = fs.readFileSync(asarPath + '.bak');
-                    if (digest(existingBak) === originalHash) {
-                        needBackup = false;
-                    }
-                }
-            } catch {}
-            if (needBackup) {
-                try {
-                    const backup = path.join(replacementDir, 'official.bak');
-                    fs.writeFileSync(backup, original, { mode: sourceStat.mode & 0o777, flag: 'wx' });
-                    if (ROOT) {
-                        try { fs.chownSync(backup, sourceStat.uid, sourceStat.gid); } catch {}
-                    }
-                    safeReplaceFile(backup, asarPath + '.bak', sourceStat.mode, sourceStat.uid, sourceStat.gid);
-                } catch (bakErr) {
-                    log('應用程式目錄備份非致命略過：' + bakErr.message);
-                }
+            if (fs.existsSync(asarPath + '.bak')) {
+                needBackup = digest(fs.readFileSync(asarPath + '.bak')) !== originalHash;
             }
+            if (needBackup) {
+                const backup = path.join(replacementDir, 'official.bak');
+                fs.writeFileSync(backup, original, { mode: sourceStat.mode & 0o777, flag: 'wx' });
+                fsyncFile(backup);
+                if (ROOT) {
+                    try { fs.chownSync(backup, sourceStat.uid, sourceStat.gid); } catch {}
+                }
+                safeReplaceFile(backup, asarPath + '.bak', sourceStat.mode, sourceStat.uid, sourceStat.gid,
+                    { atomicRequired: true });
+            }
+            if (digest(fs.readFileSync(asarPath + '.bak')) !== originalHash) {
+                throw new Error('官方 app.asar 備份驗證失敗，拒絕修改正式檔案。');
+            }
+            fsyncFile(asarPath + '.bak');
+            fsyncDirectory(path.dirname(asarPath));
+        } else if (!fs.existsSync(asarPath + '.bak')) {
+            throw new Error('既有繁中 ASAR 缺少官方原始備份，拒絕繼續覆寫。');
         }
         if (digest(fs.readFileSync(asarPath)) !== originalHash) throw new Error('置換前官方包已更新，取消套用。');
-        safeReplaceFile(candidate, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid, { atomicRequired: true });
+        try {
+            exchangeCheckedAsar(candidate, asarPath, path.join(replacementDir, 'previous.asar'),
+                originalHash, resultHash, exchange);
+        } catch (swapError) {
+            if (swapError.concurrentRecovery) {
+                retainReplacementDir = true;
+                log('官方更新競爭：原始 ASAR 保留在 ' + swapError.concurrentRecovery + '，須人工核對。');
+            }
+            throw swapError;
+        }
         replaced = true;
+        fsyncDirectory(path.dirname(asarPath));
         sign(appPath, sourceStat);
+        if (digest(fs.readFileSync(asarPath)) !== resultHash) {
+            throw new Error('簽署期間官方 app.asar 已更新，保留較新檔案並取消本輪收據。');
+        }
         const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
         fs.writeFileSync(stateTmp, JSON.stringify({ recipe, output: digest(result), updatedAt: new Date().toISOString() }) + '\n');
         if (ROOT) {
@@ -634,13 +753,20 @@ function checkAndLocalizeApp(appInfo, {
                 }
                 const rollback = path.join(replacementDir || stageDir, 'rollback.asar');
                 fs.writeFileSync(rollback, original, { flag: 'wx', mode: sourceStat.mode & 0o777 });
+                fsyncFile(rollback);
                 if (ROOT) {
                     try { fs.chownSync(rollback, sourceStat.uid, sourceStat.gid); } catch {}
                 }
-                safeReplaceFile(rollback, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid, { atomicRequired: true });
+                exchangeCheckedAsar(rollback, asarPath, path.join(replacementDir || stageDir, 'rollback-previous.asar'),
+                    resultHash, originalHash, exchange);
+                fsyncDirectory(path.dirname(asarPath));
                 sign(appPath, sourceStat);
                 log('套用未通過，已還原原始 app.asar。');
             } catch (rollbackError) {
+                if (rollbackError.concurrentRecovery) {
+                    retainReplacementDir = true;
+                    log('回退期間官方更新競爭，保留替換前檔案：' + rollbackError.concurrentRecovery);
+                }
                 // If the rollback itself is denied, preserve the original
                 // application bytes in the private watcher state directory.
                 // Do not claim success or discard the only recovery source.
@@ -661,7 +787,7 @@ function checkAndLocalizeApp(appInfo, {
         if (stageDir) {
             try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch {}
         }
-        if (replacementDir) {
+        if (replacementDir && !retainReplacementDir) {
             try { fs.rmSync(replacementDir, { recursive: true, force: true }); } catch {}
         }
         release();
@@ -1032,6 +1158,8 @@ async function main() {
 if (require.main === module) main();
 module.exports = {
     checkAndLocalizeApp,
+    exchangeAsar,
+    exchangeCheckedAsar,
     waitForStableFile,
     acquireLock,
     isLocalized,

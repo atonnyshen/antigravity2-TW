@@ -34,6 +34,8 @@
 必跑：`git diff v3.7.1...HEAD`、`node scripts/compare_dicts.js`、`npm test`、`node --check`、macOS `bash -n`。實際版本分支需先確認。可在系統暫存資料夾建立隔離測試套件；**不可修改 /Applications/Antigravity.app、正式守護程序、系統排程或現有 GitHub Release。不可 push、merge、tag、發布或安裝正式環境。** 發現缺陷時先記錄最小修正提案與反證測試，不要擴展成新的設定架構。
 
 ## 最後四條獨立紅隊 Lane（不可只轉述先前測試）
+**2026-11-20 P0 修復後追加核驗：** 審查最新版 HEAD。前輪獨立紅隊曾以故障注入重現兩個實質問題：(1) Google ShipIt 在最後 SHA-256 檢查與原子 `rename` 之間更新 `app.asar`，守護仍把舊版中文化產物覆蓋回去；(2) `app.asar.bak` 在 `ENOSPC` 下失敗，但守護忽略錯誤並繼續覆寫正式檔案。候選修復改用原生保留舊檔的交換與強制備份驗證。必須檢視 `scripts/atomic_asar_exchange.rb`、`scripts/atomic_asar_replace.ps1`，重新驗證交換競爭、回退競爭、備份 ENOSPC、備份損毀、第二次恢復遭拒、正常重套、Windows `ReplaceFileW` 真正執行結果。沒有實際 Windows runner 的通過收據，不可聲稱跨平台原生測試已通過。對不支援原子交換的環境，要求安全拒絕，絕不可靜默退回盲目覆寫。
+
 1. **P0 發布安全**：攻擊 `scripts/check_release_assets.js` 及 `.github/workflows/release-preflight.yml`。測試正確檔名卻混入 JS、ZIP Slip、CRC 或解壓異常、digest 不符、內容與引擎不相容、重複或額外資產、Release 非草稿、API 未授權、偽造 tag。以正式 v3.7.1 更新器逆向重現任意 ZIP 行為。核查 Actions 草稿查詢**必須具有 push 級可見性**、兩工作階段權限隔離、沒有自動發布。若尚無真正草稿，僅能評為「本機／虛擬通過；實際發布草稿未驗證」。
 2. **P0 翻譯回退**：測試 `test/translation_updates.test.js` 與 `test/watcher.test.js` 的正負路徑。涵蓋下載或驗證失敗、指標變更後 ASAR 失敗、子程序成功但版本未變、原子 rename 遭 `EPERM` 或 `EXDEV` 拒絕、簽署失敗、回退本身遭拒絕、收據寫入前中斷與下次重啟恢復。逐一核對 `app.asar` SHA、`app.asar.bak`、`active_translation.json`、私人 `recovery-*/previous-app.asar`、排程 exit code 與日誌，不能只檢查指標。**若回退也失敗，應明確回報需要人工恢復，不可判成完全回退成功。**
    - **新反例**：前輪紅隊宣稱指標與 ASAR「完全連動」，但曾重現指標已回復 `3.7.4`、ASAR 仍是錯誤 `3.7.99`。本輪補上子程序成功但版本錯誤後的受控舊版重套與再核對。請重新攻擊「第二次重套仍失敗」「指標已被其他進程更改」「ASAR 同時受到官方更新」三種情境；不得僅憑測試數量宣布完全復原。
