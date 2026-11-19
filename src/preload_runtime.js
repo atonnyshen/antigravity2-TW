@@ -697,7 +697,7 @@
         [/^normally uses encryption to protect your information\. When the browser tried to connect to$/i, () => USE_TW ? "通常使用加密技術來保護您的資訊。當瀏覽器本次嘗試連線至 " : "通常使用加密技术来保护您的信息。当浏览器本次尝试连接到 "],
         [/^this time, the website sent back unusual and incorrect credentials\.?$/i, () => USE_TW ? " 時，該網站傳回了異常且不正確的憑證。" : " 时，该网站发回了异常且不正确的凭据。"],
         [/^(.+?)\s+normally uses encryption to protect your information\.\s*When the browser tried to connect to\s+(.+?)\s+this time,\s*the website sent back unusual and incorrect credentials\.?$/i, (m, h1, h2) => USE_TW ? (h1 + " 通常使用加密技術來保護您的資訊。當瀏覽器本次嘗試連線至 " + h2 + " 時，該網站傳回了異常且不正確的憑證。") : (h1 + " 通常使用加密技术来保护您的信息。当浏览器本次尝试连接到 " + h2 + " 时，该网站发回了异常且不正确的凭据。")],
-        [/^The certificate was rejected \((.+)\)\.\s*$/i, (m, code) => USE_TW ? ("憑證已被拒絕 (" + code + ")。") : ("证书已被拒绝 (" + code + ")。")],
+        [/^The certificate was rejected \((.+)\)\.\s*$/i, (m, code) => USE_TW ? ("憑證未通過驗證 (" + code + ")。") : ("证书未通过验证 (" + code + ")。")],
         [/^Nothing is running on port (\d+)$/i, (m, port) => USE_TW ? ("連接埠 " + port + " 上沒有執行中的服務") : ("端口 " + port + " 上没有正在运行的服务")],
         [/^Resume the conversation to start its workspace again, then start the server on port (\d+) and retry\.$/i, (m, port) => USE_TW ? ("請恢復對話以重新啟動其工作區，然後在連接埠 " + port + " 上啟動伺服器並重試。") : ("请恢复会话以重新启动其工作区，然后在端口 " + port + " 上启动服务器并重试。")],
         [/^No server is listening on port (\d+) inside the remote workspace\. Start it, or ask the agent to, then retry\.$/i, (m, port) => USE_TW ? ("遠端工作區內的連接埠 " + port + " 沒有伺服器正在監聽。請啟動伺服器（或請代理啟動），然後重試。") : ("远程工作区内的端口 " + port + " 没有服务器正在监听。请启动服务器（或让智能体启动），然后重试。")],
@@ -717,7 +717,7 @@
         [/^This deletes\s+(\d+)\s+call recordings?\s*\(([0-9.]+)\s*MB\)\s+from your machine\.\s*You can't undo this\.$/i, (m, count, mb) => USE_TW ? ("這將從您的電腦中刪除 " + count + " 筆通話錄音（" + mb + " MB）。此操作無法復原。") : ("这将从您的计算机中删除 " + count + " 条通话录音（" + mb + " MB）。此操作无法撤销。")],
         [/^Step\s+(\d+)\s+of\s+(\d+)$/i, (m, a, b) => USE_TW ? ("第 " + a + " 步，共 " + b + " 步") : ("第 " + a + " 步，共 " + b + " 步")],
         [/^\+(\d+)\s+more$/i, (m, num) => USE_TW ? ("另外 +" + num + " 項") : ("另外 +" + num + " 项")],
-        [/^Not referenced by any feature\s*\((\d+)\)$/i, (m, num) => USE_TW ? ("未被任何功能引用 (" + num + ")") : ("未被任何功能引用 (" + num + ")")],
+        [/^Not referenced by any feature\s*\((\d+)\)$/i, (m, num) => USE_TW ? ("尚無任何功能參照 (" + num + ")") : ("未被任何功能引用 (" + num + ")")],
         [/^Zipping\s+(.+?)(\.\.\.|…)?$/i, (m, name) => USE_TW ? ("正在壓縮 " + name + "...") : ("正在压缩 " + name + "...")],
         [/^There are currently no Build with\s+(.+?)\s+plugins available\.?$/i, (m, partner) => USE_TW ? ("目前沒有可用的 Build with " + partner + " 外掛程式。") : ("当前没有可用的 Build with " + partner + " 插件。")],
         [/^To switch accounts,\s*sign out in the\s+(.+?)\s+and sign in again\.?$/i, (m, place) => USE_TW ? ("如需切換帳戶，請在" + place + "中登出並重新登入。") : ("如需切换账户，请在" + place + "中退出登录并重新登录。")],
@@ -1469,6 +1469,12 @@
                     return;
                 }
                 if (cachedValue === originalVal || unchangedTextValues.get(node) === originalVal) return;
+
+                // Slash 指令標記（例如 /goal, /swarm, /boost 等）不得漢化，保留原生命令識別碼以防觸發異常
+                if (/^\/[a-zA-Z0-9_.-]+$/.test(valNorm)) {
+                    unchangedTextValues.set(node, originalVal);
+                    return;
+                }
 
                 // Material Symbol 字体缺失图标修复（保留 React TextNode 避免遍历失同步）
                 if (valNorm === 'restore_page' && node.parentElement && (

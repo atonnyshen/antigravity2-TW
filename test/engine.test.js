@@ -376,6 +376,18 @@ test('model availability and dynamic deprecation date warnings are localized acc
         [
             'Swarm · 4 workers',
             '蜂群 · 4 位成員'
+        ],
+        [
+            '/goal',
+            '/goal'
+        ],
+        [
+            '/swarm',
+            '/swarm'
+        ],
+        [
+            '/boost',
+            '/boost'
         ]
     ];
     for (const [input, expected] of cases) {
