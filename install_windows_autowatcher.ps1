@@ -1,4 +1,5 @@
-﻿$ErrorActionPreference = "Stop"
+﻿param([ValidateSet('off', 'notify', 'translations')][string]$UpdatePolicy = 'translations')
+$ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -33,5 +34,5 @@ if (-not $NodePath) {
     exit 1
 }
 
-& $NodePath $WatcherScript --install-windows-task
+& $NodePath $WatcherScript --install-windows-task "--update-policy=$UpdatePolicy"
 exit $LASTEXITCODE

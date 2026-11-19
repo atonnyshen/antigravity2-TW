@@ -325,6 +325,16 @@ function recipeHash() {
             }
         }
     }
+    const active = autoUpdater && typeof autoUpdater.readActiveTranslation === 'function'
+        ? autoUpdater.readActiveTranslation(DIR) : null;
+    if (active) {
+        files.push(path.join('.watcher-state', 'active_translation.json'));
+        for (const folder of ['dicts', 'dicts_tw']) {
+            for (const name of fs.readdirSync(path.join(active.folder, folder)).filter(x => x.endsWith('.json')).sort()) {
+                files.push(path.relative(DIR, path.join(active.folder, folder, name)));
+            }
+        }
+    }
     const hash = crypto.createHash('sha256');
     for (const file of files) {
         const fullPath = path.join(DIR, file);
@@ -376,6 +386,29 @@ function getLocalPackageVersion(baseDir = DIR) {
         }
     } catch {}
     return '3.7.1';
+}
+
+const UPDATE_MODES = new Set(['off', 'notify', 'translations']);
+
+function readUpdateMode(stateDir = path.join(DIR, '.watcher-state')) {
+    try {
+        const value = JSON.parse(fs.readFileSync(path.join(stateDir, 'update_policy.json'), 'utf8'));
+        if (value && UPDATE_MODES.has(value.mode)) return value.mode;
+        if (value && value.mode === 'auto') return 'translations';
+    } catch {}
+    // Existing installations did not consent to unattended new download actions.
+    return 'notify';
+}
+
+function setUpdateMode(mode, stateDir = path.join(DIR, '.watcher-state')) {
+    if (!UPDATE_MODES.has(mode)) throw new Error('不支援的自動更新模式：' + mode);
+    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    const target = path.join(stateDir, 'update_policy.json');
+    const temp = path.join(stateDir, `update_policy.${process.pid}.tmp`);
+    fs.writeFileSync(temp, JSON.stringify({ mode }) + '\n', { mode: 0o600, flag: 'wx' });
+    try { fs.renameSync(temp, target); }
+    catch (error) { try { fs.unlinkSync(temp); } catch {} throw error; }
+    return mode;
 }
 
 function ensureRegularTarget(file) {
@@ -504,7 +537,16 @@ function checkAndLocalizeApp(appInfo, {
         return false;
     }
     const targetMeta = localized ? extractLocalizationMeta(original) : null;
-    if (localized && targetMeta && targetMeta.version && compareVersions(targetMeta.version, currentVersion) > 0) {
+    const active = autoUpdater && typeof autoUpdater.readActiveTranslation === 'function'
+        ? autoUpdater.readActiveTranslation(DIR) : null;
+    const desiredTranslationVersion = active ? active.version : currentVersion;
+    const deployedTranslationVersion = targetMeta && (targetMeta.translationVersion || targetMeta.version);
+    const higherEngineVersion = targetMeta && targetMeta.version && compareVersions(targetMeta.version, currentVersion) > 0;
+    const externalSameVersion = targetMeta && targetMeta.version &&
+        compareVersions(targetMeta.version, currentVersion) === 0 &&
+        compareVersions(desiredTranslationVersion, deployedTranslationVersion || '') <= 0 &&
+        previous.output !== originalHash;
+    if (localized && (higherEngineVersion || externalSameVersion)) {
         try {
             const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
             fs.writeFileSync(stateTmp, JSON.stringify({
@@ -515,7 +557,7 @@ function checkAndLocalizeApp(appInfo, {
             }) + '\n');
             safeReplaceFile(stateTmp, statePath, 0o644, sourceStat.uid, sourceStat.gid);
         } catch {}
-        log(`偵測到目標 app.asar 已由較高版本 (v${targetMeta.version}) 套用，目前守護版本為 v${currentVersion}，主動略過以防反向回滾。`);
+        log(`目標 app.asar 來自外部同版或較新的引擎 (v${targetMeta.version})，主動保留以防回滾。`);
         return false;
     }
 
@@ -718,14 +760,18 @@ function installWindowsTask(options = {}) {
     const scriptPath = options.scriptPath || path.join(DIR, 'auto_localize_watcher.js');
     const taskName = options.taskName || 'AntigravityAutoLocalize';
     const baseDir = options.baseDir || DIR;
+    const updateMode = options.updateMode || 'translations';
     const workingDir = options.workingDir || path.dirname(scriptPath);
-    const runLevel = options.runLevel || (isWindowsAdmin(execSyncFn) ? 'HighestAvailable' : 'LeastPrivilege');
+    // An elevated task may execute from a user-writable project directory.
+    // Always register the background process at ordinary user privilege.
+    const runLevel = 'LeastPrivilege';
     const disableFlag = path.join(baseDir, '.disable_autowatcher');
 
     try {
         if (fs.existsSync(disableFlag)) fs.unlinkSync(disableFlag);
     } catch {}
 
+    setUpdateMode(updateMode, path.join(baseDir, '.watcher-state'));
     const taskRun = buildWindowsTaskCommand(nodePath, scriptPath);
     const xmlText = buildWindowsTaskXml({ nodePath, scriptPath, workingDir, runLevel });
     const xmlPath = path.join(os.tmpdir(), `ag_tw_task_${process.pid}_${Date.now()}.xml`);
@@ -816,6 +862,8 @@ async function maybeSelfUpdateAndReapply({
     if (process.env.AG_TW_NO_SELF_UPDATE === '1' || process.env.NODE_ENV === 'test') {
         return { updated: false, reason: 'disabled_by_env' };
     }
+    const mode = readUpdateMode(stateDir);
+    if (mode === 'off') return { updated: false, reason: 'updates_disabled' };
     const cacheFile = path.join(stateDir, 'update_check.json');
     const res = await updater.checkUpdate({
         currentVersion,
@@ -827,9 +875,14 @@ async function maybeSelfUpdateAndReapply({
     if (!res || !res.hasUpdate) {
         return { updated: false, reason: res && res.skipped ? 'within_interval' : 'up_to_date', checkResult: res };
     }
-    log(`發現繁中化新版本 ${res.tag} (目前: v${currentVersion})，準備下載並驗證自我更新...`);
-    if (typeof updater.selfUpdateWatcher !== 'function' || !res.release || !res.release.asset) {
-        return { updated: false, reason: 'no_self_update_asset', checkResult: res };
+    if (mode === 'notify') {
+        log(`發現繁中化版本 ${res.tag}；依目前設定僅通知，不會自動下載與執行。`);
+        if (typeof updater.notifyMac === 'function') updater.notifyMac('Antigravity 繁體中文化更新', `新版本 ${res.tag} 已發布，可自行選擇更新。`);
+        return { updated: false, reason: 'notification_only', checkResult: res };
+    }
+    log(`新版本 ${res.tag} 已發布，檢查是否提供相容的純翻譯資料包...`);
+    if (typeof updater.installTranslationUpdate !== 'function' || !res.release) {
+        return { updated: false, reason: 'no_translation_updater', checkResult: res };
     }
     const releaseLock = acquireLock(path.join(stateDir, 'run.lock'));
     if (!releaseLock) {
@@ -837,20 +890,22 @@ async function maybeSelfUpdateAndReapply({
     }
     let updateRes;
     try {
-        updateRes = await updater.selfUpdateWatcher({
+        updateRes = await updater.installTranslationUpdate({
             targetDir,
-            currentVersion,
+            currentEngineVersion: currentVersion,
             release: res.release,
-            cacheFilePath: cacheFile,
             ...updaterOptions
         });
     } finally {
         releaseLock();
     }
     if (updateRes && updateRes.updated) {
-        log(`守護程式已原子更新至 v${updateRes.newVersion}，正在以新版引擎重新檢查並套用繁中化...`);
+        log(`純翻譯資料包已更新至 v${updateRes.newVersion}，使用原有引擎重新套用繁體中文...`);
         execReapplyFn(targetDir);
-        log(`已自動更新至 v${updateRes.newVersion} 並完成繁中化套用。`);
+        log(`已完成 v${updateRes.newVersion} 翻譯資料套用；沒有更新程式功能。`);
+    } else if (updateRes && updateRes.reason === 'no_translation_only_asset') {
+        log(`新版本 ${res.tag} 沒有獨立翻譯包，請手動更新程式功能。`);
+        if (typeof updater.notifyMac === 'function') updater.notifyMac('Antigravity 繁體中文化更新', `新版本 ${res.tag} 已發布，程式功能須手動安裝。`);
     }
     return updateRes;
 }
@@ -859,7 +914,8 @@ async function main() {
     const args = process.argv.slice(2);
     if (args.includes('--install-windows-task')) {
         try {
-            installWindowsTask();
+            const modeArg = args.find(arg => arg.startsWith('--update-policy='));
+            installWindowsTask({ updateMode: modeArg ? modeArg.slice('--update-policy='.length) : 'translations' });
         } catch (err) {
             console.error('[錯誤] 註冊 Windows 背景排程失敗：' + (err.message || err));
             console.error('[提示] 若 Antigravity 安裝在 Program Files 等受保護路徑，請以「系統管理員身分」執行批次檔。');
@@ -918,5 +974,7 @@ module.exports = {
     compareVersions,
     extractLocalizationMeta,
     getLocalPackageVersion,
+    readUpdateMode,
+    setUpdateMode,
     maybeSelfUpdateAndReapply
 };

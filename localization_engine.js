@@ -200,9 +200,23 @@ function normalizeText(text) {
                .replace(/…/g, '...');
 }
 
+function getActiveTranslation() {
+    try {
+        const state = JSON.parse(fs.readFileSync(path.join(__dirname, '.watcher-state', 'active_translation.json'), 'utf8'));
+        if (!state || !/^\d+\.\d+\.\d+$/.test(state.version)) return null;
+        const root = path.join(__dirname, '.translation-packs');
+        const folder = path.join(root, state.version);
+        if (!fs.lstatSync(root).isDirectory() || !fs.lstatSync(folder).isDirectory()) return null;
+        if (!fs.statSync(path.join(folder, 'dicts')).isDirectory() ||
+            !fs.statSync(path.join(folder, 'dicts_tw')).isDirectory()) return null;
+        return { version: state.version, folder };
+    } catch { return null; }
+}
+
 function loadDictionary() {
     const totalMap = {};
-    const dictsDir = path.join(__dirname, DICTS_FOLDER);
+    const active = getActiveTranslation();
+    const dictsDir = path.join(active ? active.folder : __dirname, DICTS_FOLDER);
     if (fs.existsSync(dictsDir)) {
         const files = fs.readdirSync(dictsDir);
         for (const file of files) {
@@ -249,7 +263,8 @@ function generateJs() {
         .replace('__USE_TW_PLACEHOLDER__', () => (USE_TW ? 'true' : 'false'))
         .replace('DICT_PLACEHOLDER', () => dictJson);
 
-    const metaComment = `/* --- ANTIGRAVITY L10N META:${JSON.stringify({ version: getPackageVersion(), buildTime: Date.now() })} --- */`;
+    const active = getActiveTranslation();
+    const metaComment = `/* --- ANTIGRAVITY L10N META:${JSON.stringify({ version: getPackageVersion(), translationVersion: active ? active.version : getPackageVersion(), buildTime: Date.now() })} --- */`;
     return `${SIGNATURE_START}\n${metaComment}\n${body}\n${SIGNATURE_END}`;
 }
 
@@ -686,9 +701,9 @@ function acquireWatcherLockSync(lockPath, waitMs = 4000) {
                     if (ke.code !== 'ESRCH') alive = true;
                 }
             }
-            if (!alive || Date.now() >= deadline) {
+            if (alive && Date.now() >= deadline) return null;
+            if (!alive) {
                 try { fs.rmSync(lockPath, { recursive: true, force: true }); } catch {}
-                if (Date.now() >= deadline && alive) return null;
                 continue;
             }
             sleepSync(150);
@@ -736,7 +751,11 @@ function prepareMacWatcherSync({
         const stateDir = path.join(rtDir, '.watcher-state');
         fs.mkdirSync(stateDir, { recursive: true, mode: 0o755 });
         const release = acquireWatcherLockSync(path.join(stateDir, 'run.lock'));
-        if (release) session.locks.push(release);
+        if (!release) {
+            console.warn(`[守護程序] ${rtDir} 正在執行，未取得排他鎖。略過本次同步，避免覆寫執行中的守護程序。`);
+            continue;
+        }
+        session.locks.push(release);
 
         for (const file of ['auto_localize_watcher.js', 'localization_engine.js', 'package.json', 'package-lock.json']) {
             const srcFile = path.join(sourceDir, file);

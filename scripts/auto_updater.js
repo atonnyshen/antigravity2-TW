@@ -55,7 +55,7 @@ function isAllowedAssetUrl(rawUrl, {
 
 function selectReleaseAsset(assets = []) {
     if (!Array.isArray(assets)) return null;
-    const preferred = assets.find(a => a && /^antigravity2-TW-.*\.zip$/i.test(a.name || '') && a.browser_download_url);
+    const preferred = assets.find(a => a && /^antigravity2-TW-v\d+\.\d+\.\d+\.zip$/i.test(a.name || '') && a.browser_download_url);
     if (preferred) {
         return {
             name: preferred.name,
@@ -64,14 +64,130 @@ function selectReleaseAsset(assets = []) {
             digest: preferred.digest || ''
         };
     }
-    const fallback = assets.find(a => a && /\.zip$/i.test(a.name || '') && a.browser_download_url);
-    if (!fallback) return null;
+    return null;
+}
+
+function selectTranslationAsset(assets = [], releaseTag = '') {
+    if (!Array.isArray(assets) || !/^v\d+\.\d+\.\d+$/.test(releaseTag)) return null;
+    const name = `antigravity2-TW-translations-${releaseTag}.zip`;
+    const asset = assets.find(a => a && a.name === name && a.browser_download_url);
+    if (!asset) return null;
     return {
-        name: fallback.name,
-        url: fallback.browser_download_url,
-        size: fallback.size || 0,
-        digest: fallback.digest || ''
+        name, url: asset.browser_download_url,
+        size: Number(asset.size) || 0,
+        digest: asset.digest || ''
     };
+}
+
+function readActiveTranslation(baseDir) {
+    try {
+        const raw = JSON.parse(fs.readFileSync(path.join(baseDir, '.watcher-state', 'active_translation.json'), 'utf8'));
+        if (!raw || !/^\d+\.\d+\.\d+$/.test(raw.version)) return null;
+        const folder = path.join(baseDir, '.translation-packs', raw.version);
+        if (!fs.lstatSync(path.join(baseDir, '.translation-packs')).isDirectory() ||
+            !fs.lstatSync(folder).isDirectory()) return null;
+        return { version: raw.version, folder };
+    } catch { return null; }
+}
+
+function validateTranslationPack(folder, releaseVersion, engineVersion) {
+    const allowedTop = new Set(['translation-pack.json', 'dicts', 'dicts_tw']);
+    const top = fs.readdirSync(folder, { withFileTypes: true });
+    if (top.length !== allowedTop.size || top.some(e => !allowedTop.has(e.name) || e.isSymbolicLink())) {
+        throw new Error('Translation ZIP contains unexpected files or links');
+    }
+    const manifestPath = path.join(folder, 'translation-pack.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    if (!manifest || manifest.schemaVersion !== 1 || manifest.version !== releaseVersion ||
+        !/^\d+\.\d+\.\d+$/.test(manifest.minEngineVersion || '') ||
+        !/^\d+\.\d+\.\d+$/.test(manifest.maxEngineVersion || '')) {
+        throw new Error('Invalid translation pack manifest');
+    }
+    if (compareVersions(engineVersion, manifest.minEngineVersion) < 0 ||
+        compareVersions(engineVersion, manifest.maxEngineVersion) > 0) {
+        throw new Error(`Translation pack ${releaseVersion} is incompatible with engine ${engineVersion}`);
+    }
+    let totalSize = 0;
+    for (const folderName of ['dicts', 'dicts_tw']) {
+        const subdir = path.join(folder, folderName);
+        if (!fs.statSync(subdir).isDirectory()) throw new Error('Invalid translation directory');
+        const entries = fs.readdirSync(subdir, { withFileTypes: true });
+        if (!entries.length || entries.length > 80) throw new Error('Unexpected dictionary file count');
+        for (const entry of entries) {
+            if (!entry.isFile() || !/^[A-Za-z0-9_-]+\.json$/.test(entry.name)) {
+                throw new Error('Translation pack contains an unsafe dictionary file');
+            }
+            const content = fs.readFileSync(path.join(subdir, entry.name));
+            if (content.length > 8 * 1024 * 1024) throw new Error('Dictionary file too large');
+            totalSize += content.length;
+            const obj = JSON.parse(content.toString('utf8'));
+            if (!obj || typeof obj !== 'object' || Array.isArray(obj) ||
+                Object.values(obj).some(v => typeof v !== 'string')) {
+                throw new Error('Translation pack contains invalid dictionary values');
+            }
+        }
+    }
+    if (totalSize > 32 * 1024 * 1024) throw new Error('Translation pack exceeds maximum size');
+    const { compareDicts } = require('./compare_dicts');
+    if (!compareDicts(path.join(folder, 'dicts'), path.join(folder, 'dicts_tw'))) {
+        throw new Error('Translation pack failed terminology and dictionary alignment checks');
+    }
+    return manifest;
+}
+
+async function installTranslationUpdate({
+    targetDir, currentEngineVersion, release,
+    downloadFn = downloadVerifiedAsset,
+    extractFn = extractZipArchive
+} = {}) {
+    if (!targetDir || !release || !/^v\d+\.\d+\.\d+$/.test(release.tag || '')) {
+        throw new Error('Invalid translation update request');
+    }
+    const version = release.tag.slice(1);
+    const current = readActiveTranslation(targetDir);
+    const installedVersion = current ? current.version : currentEngineVersion;
+    if (compareVersions(version, installedVersion) <= 0) {
+        return { updated: false, reason: 'translation_up_to_date' };
+    }
+    const asset = selectTranslationAsset(release.assets, release.tag);
+    if (!asset) return { updated: false, reason: 'no_translation_only_asset' };
+    const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ag2tw-translation-update-'));
+    let stageDir = null;
+    try {
+        const zipPath = path.join(workRoot, asset.name);
+        await downloadFn(asset.url, zipPath, { expectedDigest: asset.digest });
+        const extracted = extractFn(zipPath, path.join(workRoot, 'unpacked'));
+        validateTranslationPack(extracted, version, currentEngineVersion);
+
+        const packsRoot = path.join(targetDir, '.translation-packs');
+        if (fs.existsSync(packsRoot) && !fs.lstatSync(packsRoot).isDirectory()) {
+            throw new Error('Unsafe translation pack root');
+        }
+        fs.mkdirSync(packsRoot, { recursive: true, mode: 0o700 });
+        const finalDir = path.join(packsRoot, version);
+        stageDir = fs.mkdtempSync(path.join(packsRoot, '.stage-'));
+        for (const dir of ['dicts', 'dicts_tw']) copyDirRecursive(path.join(extracted, dir), path.join(stageDir, dir));
+        fs.copyFileSync(path.join(extracted, 'translation-pack.json'), path.join(stageDir, 'translation-pack.json'));
+        if (fs.existsSync(finalDir)) {
+            validateTranslationPack(finalDir, version, currentEngineVersion);
+            fs.rmSync(stageDir, { recursive: true, force: true });
+        } else {
+            fs.renameSync(stageDir, finalDir);
+        }
+        stageDir = null;
+
+        const stateDir = path.join(targetDir, '.watcher-state');
+        fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+        const statePath = path.join(stateDir, 'active_translation.json');
+        const tempPath = path.join(stateDir, `active_translation.${process.pid}.tmp`);
+        fs.writeFileSync(tempPath, JSON.stringify({ version }) + '\n', { flag: 'wx', mode: 0o600 });
+        try { fs.renameSync(tempPath, statePath); }
+        catch (error) { try { fs.unlinkSync(tempPath); } catch {} throw error; }
+        return { updated: true, previousVersion: installedVersion, newVersion: version, dataOnly: true };
+    } finally {
+        if (stageDir) try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch {}
+        fs.rmSync(workRoot, { recursive: true, force: true });
+    }
 }
 
 function fetchLatestRelease(repo = 'atonnyshen/antigravity2-TW', timeoutMs = 6000, apiUrl = null) {
@@ -82,6 +198,10 @@ function fetchLatestRelease(repo = 'atonnyshen/antigravity2-TW', timeoutMs = 600
             parsed = new URL(url);
         } catch (err) {
             return reject(err);
+        }
+        if (parsed.protocol !== 'https:' || parsed.hostname !== 'api.github.com' ||
+            !/^\/repos\/atonnyshen\/antigravity2-TW\/releases\/latest\/?$/.test(parsed.pathname)) {
+            return reject(new Error('Blocked untrusted release metadata URL'));
         }
         const transport = parsed.protocol === 'http:' ? http : https;
         const options = {
@@ -96,7 +216,12 @@ function fetchLatestRelease(repo = 'atonnyshen/antigravity2-TW', timeoutMs = 600
             if (res.statusCode === 301 || res.statusCode === 302) {
                 const redirectUrl = res.headers.location;
                 if (!redirectUrl) return reject(new Error('Redirect location missing'));
-                return transport.get(redirectUrl, options, redirectRes => {
+                const next = new URL(redirectUrl, url);
+                if (next.protocol !== 'https:' || next.hostname !== 'api.github.com' || next.pathname !== parsed.pathname) {
+                    return reject(new Error('Blocked release API redirect'));
+                }
+                res.resume();
+                return https.get(next, options, redirectRes => {
                     handleResponse(redirectRes, resolve, reject);
                 }).on('error', reject);
             }
@@ -114,7 +239,11 @@ function fetchLatestRelease(repo = 'atonnyshen/antigravity2-TW', timeoutMs = 600
 function handleResponse(res, resolve, reject) {
     let body = '';
     res.setEncoding('utf8');
-    res.on('data', chunk => { body += chunk; });
+    res.on('data', chunk => {
+        body += chunk;
+        if (body.length > 2 * 1024 * 1024) res.destroy(new Error('Release metadata exceeds size limit'));
+    });
+    res.on('error', reject);
     res.on('end', () => {
         if (res.statusCode !== 200) {
             return reject(new Error(`GitHub API returned status ${res.statusCode}`));
@@ -146,6 +275,10 @@ function downloadVerifiedAsset(assetUrl, destPath, {
     allowedProtocols = ['https:']
 } = {}) {
     return new Promise((resolve, reject) => {
+        const normalizedExpected = String(expectedDigest || '').replace(/^sha256:/i, '').trim().toLowerCase();
+        if (!/^[a-f0-9]{64}$/.test(normalizedExpected)) {
+            return reject(new Error('Release asset has no valid mandatory SHA-256 digest'));
+        }
         const partPath = `${destPath}.part`;
         const cleanupPart = () => {
             try { if (fs.existsSync(partPath)) fs.unlinkSync(partPath); } catch {}
@@ -207,12 +340,9 @@ function downloadVerifiedAsset(assetUrl, destPath, {
                             return reject(new Error('Downloaded asset is empty'));
                         }
                         const actualSha256 = hash.digest('hex').toLowerCase();
-                        if (expectedDigest) {
-                            const normalizedExpected = String(expectedDigest).replace(/^sha256:/i, '').trim().toLowerCase();
-                            if (!/^[a-f0-9]{64}$/.test(normalizedExpected) || actualSha256 !== normalizedExpected) {
-                                cleanupPart();
-                                return reject(new Error(`SHA-256 checksum mismatch: expected ${normalizedExpected}, got ${actualSha256}`));
-                            }
+                        if (actualSha256 !== normalizedExpected) {
+                            cleanupPart();
+                            return reject(new Error(`SHA-256 checksum mismatch: expected ${normalizedExpected}, got ${actualSha256}`));
                         }
                         fs.renameSync(partPath, destPath);
                         resolve({ path: destPath, sha256: actualSha256, bytes: totalBytes });
@@ -243,7 +373,72 @@ function downloadVerifiedAsset(assetUrl, destPath, {
     });
 }
 
+// Read the ZIP central directory without extracting untrusted entries. Reject
+// path traversal, links, special files and oversized archives on every OS.
+function verifyZipEntries(zipPath) {
+    const st = fs.statSync(zipPath);
+    if (st.size < 22 || st.size > 128 * 1024 * 1024) throw new Error('Invalid ZIP file size');
+    const buf = fs.readFileSync(zipPath);
+    let eocd = -1;
+    for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
+        if (buf.readUInt32LE(i) === 0x06054b50 && i + 22 + buf.readUInt16LE(i + 20) === buf.length) {
+            eocd = i;
+            break;
+        }
+    }
+    if (eocd < 0) throw new Error('ZIP end-of-central-directory not found');
+    const count = buf.readUInt16LE(eocd + 10);
+    const centralSize = buf.readUInt32LE(eocd + 12);
+    let pos = buf.readUInt32LE(eocd + 16);
+    if (!count || count === 0xffff || count > 4000 || pos === 0xffffffff ||
+        centralSize === 0xffffffff || pos + centralSize > eocd) {
+        throw new Error('ZIP central-directory bounds invalid or unsupported');
+    }
+    const end = pos + centralSize;
+    let totalSize = 0;
+    for (let n = 0; n < count; n++) {
+        if (pos + 46 > end || buf.readUInt32LE(pos) !== 0x02014b50) throw new Error('Invalid ZIP central directory');
+        const flags = buf.readUInt16LE(pos + 8);
+        const method = buf.readUInt16LE(pos + 10);
+        const compressed = buf.readUInt32LE(pos + 20);
+        const unpacked = buf.readUInt32LE(pos + 24);
+        const nameLen = buf.readUInt16LE(pos + 28);
+        const extraLen = buf.readUInt16LE(pos + 30);
+        const commentLen = buf.readUInt16LE(pos + 32);
+        const next = pos + 46 + nameLen + extraLen + commentLen;
+        if (next > end || !nameLen || (flags & 1) || ![0, 8].includes(method) ||
+            compressed === 0xffffffff || unpacked === 0xffffffff) {
+            throw new Error('Invalid or encrypted ZIP entry');
+        }
+        const name = buf.subarray(pos + 46, pos + 46 + nameLen).toString(flags & 0x800 ? 'utf8' : 'latin1');
+        const localOffset = buf.readUInt32LE(pos + 42);
+        if (localOffset + 30 > buf.length || buf.readUInt32LE(localOffset) !== 0x04034b50 ||
+            buf.readUInt16LE(localOffset + 8) !== method) {
+            throw new Error('Invalid ZIP local header');
+        }
+        const localNameLen = buf.readUInt16LE(localOffset + 26);
+        const localName = buf.subarray(localOffset + 30, localOffset + 30 + localNameLen);
+        if (localOffset + 30 + localNameLen > buf.length ||
+            !localName.equals(buf.subarray(pos + 46, pos + 46 + nameLen))) {
+            throw new Error('ZIP local filename differs from central directory');
+        }
+        const parts = name.split('/');
+        if (name.startsWith('/') || name.includes('\\') || name.includes('\0') || name.includes(':') ||
+            parts.some(part => part === '.' || part === '..' || /[. ]$/.test(part) && part !== '')) {
+            throw new Error(`Unsafe ZIP entry path: ${name}`);
+        }
+        const mode = (buf.readUInt32LE(pos + 38) >>> 16) & 0o170000;
+        if (![0, 0o040000, 0o100000].includes(mode)) throw new Error(`Unsafe ZIP entry type: ${name}`);
+        totalSize += unpacked;
+        if (totalSize > 256 * 1024 * 1024) throw new Error('ZIP exceeds maximum uncompressed size');
+        pos = next;
+    }
+    if (pos !== end) throw new Error('Unexpected ZIP central-directory trailing bytes');
+    return { entries: count, uncompressedBytes: totalSize };
+}
+
 function extractZipArchive(zipPath, extractDir) {
+    verifyZipEntries(zipPath);
     fs.mkdirSync(extractDir, { recursive: true });
     if (process.platform === 'win32') {
         execFileSync('tar.exe', ['-xf', zipPath, '-C', extractDir], { stdio: 'pipe', timeout: 60000 });
@@ -420,6 +615,10 @@ async function selfUpdateWatcher({
         return { updated: false, reason: 'no_zip_asset' };
     }
     const remoteVersion = String(release.tag || '').replace(/^v/, '');
+    if (!/^\d+\.\d+\.\d+$/.test(remoteVersion)) throw new Error('Release version must be a stable numeric version');
+    if (release.asset.name !== `antigravity2-TW-v${remoteVersion}.zip`) {
+        throw new Error('Release ZIP filename does not match release tag');
+    }
     if (!remoteVersion || compareVersions(remoteVersion, currentVersion) <= 0) {
         return { updated: false, reason: 'up_to_date' };
     }
@@ -436,6 +635,7 @@ async function selfUpdateWatcher({
         const extractDir = path.join(workRoot, 'extracted');
         const pkgDir = extractFn(zipPath, extractDir);
         const pkg = validateExtractedPackage(pkgDir, currentVersion);
+        if (pkg.version !== remoteVersion) throw new Error('Extracted package version disagrees with Release tag');
         const result = applySelfUpdateAtomic(pkgDir, targetDir);
 
         if (cacheFilePath) {
@@ -527,12 +727,18 @@ module.exports = {
     compareVersions,
     isAllowedAssetUrl,
     selectReleaseAsset,
+    selectTranslationAsset,
+    readActiveTranslation,
+    validateTranslationPack,
+    installTranslationUpdate,
+    verifyZipEntries,
     fetchLatestRelease,
     downloadVerifiedAsset,
     extractZipArchive,
     validateExtractedPackage,
-    applySelfUpdateAtomic,
-    selfUpdateWatcher,
+    // Retain the old public name as a fail-closed compatibility shim.
+    // Executable feature updates must use the manual installer.
+    selfUpdateWatcher: async () => ({ updated: false, reason: 'manual_code_update_required' }),
     checkUpdate,
     notifyMac
 };

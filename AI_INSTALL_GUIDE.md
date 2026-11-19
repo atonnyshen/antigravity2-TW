@@ -1,6 +1,6 @@
 # Antigravity 2.0 繁體中文套件 — AI 助手標準安裝手冊（AI Install Playbook）
 
-> 本手冊隨套件附帶於壓縮檔與 Git 儲存庫根目錄。  
+> 本手冊隨套件附帶於壓縮檔與 Git 存放庫根目錄。
 > **給正在閱讀本文件的 AI 助手**：請**嚴格依序**執行以下兩個階段。**在完成「第一階段：唯讀檢查」並由使用者明確回覆選項前，請勿修改任何系統或 Antigravity 應用程式檔案。**
 
 ---
@@ -31,7 +31,7 @@
      - 除選用的 24 小時 GitHub 版本檢測外，無上傳本機資料的網路行為。
 3. **向使用者回報並提供選項**：
    用簡明繁體中文列出環境檢查與安全確認結果，接著請使用者直接回覆數字 **1～4**：
-   - **`1` 一鍵安裝繁體中文 + 啟用背景自動更新守護（推薦，官方更新或套件升版時可自動同步與自我更新）**
+    - **`1` 一鍵安裝繁體中文 + 啟用背景守護（推薦；官方更新後重套繁中，僅自動更新經驗證的純翻譯資料）**
    - **`2` 僅安裝繁體中文（若本機曾裝過背景守護，引擎會自動同步刷新守護快照以防回滾）**
    - **`3` 只看檢查結果，暫不修改**
    - **`4` 卸載背景自動守護並還原官方原版英文**
@@ -47,21 +47,21 @@
   ```bash
   node localization_engine.js --tw --no-kill --sync-watcher --brand-title english
   ```
-- **步驟 B（啟用或更新背景守護，每 5 分鐘自動巡檢，並支援安全校驗自我更新）**：
+- **步驟 B（啟用或更新背景守護，每 5 分鐘巡檢；只自動取得經驗證的純翻譯資料，不升級程式功能）**：
   - **macOS**：
     ```bash
-    bash install_macos_autowatcher.sh
+    bash install_macos_autowatcher.sh --update-policy=translations
     ```
   - **Windows**：
     ```powershell
-    node auto_localize_watcher.js --install-windows-task
+    node auto_localize_watcher.js --install-windows-task --update-policy=translations
     ```
 
 ### 選項 `2`：僅安裝繁體中文
 ```bash
 node localization_engine.js --tw --no-kill --sync-watcher --brand-title english
 ```
-*(若本機已安裝舊版 macOS `LaunchAgent` 或 Windows `AntigravityAutoLocalize` 排程，`--sync-watcher` 與版本保護機制會自動將背景守護更新至目前版本，避免舊版守護將 `app.asar` 反向回滾。若使用者日後希望官方更新時自動重套，可再回來執行背景守護安裝。)*
+*(如果本機已安裝守護程序，安裝器會在取得鎖定且權限允許時同步現有守護副本。沒有取得鎖定時應保留現有程序，不宣稱同步成功；如需變更背景權限或更新政策，請重新執行守護安裝器。)*
 
 ### 選項 `3`：僅做唯讀檢查
 不執行任何寫入指令，結束任務。
