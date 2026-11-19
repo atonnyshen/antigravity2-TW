@@ -21,11 +21,13 @@
 
    ```bash
    gh api repos/atonnyshen/antigravity2-TW/releases/tags/vX.Y.Z |
-     node scripts/check_release_assets.js vX.Y.Z
+     node scripts/check_release_assets.js vX.Y.Z \
+       --file dist/antigravity2-TW-translations-vX.Y.Z.zip \
+       --engine-version X.Y.Z
    ```
 
-   檢查器拒絕：非 draft、版本錯誤、非唯一純翻譯 ZIP、SHA-256 digest 缺失、未上傳完成或空檔。它核對的是 GitHub API 的 **實際 Release 資產清單**，不是本機預計上傳的檔名。
-6. 再以 GitHub API 提供的 `assets[].digest` 對帳本機翻譯 ZIP 的 SHA-256，確認內容相同。核對 Source code (zip) 的安裝方式與 Release Notes 告知內容。
+   檢查器拒絕：非 draft、版本錯誤、非唯一純翻譯 ZIP、SHA-256 digest 缺失、未上傳完成、空檔、GitHub 與本機 ZIP 雜湊不符、ZIP 混入程式碼、字典格式錯誤、引擎版本不相容。它核對的是 GitHub API 的**實際 Release 資產清單**與**本機實際 ZIP 內容**，不是單憑檔名驗收。`--engine-version` 必須指定已測試的目標引擎版本；不同引擎若需支援，應分別測試。
+6. 上一步已核對 GitHub API `assets[].digest` 與本機 ZIP 的 SHA-256，仍須人工核對 Source code (zip) 的安裝方式及 Release Notes。**注意這是 SOP 中要求手動執行的發布前檢查，目前沒有接進 GitHub Actions 的自動發布管線，不能宣稱 CI 保證放行。**
 7. 經人工核准後才以 `gh release edit vX.Y.Z --draft=false` 發布，並立即唯讀重新核對發布後的資產清單。不得因為檢查器通過，就省略人工發布核准。
 
 ## 不符合即停止發布

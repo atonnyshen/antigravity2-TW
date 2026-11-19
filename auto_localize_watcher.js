@@ -836,6 +836,13 @@ async function refreshTranslationsAndReapply({
             env: { ...process.env, AG_TW_SKIP_TRANSLATION_CHECK: '1' }
         });
     },
+    verifyReapplyFn = (version) => {
+        const appInfo = getAppInfo();
+        if (!appInfo) return false;
+        const archive = fs.readFileSync(appInfo.asarPath);
+        const meta = extractLocalizationMeta(archive);
+        return isLocalized(archive) && meta && meta.translationVersion === version;
+    },
     updaterOptions = {}
 } = {}) {
     if (!updater || typeof updater.checkUpdate !== 'function') return { updated: false, reason: 'no_updater' };
@@ -883,6 +890,9 @@ async function refreshTranslationsAndReapply({
         log(`純翻譯資料包已更新至 v${updateRes.newVersion}，使用原有引擎重新套用繁體中文...`);
         try {
             execReapplyFn(targetDir);
+            if (!verifyReapplyFn(updateRes.newVersion)) {
+                throw new Error('守護程序執行完畢，但 app.asar 未載入新版翻譯，不能宣稱套用成功。');
+            }
         } catch (error) {
             // A valid dictionary can still fail when patching an unfamiliar
             // upstream application. Undo the active-data pointer so that
@@ -964,7 +974,7 @@ async function main() {
         if (IS_MAC && (error.code === 'EPERM' || (error.message && error.message.includes('EPERM')))) {
             notifyMacUser('Antigravity 繁中化', '因 macOS 系統權限或 App 管理限制，自動覆寫受阻；請在專案中執行「點兩下安裝繁體中文」或於系統設定授權。');
         } else if (process.platform === 'win32' && (error.code === 'EPERM' || error.code === 'EACCES' || (error.message && (error.message.includes('EPERM') || error.message.includes('EACCES'))))) {
-            log('因 Windows 資料夾權限限制（例如 Program Files），自動覆寫受阻；請改用「以系統管理員身分執行」重新安裝守護。');
+            log('因 Windows 資料夾權限限制（例如 Program Files），最低權限排程無法自動覆寫。請依安裝手冊以管理員身分手動重新套用中文化；重新安裝守護不會提高背景排程權限。');
         }
         process.exitCode = 1;
     }

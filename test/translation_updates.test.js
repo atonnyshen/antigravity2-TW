@@ -167,7 +167,8 @@ test('installed watcher automatically updates only translations without a separa
         stateDir,
         updater,
         currentVersion: '3.7.1',
-        execReapplyFn: () => { reapplications++; }
+        execReapplyFn: () => { reapplications++; },
+        verifyReapplyFn: () => true
     });
     assert.equal(result.updated, true);
     assert.equal(checks, 1);
@@ -291,4 +292,34 @@ test('failed first translation update clears its pointer and falls back to bundl
         execReapplyFn: () => { throw new Error('mock ASAR write failure'); }
     }), /mock ASAR write failure/);
     assert.equal(fs.existsSync(stateFile), false);
+});
+
+test('successful child exit without new deployed translation is treated as failure and rolls back pointer', async t => {
+    const root = fixture(t);
+    const stateDir = path.join(root, '.watcher-state');
+    fs.mkdirSync(stateDir);
+    const stateFile = path.join(stateDir, 'active_translation.json');
+    fs.writeFileSync(stateFile, JSON.stringify({ version: '3.7.4' }));
+    const oldEnv = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
+    t.after(() => {
+        if (oldEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = oldEnv;
+    });
+    let reapplyCalls = 0;
+    await assert.rejects(watcher.refreshTranslationsAndReapply({
+        targetDir: root, stateDir, currentVersion: '3.7.1',
+        updater: {
+            readActiveTranslation: () => ({ version: '3.7.4' }),
+            checkUpdate: async () => ({ hasUpdate: true, tag: 'v3.7.5', release: { tag: 'v3.7.5' } }),
+            installTranslationUpdate: async () => {
+                fs.writeFileSync(stateFile, JSON.stringify({ version: '3.7.5' }));
+                return { updated: true, newVersion: '3.7.5' };
+            }
+        },
+        execReapplyFn: () => { reapplyCalls++; },
+        verifyReapplyFn: () => false
+    }), /app.asar 未載入新版翻譯/);
+    assert.equal(reapplyCalls, 1);
+    assert.equal(JSON.parse(fs.readFileSync(stateFile, 'utf8')).version, '3.7.4');
 });

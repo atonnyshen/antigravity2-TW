@@ -25,7 +25,7 @@
 正式 v3.7.1 的舊守護程序仍能選取新 Release 內的完整 ZIP，進而自動更新程式碼。請檢查：
 - 只修改新分支不會停止舊版守護程序的舊行為。
 - 若新 Release 仍附加完整程式 ZIP，舊版使用者可能在未理解新政策前自動升級程式功能。
-- 提出**不破壞舊讀者、可人工下載完整程式、但舊守護程序不會取得並執行新程式碼**的實際發布方案。**注意正式 v3.7.1 有兩層 ZIP 篩選：`/^antigravity2-TW-.*\.zip$/i` 與後備 `/\.zip$/i`。把完整程式命名為 `antigravity2-TW-manual-setup-vX.Y.Z.zip` 或任何其他 ZIP 並上傳至 Release Assets，都不能規避舊版自動下載。** GitHub 自動產生的 Source code (ZIP) 可供手動安裝，且不在 `assets[]` 中。所有新發布應先建立 draft，並以 `gh api repos/atonnyshen/antigravity2-TW/releases/tags/vX.Y.Z | node scripts/check_release_assets.js vX.Y.Z` 驗證，通過後仍需人工批准才能公開。詳見 `docs/RELEASE_TRANSLATION_ONLY_SOP.md`。另以隔離測試驗證舊程式遇到純翻譯 ZIP 時確實 fail closed，不能只宣稱規避成功。
+- 提出**不破壞舊讀者、可人工下載完整程式、但舊守護程序不會取得並執行新程式碼**的實際發布方案。**注意正式 v3.7.1 有兩層 ZIP 篩選：`/^antigravity2-TW-.*\.zip$/i` 與後備 `/\.zip$/i`。把完整程式命名為 `antigravity2-TW-manual-setup-vX.Y.Z.zip` 或任何其他 ZIP 並上傳至 Release Assets，都不能規避舊版自動下載。** GitHub 自動產生的 Source code (ZIP) 可供手動安裝，且不在 `assets[]` 中。所有新發布應先建立 draft，並以 `gh api repos/atonnyshen/antigravity2-TW/releases/tags/vX.Y.Z | node scripts/check_release_assets.js vX.Y.Z --file dist/antigravity2-TW-translations-vX.Y.Z.zip --engine-version X.Y.Z` 驗證，通過後仍需人工批准才能公開。詳見 `docs/RELEASE_TRANSLATION_ONLY_SOP.md`。另以隔離測試驗證舊程式遇到純翻譯 ZIP 時確實 fail closed，不能只宣稱規避成功。
 - 必須核對 `assets[].digest` 提供 SHA-256；如缺少 digest，新守護程序不得自動下載。
 
 ## 驗證命令與界線
