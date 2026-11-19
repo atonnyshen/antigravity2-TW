@@ -91,8 +91,10 @@ function buildTranslationPack({ version, minEngineVersion, maxEngineVersion, out
 
 if (require.main === module) {
     const version = getArg('--version', releaseVersion);
-    const minEngineVersion = getArg('--min-engine', version);
-    const maxEngineVersion = getArg('--max-engine', version);
+    // Translation release versions may advance without upgrading executable code.
+    // Default to the current engine version, not to the data-release tag.
+    const minEngineVersion = getArg('--min-engine', releaseVersion);
+    const maxEngineVersion = getArg('--max-engine', releaseVersion);
     const output = path.resolve(getArg('--output', path.join(repo, 'dist', `antigravity2-TW-translations-v${version}.zip`)));
     const { validateTranslationPack, verifyZipEntries } = require('./auto_updater');
     const { compareDicts } = require('./compare_dicts');

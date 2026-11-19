@@ -7,16 +7,11 @@ if [ "$(uname -s)" != Darwin ]; then
 fi
 
 MODE="auto"
-UPDATE_POLICY="translations"
 for arg in "$@"; do
     case "$arg" in
         --user) MODE="user" ;;
         --daemon) MODE="daemon" ;;
-        --update-policy=off) UPDATE_POLICY="off" ;;
-        --update-policy=notify) UPDATE_POLICY="notify" ;;
-        --update-policy=translations) UPDATE_POLICY="translations" ;;
-        --update-policy=auto) UPDATE_POLICY="translations" ;;
-        --update-policy=*) echo "不支援的套件更新模式：$arg" >&2; exit 1 ;;
+        *) echo "不支援的安裝參數：$arg。守護程序預設自動更新翻譯資料。" >&2; exit 1 ;;
     esac
 done
 
@@ -100,17 +95,15 @@ else
             IS_DAEMON=0
         else
             echo "偵測到目標應用程式需要管理員權限，嘗試提權..."
-            exec sudo /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon "--update-policy=$UPDATE_POLICY"
+            exec sudo /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
         fi
     fi
 fi
 
 if [ "$IS_DAEMON" -eq 1 ] && [ "$EUID" -ne 0 ]; then
     echo "以管理員認證安裝系統服務..."
-    exec sudo /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon "--update-policy=$UPDATE_POLICY"
+    exec sudo /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
 fi
-
-# Every update mode excludes unattended replacement of executable code.
 
 if [ "$IS_DAEMON" -eq 1 ]; then
     echo "🛡️ 安裝為系統級 LaunchDaemon 守護服務..."
@@ -147,8 +140,6 @@ if [ "$IS_DAEMON" -eq 1 ]; then
     /usr/sbin/chown -R root:wheel "$RUNTIME"
     /bin/chmod -R go-w "$RUNTIME"
     /usr/bin/install -d -o root -g wheel -m 700 "$RUNTIME/.watcher-state"
-    /usr/bin/printf '{"mode":"%s"}\n' "$UPDATE_POLICY" > "$RUNTIME/.watcher-state/update_policy.json"
-    /bin/chmod 600 "$RUNTIME/.watcher-state/update_policy.json"
     
     PLIST_TMP="$(mktemp "$BASE/launchd.XXXXXX")"
     cat > "$PLIST_TMP" <<PLIST_EOF
@@ -232,8 +223,7 @@ else
         fi
     done
     mkdir -p "$RUNTIME/.watcher-state"
-    /usr/bin/printf '{"mode":"%s"}\n' "$UPDATE_POLICY" > "$RUNTIME/.watcher-state/update_policy.json"
-    chmod 600 "$RUNTIME/.watcher-state/update_policy.json"
+    rm -f "$RUNTIME/.watcher-state/update_policy.json"
     
     PLIST_TMP="$(mktemp "$BASE/launchd.XXXXXX")"
     cat > "$PLIST_TMP" <<PLIST_EOF

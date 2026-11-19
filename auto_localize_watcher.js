@@ -388,29 +388,6 @@ function getLocalPackageVersion(baseDir = DIR) {
     return '3.7.1';
 }
 
-const UPDATE_MODES = new Set(['off', 'notify', 'translations']);
-
-function readUpdateMode(stateDir = path.join(DIR, '.watcher-state')) {
-    try {
-        const value = JSON.parse(fs.readFileSync(path.join(stateDir, 'update_policy.json'), 'utf8'));
-        if (value && UPDATE_MODES.has(value.mode)) return value.mode;
-        if (value && value.mode === 'auto') return 'translations';
-    } catch {}
-    // Existing installations did not consent to unattended new download actions.
-    return 'notify';
-}
-
-function setUpdateMode(mode, stateDir = path.join(DIR, '.watcher-state')) {
-    if (!UPDATE_MODES.has(mode)) throw new Error('不支援的自動更新模式：' + mode);
-    fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
-    const target = path.join(stateDir, 'update_policy.json');
-    const temp = path.join(stateDir, `update_policy.${process.pid}.tmp`);
-    fs.writeFileSync(temp, JSON.stringify({ mode }) + '\n', { mode: 0o600, flag: 'wx' });
-    try { fs.renameSync(temp, target); }
-    catch (error) { try { fs.unlinkSync(temp); } catch {} throw error; }
-    return mode;
-}
-
 function ensureRegularTarget(file) {
     // Refuse symlink destinations before privileged backup/replacement.
     const parentDir = path.dirname(file);
@@ -760,7 +737,6 @@ function installWindowsTask(options = {}) {
     const scriptPath = options.scriptPath || path.join(DIR, 'auto_localize_watcher.js');
     const taskName = options.taskName || 'AntigravityAutoLocalize';
     const baseDir = options.baseDir || DIR;
-    const updateMode = options.updateMode || 'translations';
     const workingDir = options.workingDir || path.dirname(scriptPath);
     // An elevated task may execute from a user-writable project directory.
     // Always register the background process at ordinary user privilege.
@@ -770,8 +746,12 @@ function installWindowsTask(options = {}) {
     try {
         if (fs.existsSync(disableFlag)) fs.unlinkSync(disableFlag);
     } catch {}
+    // Remove the obsolete three-mode policy after a one-time manual upgrade.
+    // Installing the watcher itself is now the sole consent decision.
+    try {
+        fs.rmSync(path.join(baseDir, '.watcher-state', 'update_policy.json'), { force: true });
+    } catch {}
 
-    setUpdateMode(updateMode, path.join(baseDir, '.watcher-state'));
     const taskRun = buildWindowsTaskCommand(nodePath, scriptPath);
     const xmlText = buildWindowsTaskXml({ nodePath, scriptPath, workingDir, runLevel });
     const xmlPath = path.join(os.tmpdir(), `ag_tw_task_${process.pid}_${Date.now()}.xml`);
@@ -843,7 +823,7 @@ function uninstallWindowsTask(options = {}) {
     return { taskName, existed, deleted };
 }
 
-async function maybeSelfUpdateAndReapply({
+async function refreshTranslationsAndReapply({
     targetDir = DIR,
     stateDir = ensureAccessibleDir(path.join(targetDir, '.watcher-state')),
     updater = autoUpdater,
@@ -853,32 +833,32 @@ async function maybeSelfUpdateAndReapply({
             cwd: dir,
             stdio: 'inherit',
             timeout: 180000,
-            env: { ...process.env, AG_TW_NO_SELF_UPDATE: '1' }
+            env: { ...process.env, AG_TW_SKIP_TRANSLATION_CHECK: '1' }
         });
     },
     updaterOptions = {}
 } = {}) {
     if (!updater || typeof updater.checkUpdate !== 'function') return { updated: false, reason: 'no_updater' };
-    if (process.env.AG_TW_NO_SELF_UPDATE === '1' || process.env.NODE_ENV === 'test') {
+    if (process.env.AG_TW_SKIP_TRANSLATION_CHECK === '1' || process.env.NODE_ENV === 'test') {
         return { updated: false, reason: 'disabled_by_env' };
     }
-    const mode = readUpdateMode(stateDir);
-    if (mode === 'off') return { updated: false, reason: 'updates_disabled' };
+    const active = updater && typeof updater.readActiveTranslation === 'function'
+        ? updater.readActiveTranslation(targetDir) : null;
+    const installedTranslationVersion = active ? active.version : currentVersion;
     const cacheFile = path.join(stateDir, 'update_check.json');
     const res = await updater.checkUpdate({
-        currentVersion,
+        currentVersion: installedTranslationVersion,
         cacheFilePath: cacheFile,
         intervalMs: 24 * 60 * 60 * 1000,
         silentNotification: true,
         ...updaterOptions
     });
+    if (res && res.error) {
+        log('檢查翻譯版本失敗，保留現有資料：' + res.error);
+        return { updated: false, reason: 'check_failed', checkResult: res };
+    }
     if (!res || !res.hasUpdate) {
         return { updated: false, reason: res && res.skipped ? 'within_interval' : 'up_to_date', checkResult: res };
-    }
-    if (mode === 'notify') {
-        log(`發現繁中化版本 ${res.tag}；依目前設定僅通知，不會自動下載與執行。`);
-        if (typeof updater.notifyMac === 'function') updater.notifyMac('Antigravity 繁體中文化更新', `新版本 ${res.tag} 已發布，可自行選擇更新。`);
-        return { updated: false, reason: 'notification_only', checkResult: res };
     }
     log(`新版本 ${res.tag} 已發布，檢查是否提供相容的純翻譯資料包...`);
     if (typeof updater.installTranslationUpdate !== 'function' || !res.release) {
@@ -906,6 +886,8 @@ async function maybeSelfUpdateAndReapply({
     } else if (updateRes && updateRes.reason === 'no_translation_only_asset') {
         log(`新版本 ${res.tag} 沒有獨立翻譯包，請手動更新程式功能。`);
         if (typeof updater.notifyMac === 'function') updater.notifyMac('Antigravity 繁體中文化更新', `新版本 ${res.tag} 已發布，程式功能須手動安裝。`);
+    } else if (updateRes && updateRes.reason === 'translation_up_to_date') {
+        log('目前翻譯資料已是相容的最新版本，略過。');
     }
     return updateRes;
 }
@@ -914,8 +896,10 @@ async function main() {
     const args = process.argv.slice(2);
     if (args.includes('--install-windows-task')) {
         try {
-            const modeArg = args.find(arg => arg.startsWith('--update-policy='));
-            installWindowsTask({ updateMode: modeArg ? modeArg.slice('--update-policy='.length) : 'translations' });
+            if (args.some(arg => arg.startsWith('--update-policy'))) {
+                throw new Error('守護程序已統一自動更新翻譯，無須更新模式參數。');
+            }
+            installWindowsTask();
         } catch (err) {
             console.error('[錯誤] 註冊 Windows 背景排程失敗：' + (err.message || err));
             console.error('[提示] 若 Antigravity 安裝在 Program Files 等受保護路徑，請以「系統管理員身分」執行批次檔。');
@@ -939,9 +923,9 @@ async function main() {
         if (!appInfo) { log('尚未找到 Antigravity，等待下次排程。'); return; }
         checkAndLocalizeApp(appInfo);
 
-        // 輕量非同步遠端版本檢測與原子自我更新（預設每 24 小時檢查一次，不阻斷主套用流程）
-        await maybeSelfUpdateAndReapply().catch(err => {
-            log('背景自我更新檢查略過：' + (err && err.message ? err.message : err));
+        // 安裝守護即同意翻譯資料自動更新；程式碼升級仍由使用者手動處理。
+        await refreshTranslationsAndReapply().catch(err => {
+            log('翻譯資料更新失敗，保留目前版本：' + (err && err.message ? err.message : err));
         });
     } catch (error) {
         log('自動繁中化失敗，稍後重試：' + (error.stack || error.message));
@@ -974,7 +958,5 @@ module.exports = {
     compareVersions,
     extractLocalizationMeta,
     getLocalPackageVersion,
-    readUpdateMode,
-    setUpdateMode,
-    maybeSelfUpdateAndReapply
+    refreshTranslationsAndReapply
 };

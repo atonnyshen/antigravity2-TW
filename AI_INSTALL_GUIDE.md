@@ -28,10 +28,10 @@
    - 快速檢視本資料夾的 `package.json`、`localization_engine.js`、`auto_localize_watcher.js`、`src/` 及 `.bat`／`.ps1`／`.command`／`.sh` 腳本，確認：
      - 執行期零外部依賴（使用者端無須跑 `npm ci`）。
      - 無可疑遠端下載執行指令（無 `irm | iex`）、無任何 `.dll` 側載模組或 `config.json`。
-     - 除選用的 24 小時 GitHub 版本檢測外，無上傳本機資料的網路行為。
+     - 僅在啟用背景守護時，每 24 小時檢查 GitHub 翻譯發布，可能下載經驗證的純翻譯資料包；不自動下載執行程式碼，也不上傳本機資料。
 3. **向使用者回報並提供選項**：
    用簡明繁體中文列出環境檢查與安全確認結果，接著請使用者直接回覆數字 **1～4**：
-    - **`1` 一鍵安裝繁體中文 + 啟用背景守護（推薦；官方更新後重套繁中，僅自動更新經驗證的純翻譯資料）**
+   - **`1` 安裝繁體中文並啟用背景守護（同意每 5 分鐘巡檢官方更新，並自動取得與套用經驗證、相容的純翻譯資料；程式功能仍須手動更新）**
    - **`2` 僅安裝繁體中文（若本機曾裝過背景守護，引擎會自動同步刷新守護快照以防回滾）**
    - **`3` 只看檢查結果，暫不修改**
    - **`4` 卸載背景自動守護並還原官方原版英文**
@@ -47,21 +47,21 @@
   ```bash
   node localization_engine.js --tw --no-kill --sync-watcher --brand-title english
   ```
-- **步驟 B（啟用或更新背景守護，每 5 分鐘巡檢；只自動取得經驗證的純翻譯資料，不升級程式功能）**：
+- **步驟 B（啟用或更新背景守護；使用者選擇此項即授權每 5 分鐘巡檢，以及每 24 小時自動取得相容翻譯資料，不升級任何程式功能）**：
   - **macOS**：
     ```bash
-    bash install_macos_autowatcher.sh --update-policy=translations
+    bash install_macos_autowatcher.sh
     ```
   - **Windows**：
     ```powershell
-    node auto_localize_watcher.js --install-windows-task --update-policy=translations
+    node auto_localize_watcher.js --install-windows-task
     ```
 
 ### 選項 `2`：僅安裝繁體中文
 ```bash
 node localization_engine.js --tw --no-kill --sync-watcher --brand-title english
 ```
-*(如果本機已安裝守護程序，安裝器會在取得鎖定且權限允許時同步現有守護副本。沒有取得鎖定時應保留現有程序，不宣稱同步成功；如需變更背景權限或更新政策，請重新執行守護安裝器。)*
+*(本選項不會新增背景守護；若本機已安裝守護程序，仍會繼續定期重套中文化及自動取得翻譯資料。要完全停止背景更新，請另外卸載守護程序。安裝器僅會在鎖定與權限允許時同步既有守護副本。)*
 
 ### 選項 `3`：僅做唯讀檢查
 不執行任何寫入指令，結束任務。

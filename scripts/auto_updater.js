@@ -13,19 +13,6 @@ const ALLOWED_DOWNLOAD_HOSTS = new Set([
     'codeload.github.com'
 ]);
 
-const MANAGED_FILES = [
-    'package.json',
-    'package-lock.json',
-    'localization_engine.js',
-    'auto_localize_watcher.js',
-    'README.md',
-    'README_TW.md',
-    'AI_INSTALL_GUIDE.md',
-    'CHANGELOG.md'
-];
-
-const MANAGED_DIRS = ['dicts', 'dicts_tw', 'src', 'scripts', 'docs'];
-
 function compareVersions(v1, v2) {
     const clean = v => (v || '').replace(/^[^\d]*/, '').split('.').map(n => parseInt(n, 10) || 0);
     const p1 = clean(v1);
@@ -51,20 +38,6 @@ function isAllowedAssetUrl(rawUrl, {
     } catch {
         return false;
     }
-}
-
-function selectReleaseAsset(assets = []) {
-    if (!Array.isArray(assets)) return null;
-    const preferred = assets.find(a => a && /^antigravity2-TW-v\d+\.\d+\.\d+\.zip$/i.test(a.name || '') && a.browser_download_url);
-    if (preferred) {
-        return {
-            name: preferred.name,
-            url: preferred.browser_download_url,
-            size: preferred.size || 0,
-            digest: preferred.digest || ''
-        };
-    }
-    return null;
 }
 
 function selectTranslationAsset(assets = [], releaseTag = '') {
@@ -251,15 +224,13 @@ function handleResponse(res, resolve, reject) {
         try {
             const data = JSON.parse(body);
             const assets = Array.isArray(data.assets) ? data.assets : [];
-            const selectedAsset = selectReleaseAsset(assets);
             resolve({
                 tag: data.tag_name || '',
                 name: data.name || '',
                 body: data.body || '',
                 publishedAt: data.published_at || '',
                 htmlUrl: data.html_url || '',
-                assets,
-                asset: selectedAsset
+                assets
             });
         } catch (e) {
             reject(e);
@@ -458,51 +429,6 @@ function extractZipArchive(zipPath, extractDir) {
     return extractDir;
 }
 
-function validateExtractedPackage(pkgDir, currentVersion) {
-    const pkgPath = path.join(pkgDir, 'package.json');
-    if (!fs.existsSync(pkgPath)) throw new Error('Missing package.json in extracted update');
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-    if (pkg.name !== 'antigravity2-tw') {
-        throw new Error(`Unexpected package name in update: ${pkg.name}`);
-    }
-    if (!pkg.version || compareVersions(pkg.version, currentVersion) <= 0) {
-        throw new Error(`Extracted package version (${pkg.version}) is not newer than current (${currentVersion})`);
-    }
-
-    const requiredJs = [
-        'localization_engine.js',
-        'auto_localize_watcher.js',
-        path.join('src', 'preload_runtime.js'),
-        path.join('src', 'main_patches.js'),
-        path.join('src', 'asar_patcher.js')
-    ];
-    for (const rel of requiredJs) {
-        const full = path.join(pkgDir, rel);
-        if (!fs.existsSync(full)) {
-            throw new Error(`Missing required file in update: ${rel}`);
-        }
-        execFileSync(process.execPath, ['--check', full], { stdio: 'pipe', timeout: 10000 });
-    }
-
-    for (const dictFolder of ['dicts', 'dicts_tw']) {
-        const dirPath = path.join(pkgDir, dictFolder);
-        if (!fs.existsSync(dirPath)) {
-            throw new Error(`Missing dictionary directory in update: ${dictFolder}`);
-        }
-        const jsonFiles = fs.readdirSync(dirPath).filter(f => f.endsWith('.json'));
-        if (jsonFiles.length === 0) {
-            throw new Error(`Empty dictionary directory in update: ${dictFolder}`);
-        }
-        for (const jf of jsonFiles) {
-            const parsed = JSON.parse(fs.readFileSync(path.join(dirPath, jf), 'utf8'));
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-                throw new Error(`Invalid dictionary JSON object: ${dictFolder}/${jf}`);
-            }
-        }
-    }
-    return pkg;
-}
-
 function copyDirRecursive(src, dest) {
     fs.mkdirSync(dest, { recursive: true });
     for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
@@ -516,158 +442,12 @@ function copyDirRecursive(src, dest) {
     }
 }
 
-function applySelfUpdateAtomic(sourcePkgDir, targetDir) {
-    const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ag2tw-selfupdate-bak-'));
-    const replacedFiles = [];
-    const replacedDirs = [];
-
-    try {
-        for (const file of MANAGED_FILES) {
-            const dst = path.join(targetDir, file);
-            if (fs.existsSync(dst)) {
-                fs.copyFileSync(dst, path.join(backupDir, file));
-            }
-        }
-        for (const dir of MANAGED_DIRS) {
-            const dst = path.join(targetDir, dir);
-            if (fs.existsSync(dst)) {
-                copyDirRecursive(dst, path.join(backupDir, dir));
-            }
-        }
-
-        for (const file of MANAGED_FILES) {
-            const src = path.join(sourcePkgDir, file);
-            if (!fs.existsSync(src)) continue;
-            const dst = path.join(targetDir, file);
-            const tmpDst = path.join(targetDir, `.${file}.tmp-${process.pid}`);
-            fs.copyFileSync(src, tmpDst);
-            fs.renameSync(tmpDst, dst);
-            replacedFiles.push(file);
-        }
-
-        for (const dir of MANAGED_DIRS) {
-            const src = path.join(sourcePkgDir, dir);
-            if (!fs.existsSync(src)) continue;
-            const dst = path.join(targetDir, dir);
-            const stageDir = path.join(targetDir, `.${dir}.tmp-${process.pid}`);
-            fs.rmSync(stageDir, { recursive: true, force: true });
-            copyDirRecursive(src, stageDir);
-            fs.rmSync(dst, { recursive: true, force: true });
-            fs.renameSync(stageDir, dst);
-            replacedDirs.push(dir);
-        }
-
-        // Verify installed files in targetDir
-        const newPkg = JSON.parse(fs.readFileSync(path.join(targetDir, 'package.json'), 'utf8'));
-        if (!newPkg || !newPkg.version) throw new Error('Post-update package.json invalid');
-        for (const rel of ['localization_engine.js', 'auto_localize_watcher.js', path.join('src', 'preload_runtime.js')]) {
-            if (!fs.existsSync(path.join(targetDir, rel))) {
-                throw new Error(`Post-update file missing: ${rel}`);
-            }
-        }
-        return { version: newPkg.version, replacedFiles, replacedDirs };
-    } catch (err) {
-        // Rollback managed files and directories without touching node_modules or .watcher-state
-        for (const file of MANAGED_FILES) {
-            const bak = path.join(backupDir, file);
-            const dst = path.join(targetDir, file);
-            try {
-                if (fs.existsSync(bak)) fs.copyFileSync(bak, dst);
-            } catch {}
-        }
-        for (const dir of MANAGED_DIRS) {
-            const bak = path.join(backupDir, dir);
-            const dst = path.join(targetDir, dir);
-            const tmpStage = path.join(targetDir, `.${dir}.tmp-${process.pid}`);
-            try { fs.rmSync(tmpStage, { recursive: true, force: true }); } catch {}
-            try {
-                if (fs.existsSync(bak)) {
-                    fs.rmSync(dst, { recursive: true, force: true });
-                    copyDirRecursive(bak, dst);
-                }
-            } catch {}
-        }
-        throw err;
-    } finally {
-        try { fs.rmSync(backupDir, { recursive: true, force: true }); } catch {}
-    }
-}
-
 function notifyMac(title, message) {
     if (process.platform !== 'darwin') return;
     try {
         const script = `display notification "${message.replace(/"/g, '\\"')}" with title "${title.replace(/"/g, '\\"')}"`;
         execFileSync('/usr/bin/osascript', ['-e', script], { stdio: 'ignore' });
     } catch {}
-}
-
-async function selfUpdateWatcher({
-    targetDir,
-    currentVersion,
-    release,
-    cacheFilePath = '',
-    allowedHosts = ALLOWED_DOWNLOAD_HOSTS,
-    allowedProtocols = ['https:'],
-    extractFn = extractZipArchive,
-    silentNotification = false
-} = {}) {
-    if (!release || !release.asset || !release.asset.url) {
-        return { updated: false, reason: 'no_zip_asset' };
-    }
-    const remoteVersion = String(release.tag || '').replace(/^v/, '');
-    if (!/^\d+\.\d+\.\d+$/.test(remoteVersion)) throw new Error('Release version must be a stable numeric version');
-    if (release.asset.name !== `antigravity2-TW-v${remoteVersion}.zip`) {
-        throw new Error('Release ZIP filename does not match release tag');
-    }
-    if (!remoteVersion || compareVersions(remoteVersion, currentVersion) <= 0) {
-        return { updated: false, reason: 'up_to_date' };
-    }
-
-    const workRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ag2tw-update-'));
-    try {
-        const zipPath = path.join(workRoot, path.basename(release.asset.name || 'update.zip'));
-        await downloadVerifiedAsset(release.asset.url, zipPath, {
-            expectedDigest: release.asset.digest || '',
-            allowedHosts,
-            allowedProtocols
-        });
-
-        const extractDir = path.join(workRoot, 'extracted');
-        const pkgDir = extractFn(zipPath, extractDir);
-        const pkg = validateExtractedPackage(pkgDir, currentVersion);
-        if (pkg.version !== remoteVersion) throw new Error('Extracted package version disagrees with Release tag');
-        const result = applySelfUpdateAtomic(pkgDir, targetDir);
-
-        if (cacheFilePath) {
-            try {
-                let existing = {};
-                if (fs.existsSync(cacheFilePath)) {
-                    existing = JSON.parse(fs.readFileSync(cacheFilePath, 'utf8'));
-                }
-                fs.mkdirSync(path.dirname(cacheFilePath), { recursive: true });
-                fs.writeFileSync(cacheFilePath, JSON.stringify({
-                    ...existing,
-                    currentVersion: result.version,
-                    selfUpdatedFrom: currentVersion,
-                    selfUpdatedTo: result.version,
-                    selfUpdatedAt: new Date().toISOString()
-                }, null, 2) + '\n');
-            } catch {}
-        }
-
-        if (!silentNotification) {
-            notifyMac('Antigravity 繁體中文化更新', `已自動更新至 v${result.version} 並重新套用繁中化。`);
-        }
-
-        return {
-            updated: true,
-            previousVersion: currentVersion,
-            newVersion: pkg.version,
-            assetName: release.asset.name
-        };
-    } finally {
-        try { fs.rmSync(workRoot, { recursive: true, force: true }); } catch {}
-    }
 }
 
 async function checkUpdate({
@@ -699,7 +479,6 @@ async function checkUpdate({
             remoteVersion,
             tag: release.tag,
             htmlUrl: release.htmlUrl,
-            asset: release.asset || null,
             lastChecked: Date.now()
         };
 
@@ -722,11 +501,8 @@ async function checkUpdate({
 
 module.exports = {
     ALLOWED_DOWNLOAD_HOSTS,
-    MANAGED_FILES,
-    MANAGED_DIRS,
     compareVersions,
     isAllowedAssetUrl,
-    selectReleaseAsset,
     selectTranslationAsset,
     readActiveTranslation,
     validateTranslationPack,
@@ -735,10 +511,6 @@ module.exports = {
     fetchLatestRelease,
     downloadVerifiedAsset,
     extractZipArchive,
-    validateExtractedPackage,
-    // Retain the old public name as a fail-closed compatibility shim.
-    // Executable feature updates must use the manual installer.
-    selfUpdateWatcher: async () => ({ updated: false, reason: 'manual_code_update_required' }),
     checkUpdate,
     notifyMac
 };

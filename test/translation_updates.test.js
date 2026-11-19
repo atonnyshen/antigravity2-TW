@@ -53,10 +53,18 @@ test('downloader refuses to fetch a Release without a mandatory SHA-256', async 
     );
 });
 
-test('legacy executable updater API is fail-closed', async () => {
-    const { selfUpdateWatcher } = require('../scripts/auto_updater');
-    const result = await selfUpdateWatcher({});
-    assert.deepEqual(result, { updated: false, reason: 'manual_code_update_required' });
+test('code self-upgrade API and update-policy switches are absent', () => {
+    const updater = require('../scripts/auto_updater');
+    for (const obsolete of [
+        'selfUpdateWatcher', 'applySelfUpdateAtomic', 'validateExtractedPackage',
+        'MANAGED_FILES', 'MANAGED_DIRS', 'selectReleaseAsset'
+    ]) {
+        assert.equal(Object.hasOwn(updater, obsolete), false, obsolete);
+    }
+    assert.equal(Object.hasOwn(watcher, 'readUpdateMode'), false);
+    assert.equal(Object.hasOwn(watcher, 'setUpdateMode'), false);
+    const updaterText = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'auto_updater.js'), 'utf8');
+    assert.doesNotMatch(updaterText, /function (?:applySelfUpdateAtomic|selfUpdateWatcher)\b/);
 });
 
 test('translation update changes only immutable data snapshot and pointer', async t => {
@@ -126,29 +134,108 @@ test('existing localization engine loads the active translation snapshot without
     assert.match(result.stdout, /true true/);
 });
 
-test('off and notify policies never install executable code or translation packs', async t => {
+test('installed watcher automatically updates only translations without a separate switch', async t => {
     const root = fixture(t);
     const stateDir = path.join(root, '.watcher-state');
-    const orig = process.env.NODE_ENV;
+    fs.mkdirSync(stateDir);
+    const originalEnv = process.env.NODE_ENV;
     delete process.env.NODE_ENV;
-    t.after(() => { if (orig === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = orig; });
-    let installs = 0, codeInstalls = 0, reapplies = 0, checks = 0;
+    t.after(() => {
+        if (originalEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = originalEnv;
+    });
+    let checks = 0;
+    let installs = 0;
+    let reapplications = 0;
+    let unexpectedCodeUpdates = 0;
     const updater = {
-        checkUpdate: async () => { checks++; return { hasUpdate: true, tag: 'v3.7.2', release: { tag: 'v3.7.2', assets: [] } }; },
-        installTranslationUpdate: async () => { installs++; return { updated: true, newVersion: '3.7.2' }; },
-        selfUpdateWatcher: async () => { codeInstalls++; throw new Error('Code must never update automatically'); },
+        readActiveTranslation: () => null,
+        checkUpdate: async ({ currentVersion }) => {
+            checks++;
+            assert.equal(currentVersion, '3.7.1');
+            return { hasUpdate: true, tag: 'v3.7.2', release: { tag: 'v3.7.2', assets: [] } };
+        },
+        installTranslationUpdate: async () => {
+            installs++;
+            return { updated: true, newVersion: '3.7.2' };
+        },
+        selfUpdateWatcher: () => { unexpectedCodeUpdates++; throw new Error('No code updates allowed'); },
         notifyMac() {}
     };
-    for (const mode of ['off', 'notify', 'translations']) {
-        watcher.setUpdateMode(mode, stateDir);
-        const res = await watcher.maybeSelfUpdateAndReapply({
-            targetDir: root, stateDir, updater, currentVersion: '3.7.1',
-            execReapplyFn: () => { reapplies++; }
-        });
-        assert.equal(res.updated, mode === 'translations');
-    }
-    assert.equal(checks, 2);
+    const result = await watcher.refreshTranslationsAndReapply({
+        targetDir: root,
+        stateDir,
+        updater,
+        currentVersion: '3.7.1',
+        execReapplyFn: () => { reapplications++; }
+    });
+    assert.equal(result.updated, true);
+    assert.equal(checks, 1);
     assert.equal(installs, 1);
-    assert.equal(codeInstalls, 0);
-    assert.equal(reapplies, 1);
+    assert.equal(reapplications, 1);
+    assert.equal(unexpectedCodeUpdates, 0);
+    assert.equal(fs.existsSync(path.join(stateDir, 'update_policy.json')), false);
+});
+
+test('active translation version is used for remote checks, not old engine version', async t => {
+    const root = fixture(t);
+    const stateDir = path.join(root, '.watcher-state');
+    fs.mkdirSync(stateDir);
+    const previous = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
+    t.after(() => {
+        if (previous === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = previous;
+    });
+    let checked = null, downloads = 0;
+    const result = await watcher.refreshTranslationsAndReapply({
+        targetDir: root,
+        stateDir,
+        updater: {
+            readActiveTranslation: () => ({ version: '3.7.5' }),
+            checkUpdate: async (input) => {
+                checked = input.currentVersion;
+                return { hasUpdate: false };
+            },
+            installTranslationUpdate: async () => { downloads++; throw new Error('Must not download'); }
+        },
+        currentVersion: '3.7.1'
+    });
+    assert.equal(checked, '3.7.5');
+    assert.equal(downloads, 0);
+    assert.equal(result.reason, 'up_to_date');
+});
+
+test('no translation-only asset never triggers executable-code update', async t => {
+    const root = fixture(t);
+    const stateDir = path.join(root, '.watcher-state');
+    fs.mkdirSync(stateDir);
+    const prior = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
+    t.after(() => {
+        if (prior === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = prior;
+    });
+    let downloads = 0, reapplies = 0;
+    const result = await watcher.refreshTranslationsAndReapply({
+        targetDir: root, stateDir,
+        updater: {
+            checkUpdate: async () => ({ hasUpdate: true, tag: 'v3.7.2', release: {
+                tag: 'v3.7.2', assets: [{
+                    name: 'antigravity2-TW-v3.7.2.zip',
+                    browser_download_url: 'https://github.com/atonnyshen/antigravity2-TW/releases/download/v3.7.2/full.zip'
+                }]
+            } }),
+            installTranslationUpdate: async ({ release }) => {
+                const { selectTranslationAsset } = require('../scripts/auto_updater');
+                if (selectTranslationAsset(release.assets, release.tag)) downloads++;
+                return { updated: false, reason: 'no_translation_only_asset' };
+            },
+            notifyMac() {}
+        },
+        execReapplyFn: () => { reapplies++; }
+    });
+    assert.equal(result.reason, 'no_translation_only_asset');
+    assert.equal(downloads, 0);
+    assert.equal(reapplies, 0);
 });
