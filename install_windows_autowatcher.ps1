@@ -8,7 +8,7 @@ $WatcherScript = Join-Path $ScriptDir "auto_localize_watcher.js"
 
 if (-not (Test-Path $WatcherScript)) {
     Write-Host "[錯誤] 找不到 auto_localize_watcher.js：$WatcherScript" -ForegroundColor Red
-    Write-Host "[提示] 請從 GitHub Releases 下載完整壓縮檔並解壓縮後，在專案資料夾內執行。" -ForegroundColor Yellow
+    Write-Host "[提示] 請下載 GitHub Source code (ZIP) 並完整解壓縮後，在專案資料夾內執行；純翻譯 ZIP 不能安裝。" -ForegroundColor Yellow
     exit 1
 }
 

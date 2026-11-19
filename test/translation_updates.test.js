@@ -239,3 +239,56 @@ test('no translation-only asset never triggers executable-code update', async t 
     assert.equal(downloads, 0);
     assert.equal(reapplies, 0);
 });
+
+test('failed post-download reapplication restores the previous translation pointer', async t => {
+    const root = fixture(t);
+    const stateDir = path.join(root, '.watcher-state');
+    fs.mkdirSync(stateDir);
+    const stateFile = path.join(stateDir, 'active_translation.json');
+    fs.writeFileSync(stateFile, JSON.stringify({ version: '3.7.4' }));
+    const previousEnv = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
+    t.after(() => {
+        if (previousEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = previousEnv;
+    });
+    const updater = {
+        readActiveTranslation: () => ({ version: JSON.parse(fs.readFileSync(stateFile, 'utf8')).version }),
+        checkUpdate: async () => ({ hasUpdate: true, tag: 'v3.7.5', release: { tag: 'v3.7.5' } }),
+        installTranslationUpdate: async () => {
+            fs.writeFileSync(stateFile, JSON.stringify({ version: '3.7.5' }));
+            return { updated: true, newVersion: '3.7.5' };
+        }
+    };
+    await assert.rejects(watcher.refreshTranslationsAndReapply({
+        targetDir: root, stateDir, updater, currentVersion: '3.7.1',
+        execReapplyFn: () => { throw new Error('mock ASAR write failure'); }
+    }), /mock ASAR write failure/);
+    assert.equal(JSON.parse(fs.readFileSync(stateFile, 'utf8')).version, '3.7.4');
+});
+
+test('failed first translation update clears its pointer and falls back to bundled dictionaries', async t => {
+    const root = fixture(t);
+    const stateDir = path.join(root, '.watcher-state');
+    fs.mkdirSync(stateDir);
+    const stateFile = path.join(stateDir, 'active_translation.json');
+    const prevEnv = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
+    t.after(() => {
+        if (prevEnv === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = prevEnv;
+    });
+    await assert.rejects(watcher.refreshTranslationsAndReapply({
+        targetDir: root, stateDir, currentVersion: '3.7.1',
+        updater: {
+            readActiveTranslation: () => null,
+            checkUpdate: async () => ({ hasUpdate: true, tag: 'v3.7.2', release: { tag: 'v3.7.2' } }),
+            installTranslationUpdate: async () => {
+                fs.writeFileSync(stateFile, JSON.stringify({ version: '3.7.2' }));
+                return { updated: true, newVersion: '3.7.2' };
+            }
+        },
+        execReapplyFn: () => { throw new Error('mock ASAR write failure'); }
+    }), /mock ASAR write failure/);
+    assert.equal(fs.existsSync(stateFile), false);
+});

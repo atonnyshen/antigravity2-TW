@@ -881,7 +881,39 @@ async function refreshTranslationsAndReapply({
     }
     if (updateRes && updateRes.updated) {
         log(`純翻譯資料包已更新至 v${updateRes.newVersion}，使用原有引擎重新套用繁體中文...`);
-        execReapplyFn(targetDir);
+        try {
+            execReapplyFn(targetDir);
+        } catch (error) {
+            // A valid dictionary can still fail when patching an unfamiliar
+            // upstream application. Undo the active-data pointer so that
+            // the next watcher run uses the previous known version.
+            const rollbackLock = acquireLock(path.join(stateDir, 'run.lock'));
+            if (rollbackLock) {
+                try {
+                    const statePath = path.join(stateDir, 'active_translation.json');
+                    let deployed = null;
+                    try { deployed = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch {}
+                    if (deployed && deployed.version === updateRes.newVersion) {
+                        if (active) {
+                            const temp = path.join(stateDir, `active_translation.rollback-${process.pid}-${Date.now()}.tmp`);
+                            fs.writeFileSync(temp, JSON.stringify({ version: active.version }) + '\n', { flag: 'wx', mode: 0o600 });
+                            try { fs.renameSync(temp, statePath); }
+                            catch (err) { try { fs.rmSync(temp, { force: true }); } catch {} throw err; }
+                        } else {
+                            fs.unlinkSync(statePath);
+                        }
+                        log('套用新版翻譯失敗，已恢復前一版翻譯指標。');
+                    }
+                } catch (rollbackError) {
+                    log('新版翻譯套用失敗，而且翻譯指標回復失敗：' + rollbackError.message);
+                } finally {
+                    rollbackLock();
+                }
+            } else {
+                log('新版翻譯套用失敗，但無法取得回復鎖定，下一輪須檢查版本狀態。');
+            }
+            throw error;
+        }
         log(`已完成 v${updateRes.newVersion} 翻譯資料套用；沒有更新程式功能。`);
     } else if (updateRes && updateRes.reason === 'no_translation_only_asset') {
         log(`新版本 ${res.tag} 沒有獨立翻譯包，請手動更新程式功能。`);

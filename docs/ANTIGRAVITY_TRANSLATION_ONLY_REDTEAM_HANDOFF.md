@@ -18,12 +18,14 @@
 - 對 ZIP Slip、符號連結、local/central header 不一致、超大與加密 ZIP、偽造或缺少 digest、GitHub 非預期重新導向、套件內混入 JS、引擎不相容、不合法字典、版本倒退、競態搶鎖、寫入權限提升進行反證測試。
 - 複核 Slash 指令、Thinking Effort 標籤及台灣繁體中文 L0 體例，不因更新翻譯資料而失守。
 - 在 macOS 真實 launchd 與 Windows 工作排程的條件可用時進行隔離測試，包含一般使用者權限、`Program Files` 權限不足情境。不可把模擬測試冒充實機驗證。
+- **更正上一輪紅隊過度推論**：macOS 安裝腳本在官方 App 不可寫時仍可能明確呼叫 `sudo` 安裝 LaunchDaemon，不能宣稱一般使用者一律使用 LaunchAgent。Windows `LeastPrivilege` 排程即使由管理員註冊，也不保證可修改 `Program Files`。需以真實權限測試區分安全性與自動重套可用性。
+- **新增回退驗收**：純翻譯包下載成功後，如重新套用 ASAR 失敗，應恢復先前有效的 `active_translation.json`（或刪除首次更新指標），不能將「通過字典格式驗證」誤當成「已成功套用與可完整回退」。再檢查最終 ASAR 與備份狀態。
 
 ## P0：既有 v3.7.1 安裝的發布遷移風險
 正式 v3.7.1 的舊守護程序仍能選取新 Release 內的完整 ZIP，進而自動更新程式碼。請檢查：
 - 只修改新分支不會停止舊版守護程序的舊行為。
 - 若新 Release 仍附加完整程式 ZIP，舊版使用者可能在未理解新政策前自動升級程式功能。
-- 提出**不破壞舊讀者、可人工下載完整程式、但舊守護程序不會取得並執行新程式碼**的實際發布方案。可研究先用 GitHub 自動提供的 Source code (ZIP) 供手動安裝、Release Assets 只放純翻譯包，並驗證舊程式遇到純翻譯 ZIP 時確實 fail closed。不能只宣稱規避成功。
+- 提出**不破壞舊讀者、可人工下載完整程式、但舊守護程序不會取得並執行新程式碼**的實際發布方案。**注意正式 v3.7.1 有兩層 ZIP 篩選：`/^antigravity2-TW-.*\.zip$/i` 與後備 `/\.zip$/i`。把完整程式命名為 `antigravity2-TW-manual-setup-vX.Y.Z.zip` 或任何其他 ZIP 並上傳至 Release Assets，都不能規避舊版自動下載。** GitHub 自動產生的 Source code (ZIP) 可供手動安裝，且不在 `assets[]` 中。所有新發布應先建立 draft，並以 `gh api repos/atonnyshen/antigravity2-TW/releases/tags/vX.Y.Z | node scripts/check_release_assets.js vX.Y.Z` 驗證，通過後仍需人工批准才能公開。詳見 `docs/RELEASE_TRANSLATION_ONLY_SOP.md`。另以隔離測試驗證舊程式遇到純翻譯 ZIP 時確實 fail closed，不能只宣稱規避成功。
 - 必須核對 `assets[].digest` 提供 SHA-256；如缺少 digest，新守護程序不得自動下載。
 
 ## 驗證命令與界線

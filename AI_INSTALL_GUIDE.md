@@ -85,7 +85,7 @@ node localization_engine.js --tw --no-kill --sync-watcher --brand-title english
 
 ## 權限不足排錯指引（遇 `EPERM`／`EACCES` 時使用）
 
-- **Windows**（常見於 `C:\Program Files\Antigravity`）：請使用者在專案資料夾內對對應的 `.bat`（例如 `點兩下安裝繁體中文.bat` 或 `點兩下安裝Windows背景守護.bat`）按右鍵，選擇「**以系統管理員身分執行**」，或以系統管理員身分開啟終端機重跑指令。
+- **Windows**（常見於 `C:\Program Files\Antigravity`）：手動中文化若遇寫入權限不足，可使用「**以系統管理員身分執行**」重新套用。背景守護的工作排程則刻意設為 `LeastPrivilege`；即使由管理員註冊，往後仍可能無法自動覆寫 `Program Files`。應向使用者明確說明這項限制，不能將「以管理員身分安裝守護」宣稱為永久解決方案，也不能擅自改成高權限排程。
 - **macOS**：系統級路徑需要輸入本機管理員密碼（`sudo`）；若仍遇 `Operation not permitted`，請引導使用者檢查「**系統設定 → 隱私權與安全性 → App 管理**」授權。
 
 ---
