@@ -180,6 +180,61 @@ test('backup ENOSPC blocks any live ASAR replacement, rather than logging succes
     }
 });
 
+test('backup fsync failure aborts before replacing live ASAR', t => {
+    const f = fixture(t);
+    const open = fs.openSync;
+    const fsync = fs.fsyncSync;
+    let backupFd = null;
+    let rejected = 0;
+    fs.openSync = (file, ...args) => {
+        const fd = open(file, ...args);
+        if (String(file).endsWith('official.bak')) backupFd = fd;
+        return fd;
+    };
+    fs.fsyncSync = (fd) => {
+        if (fd === backupFd) {
+            rejected++;
+            const error = new Error('Injected backup flush failure');
+            error.code = 'EIO';
+            throw error;
+        }
+        return fsync(fd);
+    };
+    try {
+        assert.throws(() => f.run(), /Injected backup flush failure/);
+        assert.equal(rejected, 1);
+        assert.equal(f.read(), 'official-v1');
+        assert.equal(fs.existsSync(f.asarPath + '.bak'), false);
+        assert.deepEqual(fs.readdirSync(f.stateDir), []);
+    } finally {
+        fs.openSync = open;
+        fs.fsyncSync = fsync;
+    }
+});
+
+test('Windows backup flush handle failure is never silently ignored', { skip: process.platform !== 'win32' }, t => {
+    const f = fixture(t);
+    const open = fs.openSync;
+    let rejected = 0;
+    fs.openSync = (file, ...args) => {
+        if (String(file).endsWith('official.bak') && args[0] === 'r+') {
+            rejected++;
+            const error = new Error('Injected Windows FlushFileBuffers handle denial');
+            error.code = 'EPERM';
+            throw error;
+        }
+        return open(file, ...args);
+    };
+    try {
+        assert.throws(() => f.run(), /Injected Windows FlushFileBuffers handle denial/);
+        assert.equal(rejected, 1);
+        assert.equal(f.read(), 'official-v1');
+        assert.equal(fs.existsSync(f.asarPath + '.bak'), false);
+    } finally {
+        fs.openSync = open;
+    }
+});
+
 test('backup promotion must be read back and verified before touching the live ASAR', t => {
     const f = fixture(t);
     const rename = fs.renameSync;
