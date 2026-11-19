@@ -912,9 +912,9 @@
             const dZh = formatEnglishDate(dateStr);
             const isThirdParty = /third-party model access/i.test(m3.trim());
             const part2 = isThirdParty
-                ? (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供第三方模型存取權限。") : ("自 " + dZh + " 起，您当前的方案将不再提供第三方模型访问权限。"))
-                : (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供 " + m3.trim() + "。") : ("自 " + dZh + " 起，您当前的方案将不再提供 " + m3.trim() + "。"));
-            return part1 + " " + part2;
+                ? (USE_TW ? ("自 " + dZh + "起，您目前的方案將不再提供第三方模型存取權限。") : ("自 " + dZh + "起，您当前的方案将不再提供第三方模型访问权限。"))
+                : (USE_TW ? ("自 " + dZh + "起，您目前的方案將不再提供 " + m3.trim() + "。") : ("自 " + dZh + "起，您当前的方案将不再提供 " + m3.trim() + "。"));
+            return part1 + part2;
         }],
         [/^(.+?)\s+is (?:currently|now) available (?:to|on)\s+(.+?)\.\s*(.+?)\s+will be removed from\s+(.+?)\s+on\s+(.+?)\.?$/i, (m, m1, aud, m3, app, dateStr) => {
             const model = m1.trim();
@@ -928,7 +928,7 @@
             const part2 = USE_TW
                 ? (m3.trim() + " 將於 " + dZh + "自 " + app.trim() + " 下架。")
                 : (m3.trim() + " 将于 " + dZh + "自 " + app.trim() + " 下架。");
-            return part1 + " " + part2;
+            return part1 + part2;
         }],
         [/^(.+?)\s+is (?:currently|now) available (?:to|on)\s+(.+?)\.?$/i, (m, m1, aud) => {
             const hasPeriod = /[.]$/.test(m.trim());
@@ -976,14 +976,14 @@
             const dZh = formatEnglishDate(dateStr);
             const isThirdParty = /third-party model access/i.test(m1.trim());
             return isThirdParty
-                ? (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供第三方模型存取權限" + period) : ("自 " + dZh + " 起，您当前的方案将不再提供第三方模型访问权限" + period))
-                : (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供 " + m1.trim() + period) : ("自 " + dZh + " 起，您当前的方案将不再提供 " + m1.trim() + period));
+                ? (USE_TW ? ("自 " + dZh + "起，您目前的方案將不再提供第三方模型存取權限" + period) : ("自 " + dZh + "起，您当前的方案将不再提供第三方模型访问权限" + period))
+                : (USE_TW ? ("自 " + dZh + "起，您目前的方案將不再提供 " + m1.trim() + period) : ("自 " + dZh + "起，您当前的方案将不再提供 " + m1.trim() + period));
         }],
         [/^Third-party model access will no longer be available starting on\s+(.+?)\.?$/i, (m, dateStr) => {
             const hasPeriod = /[.]$/.test(m.trim());
             const period = hasPeriod ? "。" : "";
             const dZh = formatEnglishDate(dateStr);
-            return USE_TW ? ("自 " + dZh + " 起將不再提供第三方模型存取權限" + period) : ("自 " + dZh + " 起将不再提供第三方模型访问权限" + period);
+            return USE_TW ? ("自 " + dZh + "起將不再提供第三方模型存取權限" + period) : ("自 " + dZh + "起将不再提供第三方模型访问权限" + period);
         }],
     ];
 
@@ -1381,12 +1381,18 @@
                     const paragraphs = node.querySelectorAll ? node.querySelectorAll('p') : [];
                     for (const p of paragraphs) {
                         const pNorm = norm(p.textContent || '');
-                        if (/^Welcome to\s+(.+?)\.\s*I coordinate the work for this project\./i.test(pNorm)) {
+                        const m = pNorm.match(/^Welcome to\s+(.+?)\.\s*I coordinate the work for this project\./i);
+                        if (m) {
+                            const projName = m[1].trim();
                             const strongEl = p.querySelector && p.querySelector('strong');
                             const nameClone = strongEl ? strongEl.cloneNode(true) : null;
                             p.textContent = '';
                             p.appendChild(document.createTextNode(USE_TW ? '歡迎使用 ' : '欢迎使用 '));
-                            if (nameClone) p.appendChild(nameClone);
+                            if (nameClone) {
+                                p.appendChild(nameClone);
+                            } else if (projName) {
+                                p.appendChild(document.createTextNode(projName));
+                            }
                             p.appendChild(document.createTextNode(USE_TW
                                 ? '。我負責協調此專案的工作。您可以向我提問或交辦任務，我會直接回覆或啟動平行工作代理。'
                                 : '。我负责协调此项目的工作。您可以向我提问或交办任务，我会直接回答或启动并行工作代理。'));

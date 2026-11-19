@@ -359,7 +359,7 @@ test('model availability and dynamic deprecation date warnings are localized acc
         ],
         [
             'Sonnet 5.5 is now available on paid Pro and Ultra plans. Third-party model access will no longer be available on your current plan starting on November 30, 2026.',
-            'Sonnet 5.5 現已在 Pro 與 Ultra 付費方案中提供。 自 2026 年 11 月 30 日 起，您目前的方案將不再提供第三方模型存取權限。'
+            'Sonnet 5.5 現已在 Pro 與 Ultra 付費方案中提供。自 2026 年 11 月 30 日起，您目前的方案將不再提供第三方模型存取權限。'
         ],
         [
             'GPT-OSS will be removed from Antigravity on November 30, 2026.',
@@ -375,11 +375,11 @@ test('model availability and dynamic deprecation date warnings are localized acc
         ],
         [
             'Third-party model access will no longer be available on your current plan starting on December 15, 2026.',
-            '自 2026 年 12 月 15 日 起，您目前的方案將不再提供第三方模型存取權限。'
+            '自 2026 年 12 月 15 日起，您目前的方案將不再提供第三方模型存取權限。'
         ],
         [
             'Claude 3.5 Sonnet will no longer be available on your current plan starting on January 1, 2027.',
-            '自 2027 年 1 月 1 日 起，您目前的方案將不再提供 Claude 3.5 Sonnet。'
+            '自 2027 年 1 月 1 日起，您目前的方案將不再提供 Claude 3.5 Sonnet。'
         ],
         [
             '@worker-1 was stopped',
@@ -483,6 +483,16 @@ test('coordinator welcome text translates with parallel agent and no mainland te
     const fullText = p1.children.map(c => c.nodeValue || c.textContent).join('');
     assert.match(fullText, /啟動平行工作代理/);
     assert.doesNotMatch(fullText, /並行/);
+    assert.match(fullText, /歡迎使用 MyProject/);
+
+    // Fallback: p contains plain text without <strong> element
+    const coordEl2 = new FakeElement('div', { 'data-testid': 'coordinator-welcome' });
+    const p2 = new FakeElement('p', {}, 'Welcome to PlainProject. I coordinate the work for this project.');
+    coordEl2.children.push(p2);
+    translateNode(coordEl2);
+    const fullText2 = p2.children.map(c => c.nodeValue || c.textContent).join('');
+    assert.match(fullText2, /歡迎使用 PlainProject/);
+    assert.match(fullText2, /啟動平行工作代理/);
 });
 
 
