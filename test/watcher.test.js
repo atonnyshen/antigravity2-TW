@@ -211,7 +211,10 @@ test('failed atomic recovery retains ShipIt newest official ASAR for manual rest
     assert.equal(f.read(), 'official-v1\n命令選擇區');
     const retained = fs.readdirSync(f.appInfo.appPath).find(n => n.startsWith('.autolocalize-'));
     assert.ok(retained, 'unresolved native race must retain its recovery staging directory');
-    assert.equal(fs.readFileSync(path.join(f.appInfo.appPath, retained, 'app.asar'), 'utf8'),
+    const retainedFile = process.platform === 'win32'
+        ? path.join(f.appInfo.appPath, retained, 'previous.asar')
+        : path.join(f.appInfo.appPath, retained, 'app.asar');
+    assert.equal(fs.readFileSync(retainedFile, 'utf8'),
         'official-v2-from-ShipIt');
     assert.equal(fs.readdirSync(f.stateDir).filter(n => n.endsWith('.json')).length, 0);
 });
