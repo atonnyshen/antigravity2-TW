@@ -339,6 +339,45 @@ function isLocalized(buffer) {
     return buffer.includes(Buffer.from(SIGNATURE)) || buffer.includes(Buffer.from(NEEDLE));
 }
 
+function compareVersions(v1, v2) {
+    if (autoUpdater && typeof autoUpdater.compareVersions === 'function') {
+        return autoUpdater.compareVersions(v1, v2);
+    }
+    const clean = v => String(v || '').replace(/^[^\d]*/, '').split('.').map(n => parseInt(n, 10) || 0);
+    const p1 = clean(v1);
+    const p2 = clean(v2);
+    for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+        const n1 = p1[i] || 0;
+        const n2 = p2[i] || 0;
+        if (n1 > n2) return 1;
+        if (n1 < n2) return -1;
+    }
+    return 0;
+}
+
+function extractLocalizationMeta(buffer) {
+    if (!buffer) return null;
+    try {
+        const text = Buffer.isBuffer(buffer) ? buffer.toString('utf8') : String(buffer);
+        const match = text.match(/\/\*\s*---\s*ANTIGRAVITY L10N META:(\{[^*\n]+\})\s*---\s*\*\//);
+        if (!match) return null;
+        const parsed = JSON.parse(match[1]);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+function getLocalPackageVersion(baseDir = DIR) {
+    try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(baseDir, 'package.json'), 'utf8'));
+        if (pkg && typeof pkg.version === 'string' && pkg.version.trim()) {
+            return pkg.version.trim();
+        }
+    } catch {}
+    return '3.7.1';
+}
+
 function ensureRegularTarget(file) {
     // Refuse symlink destinations before privileged backup/replacement.
     const parentDir = path.dirname(file);
@@ -446,7 +485,8 @@ function signApp(appPath, sourceStat) {
 
 function checkAndLocalizeApp(appInfo, {
     stateDir = path.join(DIR, '.watcher-state'), build = buildArchive,
-    sign = signApp, wait = waitForStableFile, recipe = recipeHash()
+    sign = signApp, wait = waitForStableFile, recipe = recipeHash(),
+    currentVersion = getLocalPackageVersion()
 } = {}) {
     const { appPath, asarPath } = appInfo;
     ensureRegularTarget(asarPath);
@@ -461,6 +501,21 @@ function checkAndLocalizeApp(appInfo, {
     try { previous = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch {}
     if (localized && previous.recipe === recipe && previous.output === originalHash) {
         log('已是目前版本的繁中套件，略過。');
+        return false;
+    }
+    const targetMeta = localized ? extractLocalizationMeta(original) : null;
+    if (localized && targetMeta && targetMeta.version && compareVersions(targetMeta.version, currentVersion) > 0) {
+        try {
+            const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
+            fs.writeFileSync(stateTmp, JSON.stringify({
+                recipe,
+                output: originalHash,
+                skippedHigherVersion: targetMeta.version,
+                updatedAt: new Date().toISOString()
+            }) + '\n');
+            safeReplaceFile(stateTmp, statePath, 0o644, sourceStat.uid, sourceStat.gid);
+        } catch {}
+        log(`偵測到目標 app.asar 已由較高版本 (v${targetMeta.version}) 套用，目前守護版本為 v${currentVersion}，主動略過以防反向回滾。`);
         return false;
     }
 
@@ -742,7 +797,65 @@ function uninstallWindowsTask(options = {}) {
     return { taskName, existed, deleted };
 }
 
-function main() {
+async function maybeSelfUpdateAndReapply({
+    targetDir = DIR,
+    stateDir = ensureAccessibleDir(path.join(targetDir, '.watcher-state')),
+    updater = autoUpdater,
+    currentVersion = getLocalPackageVersion(targetDir),
+    execReapplyFn = (dir) => {
+        execFileSync(process.execPath, [path.join(dir, 'auto_localize_watcher.js')], {
+            cwd: dir,
+            stdio: 'inherit',
+            timeout: 180000,
+            env: { ...process.env, AG_TW_NO_SELF_UPDATE: '1' }
+        });
+    },
+    updaterOptions = {}
+} = {}) {
+    if (!updater || typeof updater.checkUpdate !== 'function') return { updated: false, reason: 'no_updater' };
+    if (process.env.AG_TW_NO_SELF_UPDATE === '1' || process.env.NODE_ENV === 'test') {
+        return { updated: false, reason: 'disabled_by_env' };
+    }
+    const cacheFile = path.join(stateDir, 'update_check.json');
+    const res = await updater.checkUpdate({
+        currentVersion,
+        cacheFilePath: cacheFile,
+        intervalMs: 24 * 60 * 60 * 1000,
+        silentNotification: true,
+        ...updaterOptions
+    });
+    if (!res || !res.hasUpdate) {
+        return { updated: false, reason: res && res.skipped ? 'within_interval' : 'up_to_date', checkResult: res };
+    }
+    log(`發現繁中化新版本 ${res.tag} (目前: v${currentVersion})，準備下載並驗證自我更新...`);
+    if (typeof updater.selfUpdateWatcher !== 'function' || !res.release || !res.release.asset) {
+        return { updated: false, reason: 'no_self_update_asset', checkResult: res };
+    }
+    const releaseLock = acquireLock(path.join(stateDir, 'run.lock'));
+    if (!releaseLock) {
+        return { updated: false, reason: 'locked' };
+    }
+    let updateRes;
+    try {
+        updateRes = await updater.selfUpdateWatcher({
+            targetDir,
+            currentVersion,
+            release: res.release,
+            cacheFilePath: cacheFile,
+            ...updaterOptions
+        });
+    } finally {
+        releaseLock();
+    }
+    if (updateRes && updateRes.updated) {
+        log(`守護程式已原子更新至 v${updateRes.newVersion}，正在以新版引擎重新檢查並套用繁中化...`);
+        execReapplyFn(targetDir);
+        log(`已自動更新至 v${updateRes.newVersion} 並完成繁中化套用。`);
+    }
+    return updateRes;
+}
+
+async function main() {
     const args = process.argv.slice(2);
     if (args.includes('--install-windows-task')) {
         try {
@@ -770,25 +883,10 @@ function main() {
         if (!appInfo) { log('尚未找到 Antigravity，等待下次排程。'); return; }
         checkAndLocalizeApp(appInfo);
 
-        // 輕量非同步遠端版本檢測（預設每 24 小時執行一次，不阻斷主流程）
-        if (autoUpdater && typeof autoUpdater.checkUpdate === 'function') {
-            const pkgPath = path.join(DIR, 'package.json');
-            let currentVer = '3.7.0';
-            try {
-                currentVer = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || currentVer;
-            } catch {}
-            const stateDir = ensureAccessibleDir(path.join(DIR, '.watcher-state'));
-            const cacheFile = path.join(stateDir, 'update_check.json');
-            autoUpdater.checkUpdate({
-                currentVersion: currentVer,
-                cacheFilePath: cacheFile,
-                intervalMs: 24 * 60 * 60 * 1000
-            }).then(res => {
-                if (res && res.hasUpdate) {
-                    log(`發現繁中化新版本 ${res.tag} (目前: v${currentVer})，已推播系統通知。`);
-                }
-            }).catch(() => {});
-        }
+        // 輕量非同步遠端版本檢測與原子自我更新（預設每 24 小時檢查一次，不阻斷主套用流程）
+        await maybeSelfUpdateAndReapply().catch(err => {
+            log('背景自我更新檢查略過：' + (err && err.message ? err.message : err));
+        });
     } catch (error) {
         log('自動繁中化失敗，稍後重試：' + (error.stack || error.message));
         if (IS_MAC && (error.code === 'EPERM' || (error.message && error.message.includes('EPERM')))) {
@@ -816,5 +914,9 @@ module.exports = {
     buildWindowsTaskXml,
     encodeUtf16LeWithBom,
     installWindowsTask,
-    uninstallWindowsTask
+    uninstallWindowsTask,
+    compareVersions,
+    extractLocalizationMeta,
+    getLocalPackageVersion,
+    maybeSelfUpdateAndReapply
 };

@@ -495,5 +495,364 @@ test('coordinator welcome text translates with parallel agent and no mainland te
     assert.match(fullText2, /啟動平行工作代理/);
 });
 
+function createMiniDomRuntime() {
+    const js = generateJs();
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3, DOCUMENT_FRAGMENT_NODE: 11 } };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode, formatPlanAudience, isSlashCommandNameNode }; })();', context);
+    return context.hooks;
+}
+
+function makeMiniEl(tagName, attrs = {}, children = []) {
+    const el = {
+        nodeType: 1,
+        tagName: tagName.toUpperCase(),
+        attrs: { ...attrs },
+        parentElement: null,
+        childNodes: [],
+        get previousSibling() {
+            if (!this.parentElement) return null;
+            const idx = this.parentElement.childNodes.indexOf(this);
+            return idx > 0 ? this.parentElement.childNodes[idx - 1] : null;
+        },
+        get textContent() {
+            return this.childNodes.map(c => c.nodeType === 3 ? c.nodeValue : c.textContent).join('');
+        },
+        getAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name) ? this.attrs[name] : null; },
+        setAttribute(name, val) { this.attrs[name] = String(val); },
+        hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name); },
+        matches(sel) {
+            return sel.split(',').map(s => s.trim()).some(part => {
+                if (!part) return false;
+                const segments = part.match(/(?:\[[^\]]*\]|\S)+/g) || [];
+                if (segments.length > 1) {
+                    const last = segments[segments.length - 1];
+                    if (!this.matches(last)) return false;
+                    let anc = this.parentElement;
+                    for (let i = segments.length - 2; i >= 0; i--) {
+                        while (anc && !anc.matches(segments[i])) anc = anc.parentElement;
+                        if (!anc) return false;
+                        anc = anc.parentElement;
+                    }
+                    return true;
+                }
+                if (part === tagName.toLowerCase() || part === tagName.toUpperCase()) return true;
+                const attrRe = /\[([^\]=*^$]+)(?:([*^$]?=)"([^"]*)")?(?:\s+i)?\]/g;
+                let tagPrefix = part.replace(attrRe, '').replace(/\.[A-Za-z0-9_-]+/g, '');
+                if (tagPrefix && tagPrefix.toUpperCase() !== this.tagName) return false;
+                let m;
+                let matchedAny = false;
+                while ((m = attrRe.exec(part)) !== null) {
+                    matchedAny = true;
+                    const [, attrName, op, expected] = m;
+                    const actual = this.getAttribute(attrName);
+                    if (actual === null) return false;
+                    const ci = /\s+i\]$/.test(m[0]);
+                    const a = ci ? actual.toLowerCase() : actual;
+                    const e = ci && expected ? expected.toLowerCase() : expected;
+                    if (!op) continue;
+                    if (op === '=' && a !== e) return false;
+                    if (op === '*=' && !a.includes(e)) return false;
+                    if (op === '^=' && !a.startsWith(e)) return false;
+                    if (op === '$=' && !a.endsWith(e)) return false;
+                }
+                const classMatches = part.match(/\.[A-Za-z0-9_-]+/g) || [];
+                for (const cm of classMatches) {
+                    matchedAny = true;
+                    const cls = (this.getAttribute('class') || '').split(/\s+/);
+                    if (!cls.includes(cm.slice(1))) return false;
+                }
+                return matchedAny || tagPrefix !== '';
+            });
+        },
+        closest(sel) {
+            let cur = this;
+            while (cur) {
+                if (cur.matches && cur.matches(sel)) return cur;
+                cur = cur.parentElement;
+            }
+            return null;
+        },
+        querySelector(sel) {
+            for (const c of this.childNodes) {
+                if (c.nodeType === 1) {
+                    if (c.matches(sel)) return c;
+                    const found = c.querySelector(sel);
+                    if (found) return found;
+                }
+            }
+            return null;
+        },
+        getRootNode() { return {}; },
+        append(...nodes) {
+            for (const n of nodes) {
+                n.parentElement = this;
+                this.childNodes.push(n);
+            }
+        }
+    };
+    el.append(...children);
+    return el;
+}
+
+function makeMiniText(val) {
+    return {
+        nodeType: 3,
+        nodeValue: val,
+        parentElement: null,
+        get previousSibling() {
+            if (!this.parentElement) return null;
+            const idx = this.parentElement.childNodes.indexOf(this);
+            return idx > 0 ? this.parentElement.childNodes[idx - 1] : null;
+        }
+    };
+}
+
+test('model orchestrator offload dynamic rules, paid Ultra formatPlanAudience, and Thinking Effort preservation', () => {
+    const { translateNode, formatPlanAudience } = createMiniDomRuntime();
+
+    const cases = [
+        [
+            'Neon that may offload routine steps to Hydrogen. Same Neon-level quality, fewer tokens used.',
+            'Neon，可將常規步驟分派給 Hydrogen 處理。維持同等 Neon 水準的品質，消耗更少 Token。'
+        ],
+        [
+            'Argon that may offload routine steps to Hydrogen. Same Argon-level quality, fewer tokens used.',
+            'Argon，可將常規步驟分派給 Hydrogen 處理。維持同等 Argon 水準的品質，消耗更少 Token。'
+        ],
+        [
+            'Neon that may offload routine steps to Hydrogen.',
+            'Neon，可將常規步驟分派給 Hydrogen 處理。'
+        ],
+        [
+            'Same Argon-level quality, fewer tokens used',
+            '維持同等 Argon 水準的品質，消耗更少 Token'
+        ]
+    ];
+    for (const [input, expected] of cases) {
+        const node = makeMiniText(input);
+        translateNode(node);
+        assert.equal(node.nodeValue, expected, input);
+    }
+
+    assert.equal(formatPlanAudience('paid Ultra subscribers'), 'Ultra 付費訂閱者');
+    assert.equal(formatPlanAudience('paid Ultra plan subscribers'), 'Ultra 付費方案訂閱者');
+    assert.equal(formatPlanAudience('paid Ultra plans'), 'Ultra 付費方案');
+
+    // Thinking Effort levels & label MUST stay strictly in English
+    for (const eng of ['Low', 'Medium', 'High', 'Extra', 'Max', 'Thinking Effort']) {
+        const opt = makeMiniEl('div', { 'data-testid': 'model-selector-effort-option' }, [makeMiniText(eng)]);
+        translateNode(opt);
+        assert.equal(opt.textContent, eng, `model-selector-effort-option must preserve ${eng}`);
+
+        const menuOpt = makeMiniEl('div', { role: 'menu', 'aria-label': 'Select model' }, [
+            makeMiniEl('div', { role: 'menuitem' }, [makeMiniText(eng)])
+        ]);
+        translateNode(menuOpt);
+        assert.equal(menuOpt.textContent, eng, `model menu must preserve ${eng}`);
+    }
+
+    // Model name ending with Max must NOT be rewritten
+    const modelLabel = makeMiniEl('div', { 'data-testid': 'model-selector-item' }, [
+        makeMiniText('Claude 4 '),
+        makeMiniEl('span', {}, [makeMiniText('Max')])
+    ]);
+    translateNode(modelLabel);
+    assert.equal(modelLabel.textContent, 'Claude 4 Max');
+
+    // Recommended inside model menu translates to 推薦
+    const recMenu = makeMiniEl('div', { role: 'menu', 'aria-label': 'Select model' }, [
+        makeMiniEl('span', {}, [makeMiniText('Recommended')])
+    ]);
+    translateNode(recMenu);
+    assert.equal(recMenu.textContent, '推薦');
+});
+
+test('slash command names in Mentions, FastPick, and split nodes stay untranslated while descriptions translate', () => {
+    const { translateNode } = createMiniDomRuntime();
+
+    // 1. v2.33.0 [data-mention-menu] with unprefixed [data-testid="menu-option-label"] and translatable description
+    const mentionMenu = makeMiniEl('div', { role: 'listbox', 'aria-label': 'Mentions', 'data-mention-menu': '' }, [
+        makeMiniEl('div', { role: 'option' }, [
+            makeMiniEl('span', { 'data-testid': 'menu-option-label' }, [makeMiniText('goal')]),
+            makeMiniEl('span', { 'data-testid': 'menu-option-description' }, [makeMiniText('Settings')])
+        ]),
+        makeMiniEl('div', { role: 'option' }, [
+            makeMiniEl('span', { 'data-testid': 'menu-option-label' }, [makeMiniText('schedule')]),
+            makeMiniEl('span', { 'data-testid': 'menu-option-description' }, [makeMiniText('Cancel')])
+        ]),
+        makeMiniEl('div', { role: 'option' }, [
+            makeMiniEl('span', { 'data-testid': 'menu-option-label' }, [makeMiniText('workspace')]),
+            makeMiniEl('span', { 'data-testid': 'menu-option-label' }, [makeMiniText('agent')]),
+            makeMiniEl('span', { 'data-testid': 'menu-option-label' }, [makeMiniText('clear')]),
+            makeMiniEl('span', { 'data-testid': 'menu-option-label' }, [makeMiniText('Plan')]),
+            makeMiniEl('span', { 'data-testid': 'menu-option-description' }, [makeMiniText('Ask a quick question without interrupting the main conversation.')])
+        ])
+    ]);
+    translateNode(mentionMenu);
+    const labels = [
+        mentionMenu.childNodes[0].childNodes[0].textContent,
+        mentionMenu.childNodes[1].childNodes[0].textContent,
+        mentionMenu.childNodes[2].childNodes[0].textContent,
+        mentionMenu.childNodes[2].childNodes[1].textContent,
+        mentionMenu.childNodes[2].childNodes[2].textContent,
+        mentionMenu.childNodes[2].childNodes[3].textContent
+    ];
+    assert.deepEqual(labels, ['goal', 'schedule', 'workspace', 'agent', 'clear', 'Plan']);
+    assert.equal(mentionMenu.childNodes[0].childNodes[1].textContent, '設定');
+    assert.equal(mentionMenu.childNodes[1].childNodes[1].textContent, '取消');
+
+    // 2. Split <span>/</span><span>goal</span> inside an option
+    const splitOption = makeMiniEl('div', { role: 'option' }, [
+        makeMiniEl('span', {}, [makeMiniText('/')]),
+        makeMiniEl('span', {}, [makeMiniText('goal')]),
+        makeMiniEl('span', { class: 'option-description' }, [makeMiniText('Settings')])
+    ]);
+    translateNode(splitOption);
+    assert.equal(splitOption.childNodes[0].textContent, '/');
+    assert.equal(splitOption.childNodes[1].textContent, 'goal');
+    assert.equal(splitOption.childNodes[2].textContent, '設定');
+
+    // 3. Generic FastPick option with unprefixed command + description sibling
+    const fastPick = makeMiniEl('div', { role: 'option', 'data-testid': 'fastpick-item' }, [
+        makeMiniEl('span', { class: 'command-name' }, [makeMiniText('grill-me')]),
+        makeMiniEl('span', { class: 'description' }, [makeMiniText('Settings')])
+    ]);
+    translateNode(fastPick);
+    assert.equal(fastPick.childNodes[0].textContent, 'grill-me');
+    assert.equal(fastPick.childNodes[1].textContent, '設定');
+
+    // 4. Lowercase words in LOWER_WORDS_EXCLUDE do not trigger TitleCase dict entries via lowerMap
+    for (const cmd of ['schedule', 'clear', 'goal', 'plan', 'automation', 'reset', 'stop', 'filter', 'commit', 'split']) {
+        const n = makeMiniText(cmd);
+        translateNode(n);
+        assert.equal(n.nodeValue, cmd, `lowercase "${cmd}" must not match TitleCase dict entry`);
+    }
+
+    // 5. Slash commands in attributes remain protected
+    const attrHost = makeMiniEl('button', { title: '/goal', 'aria-label': '/swarm', 'aria-description': 'Settings' });
+    translateNode(attrHost);
+    assert.equal(attrHost.getAttribute('title'), '/goal');
+    assert.equal(attrHost.getAttribute('aria-label'), '/swarm');
+    assert.equal(attrHost.getAttribute('aria-description'), '設定');
+});
+
+test('L0 Taiwan prose fixes in preload_runtime, main_patches, and multi-partition cleanElectronCache', t => {
+    const { translateNode } = createMiniDomRuntime();
+    const { patchMenuJs } = require('../src/main_patches');
+    const { cleanElectronCache } = require('../localization_engine');
+
+    const twCases = [
+        ['Send message Enter', '傳送訊息 Enter'],
+        ['Queue message Enter', '佇列傳送訊息 Enter'],
+        ['Queue message ⏎', '佇列傳送訊息 ⏎'],
+        ['Available AI Credits: 500', '可用 AI 點數：500'],
+        [
+            "Your plan's baseline quota will refresh on May 1, 2026. To continue using this model now, enable AI Credit overages.",
+            '您方案的基準配額將於 May 1, 2026 重設。如需立即繼續使用此模型，請啟用 AI 點數超額使用。'
+        ],
+        [
+            'Exceeded the rules token budget. Full rule content (1,200 tokens) was replaced with a lightweight file-path pointer in context.',
+            '已超出規則 Token 預算。完整規則內容 (1,200 個 Token) 已在上下文中換成輕量級檔案路徑指標。'
+        ],
+        ['Posted in #general; click to show only #general', '發布於 #general；按一下僅顯示 #general'],
+        ['Explored 2 files, 1 artifact', '已探索 2 個檔案，1 個成品']
+    ];
+    for (const [input, expected] of twCases) {
+        const node = makeMiniText(input);
+        translateNode(node);
+        assert.equal(node.nodeValue, expected, input);
+    }
+
+    const notRefParent = makeMiniEl('div', {}, [
+        makeMiniText('Not referenced by any feature ('),
+        makeMiniEl('span', {}, [makeMiniText('3')])
+    ]);
+    translateNode(notRefParent);
+    assert.equal(notRefParent.textContent, '尚無任何功能參照 (3');
+
+    const menuPatched = patchMenuJs('function build(menu){ electron_1.Menu.setApplicationMenu(menu); }', true);
+    assert.ok(menuPatched.includes("'Replace With New': '取代為新對話'"));
+    assert.ok(!menuPatched.includes('替換'));
+
+    // cleanElectronCache purges arbitrary Partitions/* caches + Service Worker CacheStorage while keeping Local Storage
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-cache-clean-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const dirsToRemove = [
+        path.join(root, 'Code Cache'),
+        path.join(root, 'Default', 'Code Cache'),
+        path.join(root, 'Partitions', 'webview-sidecar', 'Code Cache'),
+        path.join(root, 'Partitions', 'webview-sidecar', 'Service Worker', 'CacheStorage'),
+        path.join(root, 'Partitions', 'hub-browser-1', 'Cache')
+    ];
+    const dirsToKeep = [
+        path.join(root, 'Local Storage'),
+        path.join(root, 'Partitions', 'webview-sidecar', 'Local Storage')
+    ];
+    for (const d of [...dirsToRemove, ...dirsToKeep]) {
+        fs.mkdirSync(d, { recursive: true });
+        fs.writeFileSync(path.join(d, 'data.bin'), 'x');
+    }
+    const cleaned = cleanElectronCache([root]);
+    assert.equal(cleaned, dirsToRemove.length);
+    for (const d of dirsToRemove) assert.equal(fs.existsSync(d), false, 'must purge ' + d);
+    for (const d of dirsToKeep) assert.equal(fs.existsSync(d), true, 'must keep ' + d);
+});
+
+test('metadata stamp, macOS runtime sync with lock, and Windows task path re-registration prevent watcher rollback', t => {
+    const engine = require('../localization_engine');
+    const js = engine.generateJs();
+    const metaMatch = js.match(/\/\*\s*---\s*ANTIGRAVITY L10N META:(\{[^*\n]+\})\s*---\s*\*\//);
+    assert.ok(metaMatch, 'generateJs must embed ANTIGRAVITY L10N META comment');
+    const meta = JSON.parse(metaMatch[1]);
+    assert.equal(meta.version, engine.getPackageVersion());
+
+    // Simulate macOS runtime pre-sync + commit + lock release
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-mac-sync-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const rtDir = path.join(root, 'runtime');
+    fs.mkdirSync(rtDir, { recursive: true });
+    const fakeAsar = path.join(root, 'app.asar');
+    fs.writeFileSync(fakeAsar, 'new-asar-bytes');
+
+    const session = engine.prepareMacWatcherSync({
+        sourceDir: repo,
+        runtimes: [{ kind: 'user', runtimeDir: rtDir }]
+    });
+    assert.equal(session.synced.length, 1);
+    assert.ok(fs.existsSync(path.join(rtDir, '.watcher-state', 'run.lock')), 'lock must be held during app.asar swap');
+    assert.equal(
+        JSON.parse(fs.readFileSync(path.join(rtDir, 'package.json'), 'utf8')).version,
+        engine.getPackageVersion()
+    );
+    engine.commitMacWatcherSync(session, '/Applications/Antigravity.app', fakeAsar);
+    engine.cleanupMacWatcherSync(session);
+    assert.equal(fs.existsSync(path.join(rtDir, '.watcher-state', 'run.lock')), false, 'lock must be released after commit');
+
+    const crypto = require('node:crypto');
+    const stateKey = crypto.createHash('sha256').update('/Applications/Antigravity.app').digest('hex');
+    const state = JSON.parse(fs.readFileSync(path.join(rtDir, '.watcher-state', stateKey + '.json'), 'utf8'));
+    assert.equal(state.output, crypto.createHash('sha256').update('new-asar-bytes').digest('hex'));
+
+    // Simulate Windows syncActiveWindowsWatcher re-registering task to current directory
+    const winRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-win-sync-'));
+    t.after(() => fs.rmSync(winRoot, { recursive: true, force: true }));
+    fs.mkdirSync(path.join(winRoot, 'resources'), { recursive: true });
+    fs.writeFileSync(path.join(winRoot, 'resources', 'app.asar'), 'win-asar');
+    const winBase = path.join(winRoot, 'v371');
+    fs.mkdirSync(winBase, { recursive: true });
+    fs.writeFileSync(path.join(winBase, 'package.json'), '{"version":"3.7.1"}');
+    let registeredPath = null;
+    const winRes = engine.syncActiveWindowsWatcher(winRoot, path.join(winRoot, 'resources'), {
+        baseDir: winBase,
+        execFileSyncFn: () => '',
+        installTaskFn: ({ scriptPath }) => { registeredPath = scriptPath; }
+    });
+    assert.equal(winRes.synced, true);
+    assert.equal(registeredPath, path.join(winBase, 'auto_localize_watcher.js'));
+});
+
+
+
 
 

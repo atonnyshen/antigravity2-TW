@@ -31,7 +31,7 @@ elif [ "$BRAND_CHOICE" = "3" ]; then
     BRAND_ARG="--brand-title translated"
 fi
 
-node localization_engine.js --tw $BRAND_ARG --install-dir /Applications/Antigravity.app "$@"
+node localization_engine.js --tw $BRAND_ARG --sync-watcher --install-dir /Applications/Antigravity.app "$@"
 
 if [ $? -ne 0 ]; then
     echo ""
