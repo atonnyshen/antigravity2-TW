@@ -233,23 +233,83 @@ function cleanElectronCache(targetUid) {
     } catch {}
 }
 
-function getAppInfo() {
+function getWindowsUninstallCandidates(execSyncFn = execFileSync) {
+    const found = [];
+    const registryRoots = [
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+        'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall',
+        'HKLM\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall'
+    ];
+    for (const root of registryRoots) {
+        try {
+            const output = execSyncFn('reg.exe', ['query', root, '/s', '/f', 'Antigravity', '/d'], {
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'ignore'],
+                timeout: 5000
+            });
+            for (const line of String(output || '').split(/\r?\n/)) {
+                const match = line.match(/^\s*(InstallLocation|DisplayIcon)\s+REG_\w+\s+(.+)$/i);
+                if (!match) continue;
+                let value = match[2].trim().replace(/^"|"$/g, '');
+                if (/Antigravity\.exe$/i.test(value)) value = path.dirname(value);
+                if (value) found.push(value);
+            }
+        } catch {}
+    }
+    return found;
+}
+
+function getWindowsAppCandidates(options = {}) {
+    const env = options.env || process.env;
+    const seen = new Set();
+    const list = [];
+    const add = dir => {
+        if (!dir) return;
+        const cleaned = String(dir).trim();
+        if (!cleaned) return;
+        const key = cleaned.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        list.push(cleaned);
+    };
+
+    add(env.ANTIGRAVITY_INSTALL_DIR);
+    add(env.ANTIGRAVITY_HOME);
+    if (env.LOCALAPPDATA) {
+        add(path.join(env.LOCALAPPDATA, 'Programs', 'antigravity'));
+        add(path.join(env.LOCALAPPDATA, 'Programs', 'Antigravity IDE'));
+    }
+    if (env.ProgramFiles) add(path.join(env.ProgramFiles, 'Antigravity'));
+    if (env['ProgramFiles(x86)']) add(path.join(env['ProgramFiles(x86)'], 'Antigravity'));
+    for (const drive of ['C', 'D', 'E', 'F']) {
+        add(`${drive}:\\Programs\\Antigravity`);
+        add(`${drive}:\\Programs\\Antigravity IDE`);
+        add(`${drive}:\\Antigravity`);
+    }
+    add('C:\\Program Files\\Antigravity');
+    add('C:\\Program Files (x86)\\Antigravity');
+    if (options.includeRegistry !== false && process.platform === 'win32') {
+        for (const regDir of getWindowsUninstallCandidates(options.execFileSyncFn)) {
+            add(regDir);
+        }
+    }
+    return list;
+}
+
+function getAppInfo(options = {}) {
+    const platform = options.platform || process.platform;
     let candidates;
-    if (IS_MAC) {
+    if (platform === 'darwin') {
         candidates = ['/Applications/Antigravity.app', '/Applications/Antigravity IDE.app'];
         if (!ROOT) candidates.push(
             path.join(os.homedir(), 'Applications', 'Antigravity.app'),
             path.join(os.homedir(), 'Applications', 'Antigravity IDE.app')
         );
     } else {
-        candidates = [
-            process.env.ANTIGRAVITY_INSTALL_DIR,
-            process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', 'antigravity'),
-            'C:\\Program Files\\Antigravity', 'C:\\Programs\\Antigravity'
-        ].filter(Boolean);
+        candidates = getWindowsAppCandidates(options);
     }
     for (const appPath of candidates) {
-        const asarPath = path.join(appPath, ...(IS_MAC ? ['Contents', 'Resources'] : ['resources']), 'app.asar');
+        const asarPath = path.join(appPath, ...(platform === 'darwin' ? ['Contents', 'Resources'] : ['resources']), 'app.asar');
         if (fs.existsSync(asarPath)) return { appPath, asarPath };
     }
     return null;
@@ -516,7 +576,194 @@ function checkAndLocalizeApp(appInfo, {
     }
 }
 
+function buildWindowsTaskCommand(nodePath, scriptPath) {
+    return `"${nodePath}" "${scriptPath}"`;
+}
+
+function escapeXml(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+function isWindowsAdmin(execSyncFn = execFileSync) {
+    if (process.platform !== 'win32') return false;
+    try {
+        execSyncFn('net.exe', ['session'], { stdio: 'ignore', timeout: 3000 });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function buildWindowsTaskXml({ nodePath, scriptPath, workingDir, runLevel = 'LeastPrivilege' }) {
+    const command = escapeXml(nodePath);
+    const args = escapeXml(`"${scriptPath}"`);
+    const cwd = escapeXml(workingDir || path.dirname(scriptPath));
+    const safeRunLevel = runLevel === 'HighestAvailable' ? 'HighestAvailable' : 'LeastPrivilege';
+    return [
+        '<?xml version="1.0" encoding="UTF-16"?>',
+        '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">',
+        '  <RegistrationInfo>',
+        '    <Description>Antigravity 2.0 繁體中文自動更新守護 (每 5 分鐘檢查並重套中文化)</Description>',
+        '  </RegistrationInfo>',
+        '  <Triggers>',
+        '    <TimeTrigger>',
+        '      <Repetition>',
+        '        <Interval>PT5M</Interval>',
+        '        <StopAtDurationEnd>false</StopAtDurationEnd>',
+        '      </Repetition>',
+        '      <StartBoundary>2026-01-01T00:00:00</StartBoundary>',
+        '      <Enabled>true</Enabled>',
+        '    </TimeTrigger>',
+        '    <LogonTrigger>',
+        '      <Enabled>true</Enabled>',
+        '    </LogonTrigger>',
+        '  </Triggers>',
+        '  <Principals>',
+        '    <Principal id="Author">',
+        '      <LogonType>InteractiveToken</LogonType>',
+        `      <RunLevel>${safeRunLevel}</RunLevel>`,
+        '    </Principal>',
+        '  </Principals>',
+        '  <Settings>',
+        '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>',
+        '    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>',
+        '    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>',
+        '    <AllowHardTerminate>true</AllowHardTerminate>',
+        '    <StartWhenAvailable>true</StartWhenAvailable>',
+        '    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>',
+        '    <AllowStartOnDemand>true</AllowStartOnDemand>',
+        '    <Enabled>true</Enabled>',
+        '    <Hidden>false</Hidden>',
+        '    <ExecutionTimeLimit>PT10M</ExecutionTimeLimit>',
+        '  </Settings>',
+        '  <Actions Context="Author">',
+        '    <Exec>',
+        `      <Command>${command}</Command>`,
+        `      <Arguments>${args}</Arguments>`,
+        `      <WorkingDirectory>${cwd}</WorkingDirectory>`,
+        '    </Exec>',
+        '  </Actions>',
+        '</Task>',
+        ''
+    ].join('\r\n');
+}
+
+function encodeUtf16LeWithBom(text) {
+    return Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, 'utf16le')]);
+}
+
+function installWindowsTask(options = {}) {
+    const execSyncFn = options.execFileSyncFn || execFileSync;
+    const nodePath = options.nodePath || process.execPath;
+    const scriptPath = options.scriptPath || path.join(DIR, 'auto_localize_watcher.js');
+    const taskName = options.taskName || 'AntigravityAutoLocalize';
+    const baseDir = options.baseDir || DIR;
+    const workingDir = options.workingDir || path.dirname(scriptPath);
+    const runLevel = options.runLevel || (isWindowsAdmin(execSyncFn) ? 'HighestAvailable' : 'LeastPrivilege');
+    const disableFlag = path.join(baseDir, '.disable_autowatcher');
+
+    try {
+        if (fs.existsSync(disableFlag)) fs.unlinkSync(disableFlag);
+    } catch {}
+
+    const taskRun = buildWindowsTaskCommand(nodePath, scriptPath);
+    const xmlText = buildWindowsTaskXml({ nodePath, scriptPath, workingDir, runLevel });
+    const xmlPath = path.join(os.tmpdir(), `ag_tw_task_${process.pid}_${Date.now()}.xml`);
+
+    console.log('=======================================================');
+    console.log('  安裝 Antigravity 背景自動更新守護 (Windows 工作排程)');
+    console.log('=======================================================');
+    console.log(`[1/2] 正在註冊 Windows 工作排程 (${taskName})，每 5 分鐘自動檢查一次...`);
+    try {
+        fs.writeFileSync(xmlPath, encodeUtf16LeWithBom(xmlText));
+        if (typeof options.onXmlWritten === 'function') {
+            options.onXmlWritten(xmlPath, fs.readFileSync(xmlPath));
+        }
+        execSyncFn('schtasks.exe', ['/create', '/tn', taskName, '/xml', xmlPath, '/f'], {
+            encoding: 'utf8',
+            stdio: 'inherit'
+        });
+    } finally {
+        try { if (fs.existsSync(xmlPath)) fs.unlinkSync(xmlPath); } catch {}
+    }
+    console.log('[2/2] 正在立即執行一次繁體中文化檢查...');
+    let firstRunWarning = null;
+    try {
+        execSyncFn('schtasks.exe', ['/run', '/tn', taskName], { encoding: 'utf8', stdio: 'ignore' });
+    } catch (err) {
+        firstRunWarning = err.message;
+    }
+    if (firstRunWarning) {
+        console.log(`[提示] 排程已註冊完成；立即觸發回報（${firstRunWarning}），將在 5 分鐘內自動巡檢套用。`);
+    }
+    console.log('\n[完成] Windows 背景自動更新守護已啟動！');
+    console.log(`工作名稱：${taskName}`);
+    console.log(`執行紀錄：${path.join(baseDir, 'autolocalize.log')}`);
+    return { taskName, taskRun, xmlText };
+}
+
+function uninstallWindowsTask(options = {}) {
+    const execSyncFn = options.execFileSyncFn || execFileSync;
+    const taskName = options.taskName || 'AntigravityAutoLocalize';
+    const baseDir = options.baseDir || DIR;
+    const disableFlag = path.join(baseDir, '.disable_autowatcher');
+
+    console.log('=======================================================');
+    console.log('  卸載 Antigravity 背景自動更新守護 (Windows 工作排程)');
+    console.log('=======================================================');
+    let existed = false;
+    let deleted = false;
+    try {
+        execSyncFn('schtasks.exe', ['/query', '/tn', taskName], { stdio: 'ignore' });
+        existed = true;
+    } catch {
+        existed = false;
+    }
+
+    if (existed) {
+        console.log(`[1/1] 正在移除工作排程 ${taskName}...`);
+        execSyncFn('schtasks.exe', ['/delete', '/tn', taskName, '/f'], {
+            encoding: 'utf8',
+            stdio: 'inherit'
+        });
+        deleted = true;
+        console.log('[完成] Windows 背景自動守護已卸載！');
+    } else {
+        console.log(`[提示] 未偵測到已註冊的排程工作 (${taskName})，無須移除。`);
+    }
+    try {
+        fs.writeFileSync(disableFlag, 'disabled\n', 'utf8');
+    } catch {}
+    return { taskName, existed, deleted };
+}
+
 function main() {
+    const args = process.argv.slice(2);
+    if (args.includes('--install-windows-task')) {
+        try {
+            installWindowsTask();
+        } catch (err) {
+            console.error('[錯誤] 註冊 Windows 背景排程失敗：' + (err.message || err));
+            console.error('[提示] 若 Antigravity 安裝在 Program Files 等受保護路徑，請以「系統管理員身分」執行批次檔。');
+            process.exitCode = 1;
+        }
+        return;
+    }
+    if (args.includes('--uninstall-windows-task')) {
+        try {
+            uninstallWindowsTask();
+        } catch (err) {
+            console.error('[錯誤] 移除 Windows 背景排程失敗：' + (err.message || err));
+            process.exitCode = 1;
+        }
+        return;
+    }
+
     try {
         if (fs.existsSync(path.join(DIR, '.disable_autowatcher'))) return;
         const appInfo = getAppInfo();
@@ -526,7 +773,7 @@ function main() {
         // 輕量非同步遠端版本檢測（預設每 24 小時執行一次，不阻斷主流程）
         if (autoUpdater && typeof autoUpdater.checkUpdate === 'function') {
             const pkgPath = path.join(DIR, 'package.json');
-            let currentVer = '3.6.1';
+            let currentVer = '3.7.0';
             try {
                 currentVer = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || currentVer;
             } catch {}
@@ -546,10 +793,28 @@ function main() {
         log('自動繁中化失敗，稍後重試：' + (error.stack || error.message));
         if (IS_MAC && (error.code === 'EPERM' || (error.message && error.message.includes('EPERM')))) {
             notifyMacUser('Antigravity 繁中化', '因 macOS 系統權限或 App 管理限制，自動覆寫受阻；請在專案中執行「點兩下安裝繁體中文」或於系統設定授權。');
+        } else if (process.platform === 'win32' && (error.code === 'EPERM' || error.code === 'EACCES' || (error.message && (error.message.includes('EPERM') || error.message.includes('EACCES'))))) {
+            log('因 Windows 資料夾權限限制（例如 Program Files），自動覆寫受阻；請改用「以系統管理員身分執行」重新安裝守護。');
         }
         process.exitCode = 1;
     }
 }
 
 if (require.main === module) main();
-module.exports = { checkAndLocalizeApp, waitForStableFile, acquireLock, isLocalized, digest, safeReplaceFile, recipeHash, ensureAccessibleDir };
+module.exports = {
+    checkAndLocalizeApp,
+    waitForStableFile,
+    acquireLock,
+    isLocalized,
+    digest,
+    safeReplaceFile,
+    recipeHash,
+    ensureAccessibleDir,
+    getWindowsAppCandidates,
+    getAppInfo,
+    buildWindowsTaskCommand,
+    buildWindowsTaskXml,
+    encodeUtf16LeWithBom,
+    installWindowsTask,
+    uninstallWindowsTask
+};

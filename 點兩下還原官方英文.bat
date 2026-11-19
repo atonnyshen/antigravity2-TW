@@ -1,27 +1,36 @@
 @echo off
-chcp 65001 > nul
-title Antigravity - 還原官方原版英文
-
-echo.
-echo ======================================================
-echo    正在還原 Windows 版 Antigravity 官方原版英文
-echo ======================================================
-echo.
-echo [1/2] 正在還原官方原始檔案...
+chcp 65001 >nul
+setlocal EnableExtensions
 cd /d "%~dp0"
-node localization_engine.js --huifu %*
 
-if %errorlevel% neq 0 (
-    echo.
-    echo ❌ 錯誤: 還原官方原版失敗！請檢查上方錯誤訊息，或確認是否已安裝 Node.js。
-    pause
-    exit /b 1
-)
+where node >nul 2>nul
+if %errorlevel% equ 0 goto :check_node_ver
+
+if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+if exist "%ProgramFiles(x86)%\nodejs\node.exe" set "PATH=%ProgramFiles(x86)%\nodejs;%PATH%"
+if exist "%LOCALAPPDATA%\Programs\nodejs\node.exe" set "PATH=%LOCALAPPDATA%\Programs\nodejs;%PATH%"
+
+where node >nul 2>nul
+if %errorlevel% equ 0 goto :check_node_ver
+
+echo [ERROR] Node.js 22.12.0+ not found.
+echo Please install Node.js LTS from https://nodejs.org/ and re-run this file.
+pause
+exit /b 1
+
+:check_node_ver
+node -e "const v=process.versions.node.split('.').map(Number); if(v[0]<22||(v[0]===22&&v[1]<12)){console.error('[ERROR] Node.js >= 22.12.0 required. Current:',process.versions.node); process.exit(1);}"
+if errorlevel 1 goto :failed
+
+node localization_engine.js --tw --huifu
+if errorlevel 1 goto :failed
 
 echo.
-echo [2/2] 還原完成！
+pause
+exit /b 0
+
+:failed
 echo.
-echo 🎉 提示: Antigravity 已成功無痕還原至官方原版狀態。
-echo.
-echo 視窗將在 5 秒後自動關閉...
-timeout /t 5
+echo [FAILED] Operation did not complete. Please check the messages above.
+pause
+exit /b 1

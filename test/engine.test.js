@@ -25,7 +25,7 @@ test('all translation dictionaries parse and contain string values', () => {
 test('generated script parses; protected containers and shadow roots remain untranslated', () => {
     const js = generateJs();
     new vm.Script(js);
-    const prefix = js.slice(0, js.indexOf('    const observer = new MutationObserver'));
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
     const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
     vm.runInNewContext(prefix + '\n globalThis.hooks = { isCodeOrEditor, translateNode }; })();', context);
     const { isCodeOrEditor, translateNode } = context.hooks;
@@ -72,7 +72,7 @@ test('real asar CLI: paths with spaces, injection, unpacked data, repeatability'
 
 test('FastPick and split text nodes are properly localized', () => {
     const js = generateJs();
-    const prefix = js.slice(0, js.indexOf('    const observer = new MutationObserver'));
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
     const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
     vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
     const { translateNode } = context.hooks;
@@ -131,7 +131,7 @@ test('generated script includes Taiwan dynamic rules and prompts in Traditional 
 
 test('NUX onboarding and typographical quote variations are properly localized', () => {
     const js = generateJs();
-    const prefix = js.slice(0, js.indexOf('    const observer = new MutationObserver'));
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
     const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
     vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
     const { translateNode } = context.hooks;
@@ -258,7 +258,7 @@ test('main process and native dialog patches localize quit, IPC, SSH, device cho
 
 test('v2.32.1 template rules and newly added dict keys localize UI strings accurately', () => {
     const js = generateJs();
-    const prefix = js.slice(0, js.indexOf('    const observer = new MutationObserver'));
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
     const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
     vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
     const { translateNode } = context.hooks;
@@ -288,7 +288,7 @@ test('v2.32.1 template rules and newly added dict keys localize UI strings accur
 
 test('user greeting handles dynamic user name and fragmented DOM nodes', () => {
     const js = generateJs();
-    const prefix = js.slice(0, js.indexOf('    const observer = new MutationObserver'));
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
     const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
     vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
     const { translateNode } = context.hooks;

@@ -9,7 +9,7 @@
 
 👉 **[原版簡體中文說明 (Upstream README)](README_CN.md)**
 
-目前套件版本：**3.6.1**。適配 Antigravity **v2.32.1+**；台灣用語與背景守護由本分支持續維護。
+目前套件版本：**3.7.0**。適配 Antigravity **v2.33.0**；台灣用語與背景守護由本分支持續維護。
 
 ---
 
@@ -42,11 +42,11 @@
 ## ⚙️ 核心機制
 
 1. **同步備份檔案**：偵測官方發布新版本時，自動將全新英文包同步備份為 `app.asar.bak`，避免還原時退回舊版。
-2. **更新套用方式**：背景守護先在隔離目錄重建，確認官方檔案未再更新才置換；不關閉應用程式、不清除使用中的快取。已開啟的視窗須重啟後載入。
+2. **更新套用方式**：背景守護先在隔離目錄重建，確認官方檔案未再更新才置換，不主動強制關閉應用程式；手動安裝與背景守護皆會在套用後清理 Electron 瀏覽器／位元組碼快取（`Cache`、`Code Cache`、`GPUCache` 等）以避免新舊版本衝突，不會清除對話紀錄或個人設定。已開啟的視窗須重新啟動後載入。
 3. **macOS 簽署驗證**：背景置換後執行本機 ad-hoc 簽署與驗證，失敗時嘗試還原並回傳錯誤。這不等同官方簽章或 Apple 公證。
 4. **專注桌面體驗**：全面聚焦 Antigravity 2.0 獨立桌面版 IDE 的完整繁體中文化；停止支援 VS Code 擴充套件以確保運作穩定。
 5. **常駐背景守護**：提供 macOS `launchd` 原生守護服務與 Windows 排程工作，官方版本更動時自動於背景重編注入。
-6. **遠端版本自動檢測**：背景守護服務每 24 小時定期查詢 GitHub 最新發布版本；當繁中字典或引擎有新版本釋出時，主動發出系統通知提醒升級，不彈出終端機視窗，不影響正常作業。
+6. **遠端版本自動檢測**：背景守護服務每 24 小時定期查詢 GitHub 最新發布版本並記錄於日誌；macOS 同時透過原生通知提醒升級且不彈出終端機視窗。Windows 工作排程依系統預設每 5 分鐘喚起背景程式時，命令列視窗可能短暫閃現。
 
 ---
 
@@ -65,28 +65,43 @@
 
 ## 🚀 極速安裝指南（獨立桌面版 IDE）
 
-### 步驟 1：取得專案檔案（二選一）
+本套件僅需電腦安裝 **Node.js 22.12.0 以上**（[點此下載官方安裝包](https://nodejs.org/)，安裝時一路點「下一步」即可；執行期零外部依賴，無須額外執行 `npm ci`）。
 
-- **方法 A（推薦：直接下載 ZIP）**：
-  1. 點擊本頁右上角綠色按鈕 **`Code`** → 選擇 **`Download ZIP`**。
-  2. 解壓縮至電腦任意資料夾（例如「下載」資料夾）。
+### 方法一（首選）：交給 AI 工具協助檢查並安裝（推薦・免記指令）
 
-- **方法 B（Git 複製）**：
-  ```bash
-  git clone https://github.com/atonnyshen/antigravity2-TW.git
-  cd antigravity2-TW
+本套件已內建 AI 安裝引導手冊（[`AI_INSTALL_GUIDE.md`](AI_INSTALL_GUIDE.md)）。交給 AI 後，它會**先唯讀檢查環境與程式安全，再列出 `1～4` 選項（安裝繁中＋守護／僅裝繁中／只看不改／還原英文）讓你決定**，不用一次記憶複雜參數。
+
+不論使用 **Antigravity 對話框**、**Claude Code、Codex、Cursor 或 Gemini CLI**，只要複製下面其中一句貼上即可：
+
+- **還沒下載專案？貼上這句給 AI：**
+  ```text
+  請幫我把 https://github.com/atonnyshen/antigravity2-TW 下載（或更新）到我的「下載」資料夾，並讀取裡面的 AI_INSTALL_GUIDE.md，先檢查環境與安全性再讓我選擇要執行的項目。
   ```
 
-### 步驟 2：執行一鍵套用
+- **已經打開下載好的資料夾？貼上這句就好：**
+  ```text
+  請依照 AI_INSTALL_GUIDE.md 先幫我檢查環境與安全性，再讓我選擇要執行的項目。
+  ```
 
-先安裝 **Node.js 22.12.0 以上**，並確認 `node`、`npm` 可執行。安裝入口會執行 `npm ci --ignore-scripts`，依 `package-lock.json` 安裝固定版本的依賴。直接使用引擎前也須執行此指令。背景守護不會呼叫 `npx` 或臨時下載程式。
+---
 
-1. **完全關閉** Antigravity 應用程式。
-2. 進入解壓後的資料夾：
+### 方法二：自己手動點兩下安裝（圖形介面操作）
+
+1. **下載與解壓縮**：
+   - 點擊本頁右上角綠色按鈕 **`Code`** → 選擇 **`Download ZIP`**（或前往右側 **Releases** 下載最新發布壓縮檔）。
+   - 將壓縮檔**完整解壓縮**到電腦一般資料夾（Windows 使用者請勿直接在 ZIP 預覽視窗內點兩下檔案）。
+2. **完全關閉** Antigravity 應用程式。
+3. 進入解壓縮後的資料夾，點兩下對應系統的安裝檔：
    - **macOS 使用者**：點兩下執行 **`點兩下安裝繁體中文.command`**。
-   - **Windows 使用者**：點兩下執行 **`點兩下安裝繁體中文.bat`**。
-3. 依提示選擇左上角品牌呈現方式（直接按 Enter 預設保留官方英文 `Antigravity`）。
-4. 重新啟動 Antigravity，即可進入全繁體中文（台灣）開發環境！
+   - **Windows 使用者**：點兩下執行 **`點兩下安裝繁體中文.bat`**（若 Antigravity 安裝在 `C:\Program Files\Antigravity`，請對檔案按右鍵選擇「**以系統管理員身分執行**」）。
+4. 畫面出現品牌文字選擇時，直接按 Enter（預設保留官方英文 `Antigravity`）。
+5. 重新啟動 Antigravity，即可進入繁體中文（台灣）介面。
+
+> **進階使用者／Git 命令列**：
+> ```bash
+> git clone https://github.com/atonnyshen/antigravity2-TW.git && cd antigravity2-TW
+> node localization_engine.js --tw --interactive
+> ```
 
 ---
 
@@ -121,52 +136,59 @@ Antigravity 官方更新會覆蓋資源檔。守護程式偵測變更後重套�
 
 ### 🍎 macOS 使用者
 
-系統服務需要管理員認證，並使用 nodejs.org 官方獨立 Node.js 套件的 `/usr/local/bin/node`。安裝器將程式、Node 與鎖定依賴複製到 root 擁有的 `/Library/Application Support/Antigravity2TW/runtime.*`，不讓常駐 root 服務執行工作區中可隨時改寫的程式。
+支援 nodejs.org 官方安裝包（`/usr/local/bin/node`）、Homebrew（`/opt/homebrew/bin/node`）或系統 `PATH` 中的 Node.js 22.12+，並依應用程式目錄權限自動選擇系統級 `LaunchDaemon`（`/Library/Application Support/Antigravity2TW/runtime.*`）或使用者級 `LaunchAgent`（`~/Library/Application Support/Antigravity2TW/runtime`），不會讓背景服務直接執行下載資料夾中可任意改寫的腳本。
 
-觸發方式是載入服務、應用程式路徑變更，以及每 **5 分鐘**巡檢。檔案須先穩定，才會開始建置。服務只處理 `/Applications` 內的 Antigravity 2.x；家目錄安裝與 1.x 請手動套用。更新本儲存庫後，須重新執行安裝器才能更新受保護副本。
+觸發時機包含系統啟動、應用程式檔案變動與每 **5 分鐘**巡檢一次；更新本專案後重新執行安裝器即可更新背景副本。若日誌出現 `EPERM` 或 `Operation not permitted`，請檢查「系統設定 → 隱私權與安全性 → App 管理」授權。
 
-若日誌出現 `EPERM` 或 `Operation not permitted`，檢查「系統設定 → 隱私權與安全性 → App 管理」的實際授權提示。root 不保證繞過 macOS 保護；服務註冊成功也不代表套用成功。
-
-- **啟用背景自動守護**（一行指令自動下載與註冊）：
+- **啟用背景自動守護**（點兩下或一行指令安裝）：
+  *(若已下載本專案，直接點兩下執行 **`點兩下安裝macOS背景守護.command`** 即可)*
   ```bash
   curl -fsSL https://raw.githubusercontent.com/atonnyshen/antigravity2-TW/main/install_macos_autowatcher.sh | bash
   ```
-  *(若已下載本專案，亦可直接點兩下執行 **`點兩下安裝macOS背景守護.command`**)*
-- **卸載背景守護**（停止服務，保留設定、程式與日誌供復原）：
+- **卸載背景守護**（停止服務，保留設定與日誌供檢查）：
+  *(若已下載本專案，直接點兩下執行 **`點兩下卸載macOS背景守護.command`**)*
   ```bash
-  sudo bash uninstall_macos_autowatcher.sh
+  bash uninstall_macos_autowatcher.sh
   ```
-  *(若已下載本專案，亦可直接點兩下執行 **`點兩下卸載macOS背景守護.command`**)*
 
-在本專案目錄執行卸載指令。檢查服務與最近結果：
+在本專案目錄執行卸載指令（系統級 `LaunchDaemon` 則加上 `sudo`）。檢查服務與最近結果（系統級／使用者級）：
 
 ```bash
 launchctl print system/com.antigravity.autolocalize
 tail -n 60 /Library/Logs/Antigravity2TW/autolocalize.log
+# 若安裝為使用者級 LaunchAgent：
+tail -n 60 ~/Library/Logs/Antigravity2TW/autolocalize.log
 ```
 
-確認 `last exit code = 0`，並查看「繁中套件已套用並驗證」或「已是目前版本」日誌。背景服務會自行結束，`state = not running` 不代表未註冊。還原官方英文前先停用守護，避免它再次套用。
+確認 `last exit code = 0`，並看到「繁中套件已套用並驗證」或「已是目前版本」日誌即代表正常。背景服務每次執行完就會結束，`state = not running` 不代表未註冊。還原官方英文前先停用守護，避免它自動重套。
 
 ---
 
 ### 🪟 Windows 使用者
 
-工作排程每 **5 分鐘**巡檢一次，日誌位於專案的 `autolocalize.log`。若 Antigravity 安裝於受保護的 `Program Files`，仍須確認排程執行帳號的寫入權限。
+工作排程支援系統中的 Node.js 22.12+（自動搜尋標準安裝路徑與 `PATH`），每 **5 分鐘**自動巡檢一次，並將紀錄寫入專案資料夾內的 `autolocalize.log`。所有 Windows `.bat` 檔皆採純 ASCII 與 `CRLF` 編碼，執行期零外部依賴，可直接雙擊啟動。
 
-- **一鍵安裝繁中環境**（PowerShell 一行指令）：
+觸發時機為每 **5 分鐘**定時檢查；只有當 Antigravity 官方主程式更新或本套件字典更新時才會重建套用，其餘時間立即略過。若 Antigravity 安裝於受保護的 `C:\Program Files\Antigravity`，安裝或卸載守護時請對批次檔按右鍵選擇「**以系統管理員身分執行**」。
+
+- **啟用背景自動守護**（點兩下或指令註冊排程）：
+  *(若已下載本專案，直接點兩下執行 **`點兩下安裝Windows背景守護.bat`** 即可)*
   ```powershell
-  irm https://raw.githubusercontent.com/atonnyshen/antigravity2-TW/main/install_windows.ps1 | iex
+  node auto_localize_watcher.js --install-windows-task
   ```
-- **啟用背景自動守護**（註冊 Windows 工作排程，自動巡檢重套）：
+- **卸載背景守護**（移除排程工作，停止自動檢查）：
+  *(若已下載本專案，直接點兩下執行 **`點兩下卸載Windows背景守護.bat`**)*
   ```powershell
-  irm https://raw.githubusercontent.com/atonnyshen/antigravity2-TW/main/install_windows_autowatcher.ps1 | iex
+  node auto_localize_watcher.js --uninstall-windows-task
   ```
-  *(若已下載本專案，亦可點兩下執行 **`點兩下安裝Windows背景守護.bat`**)*
-- **一鍵卸載背景守護**（移除 Windows 排程工作）：
-  ```powershell
-  irm https://raw.githubusercontent.com/atonnyshen/antigravity2-TW/main/uninstall_windows_autowatcher.ps1 | iex
-  ```
-  *(若已下載本專案，亦可點兩下執行 **`點兩下卸載Windows背景守護.bat`**)*
+
+亦可在專案資料夾內以 PowerShell 執行 `.\install_windows_autowatcher.ps1` 或 `.\uninstall_windows_autowatcher.ps1`。檢查排程狀態與最近執行紀錄：
+
+```powershell
+schtasks /query /tn AntigravityAutoLocalize
+Get-Content .\autolocalize.log -Tail 40 -Encoding UTF8
+```
+
+確認狀態為已就緒，並看到「繁中套件已套用並驗證」或「已是目前版本」日誌即代表正常。還原官方英文前先卸載守護，避免 5 分鐘內自動重套。
 
 ---
 
@@ -176,17 +198,13 @@ tail -n 60 /Library/Logs/Antigravity2TW/autolocalize.log
 
 ### 1. 桌面版 IDE 還原：
 - **macOS 使用者**：點兩下執行 **`點兩下還原官方英文.command`**。
-- **Windows 使用者**：點兩下執行 **`點兩下還原官方英文.bat`**。
+- **Windows 使用者**：點兩下執行 **`點兩下還原官方英文.bat`**（若安裝於 `Program Files`，請以系統管理員身分執行）。
 
-### 2. VS Code 官方擴充套件還原：
-- **macOS 使用者**：點兩下執行 **`點兩下還原VSCode擴充官方英文.command`**。
-- **Windows 使用者**：點兩下執行 **`點兩下還原VSCode擴充官方英文.bat`**。
-
-### 3. 背景自動守護卸載：
+### 2. 背景自動守護卸載：
 - **macOS 使用者**：點兩下執行 **`點兩下卸載macOS背景守護.command`**（或執行上方終端機卸載指令）。
-- **Windows 使用者**：點兩下執行 **`點兩下卸載Windows背景守護.bat`**（或執行上方 PowerShell 卸載指令）。
+- **Windows 使用者**：點兩下執行 **`點兩下卸載Windows背景守護.bat`**。
 
-備份檔完好保存，執行還原腳本即可迅速恢復官方原版英文狀態。
+備份檔完好保存，執行還原腳本即可迅速恢復官方原版英文狀態（還原前建議先卸載背景守護，避免 5 分鐘內自動重新繁中化）。
 
 ---
 

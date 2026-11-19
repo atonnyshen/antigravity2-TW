@@ -3,7 +3,6 @@ AgentWork/
 _temp_asar/
 node_modules/
 .DS_Store
-AGENTS.md
 
 # Tool-specific exclusions
 .reasonix/

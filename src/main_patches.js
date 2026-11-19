@@ -3,7 +3,7 @@ function escapeRegExp(string) {
 }
 
 function cleanJsContent(content, signatureStart, signatureEnd) {
-    const regex = new RegExp(escapeRegExp(signatureStart) + "[\\s\\S]*?" + escapeRegExp(signatureEnd), "g");
+    const regex = new RegExp("(?:\\r?\\n;)?\\r?\\n?" + escapeRegExp(signatureStart) + "[\\s\\S]*?" + escapeRegExp(signatureEnd), "g");
     return content.replace(regex, "");
 }
 
@@ -23,6 +23,7 @@ function cleanTrayJsContent(content) {
     content = content.replace(/\n\s*\/\* --- TRAY TRANSLATION START --- \*\/[\s\S]*?\/\* --- TRAY TRANSLATION END --- \*\//g, '');
     content = content.replace(/\n\s*\/\* --- TRAY DOUBLE CLICK START --- \*\/[\s\S]*?\/\* --- TRAY DOUBLE CLICK END --- \*\//g, '');
     content = content.replace(/\n\s*\/\* --- TRAY INSERT TRANSLATION START --- \*\/[\s\S]*?\/\* --- TRAY INSERT TRANSLATION END --- \*\//g, '');
+    content = content.replace(/\/\* --- TRAY COUNT START:([A-Za-z0-9+/=]+) --- \*\/[\s\S]*?\/\* --- TRAY COUNT END --- \*\//g, (_m, b64) => Buffer.from(b64, 'base64').toString('utf8'));
     return content;
 }
 
@@ -53,7 +54,7 @@ function patchUtilsJs(utilsContent, signatureStart, signatureEnd) {
             const fsMod = typeof fs !== 'undefined' && fs && typeof fs.readFileSync === 'function' ? fs : require('fs');
             const preloadSrc = fsMod.readFileSync(preloadFile, 'utf8');
             const sIdx = preloadSrc.indexOf(${JSON.stringify(signatureStart)});
-            const eIdx = preloadSrc.indexOf(${JSON.stringify(signatureEnd)});
+            const eIdx = sIdx !== -1 ? preloadSrc.indexOf(${JSON.stringify(signatureEnd)}, sIdx + ${signatureStart.length}) : -1;
             if (sIdx !== -1 && eIdx !== -1 && sIdx < eIdx) {
                 const extracted = preloadSrc.slice(sIdx, eIdx + ${signatureEnd.length});
                 globalThis[cacheKey] = extracted;
@@ -88,7 +89,8 @@ function patchUtilsJs(utilsContent, signatureStart, signatureEnd) {
     };
     const injectSidecarSubframe = (frame) => {
         try {
-            if (!frame || frame.isDestroyed?.() || win.isDestroyed?.() || hubContents.isDestroyed?.()) return;
+            const winDestroyed = typeof win !== 'undefined' && win && win.isDestroyed?.();
+            if (!frame || frame.isDestroyed?.() || winDestroyed || hubContents.isDestroyed?.()) return;
             const mainFrame = hubContents.mainFrame;
             if (!mainFrame || frame === mainFrame || frame.parent !== mainFrame) return;
             const frameUrl = String(frame.url || '');
@@ -101,10 +103,13 @@ function patchUtilsJs(utilsContent, signatureStart, signatureEnd) {
             Promise.resolve(mainFrame.executeJavaScript(checkExpr))
                 .then((isSidecar) => {
                     if (!isSidecar) return;
-                    if (frame.isDestroyed?.() || win.isDestroyed?.() || hubContents.isDestroyed?.()) return;
+                    const winDestroyedLater = typeof win !== 'undefined' && win && win.isDestroyed?.();
+                    if (frame.isDestroyed?.() || winDestroyedLater || hubContents.isDestroyed?.()) return;
                     return frame.executeJavaScript(script);
                 })
-                .catch(() => undefined);
+                .catch((err) => {
+                    console.warn('[汉化] Sidecar 注入失败:', err && err.message ? err.message : err);
+                });
         } catch (_err) {}
     };
     const onSidecarFrameNavigate = (event, _url, _httpResponseCode, _httpStatusText, isMainFrame, frameProcessId, frameRoutingId) => {
@@ -117,10 +122,12 @@ function patchUtilsJs(utilsContent, signatureStart, signatureEnd) {
     };
     hubContents.on('did-frame-navigate', onSidecarFrameNavigate);
     hubContents.on('did-frame-finish-load', onSidecarFrameFinishLoad);
-    win.on('closed', () => {
-        hubContents.off?.('did-frame-navigate', onSidecarFrameNavigate);
-        hubContents.off?.('did-frame-finish-load', onSidecarFrameFinishLoad);
-    });
+    if (typeof win !== 'undefined' && win && typeof win.on === 'function') {
+        win.on('closed', () => {
+            hubContents.off?.('did-frame-navigate', onSidecarFrameNavigate);
+            hubContents.off?.('did-frame-finish-load', onSidecarFrameFinishLoad);
+        });
+    }
     /* --- SIDECAR TRANSLATION END --- */`;
 
     console.log(`[修改] 伴生面板 (Sidecar) 汉化钩子注入成功！`);
@@ -130,7 +137,7 @@ function patchUtilsJs(utilsContent, signatureStart, signatureEnd) {
 function patchPreloadJs(content, translationJs, signatureStart, signatureEnd) {
     console.log(`[修改] 正在向 preload.js 注入汉化代码...`);
     const cleanedContent = cleanJsContent(content, signatureStart, signatureEnd);
-    const newContent = cleanedContent + "\n" + translationJs;
+    const newContent = cleanedContent + "\n;\n" + translationJs;
     console.log(`[修改] 注入成功！`);
     return newContent;
 }
@@ -337,44 +344,58 @@ function patchTrayJs(trayContent, useTw) {
         'Reopen Locally': '在本地重新打开',
         'Quit': '退出'
     }`};
-    for (const item of actions) {
-        if (!item || !item.label) continue;
-        if (translations[item.label]) {
-            item.label = translations[item.label];
-        } else if (item.label.startsWith('Open ')) {
-            item.label = (${useTw ? "true" : "false"} ? '開啟 ' : '打开 ') + item.label.slice(5);
-        } else if (item.label === 'Quit') {
-            item.label = ${useTw ? "true" : "false"} ? '結束' : '退出';
+    if (typeof actions !== 'undefined' && Array.isArray(actions)) {
+        for (const item of actions) {
+            if (!item || !item.label) continue;
+            if (translations[item.label]) {
+                item.label = translations[item.label];
+            } else if (item.label.startsWith('Open ')) {
+                item.label = (${useTw ? "true" : "false"} ? '開啟 ' : '打开 ') + item.label.slice(5);
+            } else if (item.label === 'Quit') {
+                item.label = ${useTw ? "true" : "false"} ? '結束' : '退出';
+            }
         }
     }
     /* --- TRAY TRANSLATION END --- */`;
 
-    let trayPatched = trayCleaned.replace(targetCreate, replacementCreate);
-    if (trayPatched === trayCleaned) {
+    let hitCount = 0;
+    let trayPatched = trayCleaned.replace(targetCreate, (...m) => {
+        hitCount++;
+        return replacementCreate(...m);
+    });
+    if (hitCount === 0) {
         console.warn(`[警告] 未能在 tray.js 中找到 createTray 函数插入点。`);
     }
 
     const dblClickTarget = /tray\.setContextMenu\(contextMenu\);/;
     const dblClickReplacement = `tray.setContextMenu(contextMenu);
     /* --- TRAY DOUBLE CLICK START --- */
-    const openAction = actions.find(item => item && typeof item.click === 'function' && !['Quit', '退出', '結束'].includes(item.label));
-    if (openAction) {
-        tray.on('double-click', () => {
-            const wins = electron_1.BrowserWindow.getAllWindows();
-            if (wins.length > 0 && wins[0].isMinimized()) {
-                wins[0].restore();
-            }
-            openAction.click();
-        });
+    if (typeof actions !== 'undefined' && Array.isArray(actions) && typeof tray !== 'undefined' && tray && typeof tray.on === 'function') {
+        const openAction = actions.find(item => item && typeof item.click === 'function' && !['Quit', '退出', '結束'].includes(item.label));
+        if (openAction) {
+            tray.on('double-click', () => {
+                const wins = electron_1.BrowserWindow.getAllWindows();
+                if (wins.length > 0 && wins[0].isMinimized()) {
+                    wins[0].restore();
+                }
+                openAction.click();
+            });
+        }
     }
     /* --- TRAY DOUBLE CLICK END --- */`;
-    trayPatched = trayPatched.replace(dblClickTarget, dblClickReplacement);
+    trayPatched = trayPatched.replace(dblClickTarget, () => {
+        hitCount++;
+        return dblClickReplacement;
+    });
 
-    const countRegex = /countItem\.label\s*=\s*\([\s\S]*?' running';/g;
+    const countRegex = /countItem\.label\s*=\s*\([^;]{0,300}' running';/g;
     const replacementCount = useTw
         ? "countItem.label = count > 0 ? `${count} 個代理執行中` : '無執行中的代理';"
         : "countItem.label = count > 0 ? `${count} 个智能体运行中` : '无运行中的智能体';";
-    trayPatched = trayPatched.replace(countRegex, replacementCount);
+    trayPatched = trayPatched.replace(countRegex, (match) => {
+        hitCount++;
+        return `/* --- TRAY COUNT START:${Buffer.from(match, 'utf8').toString('base64')} --- */ ${replacementCount} /* --- TRAY COUNT END --- */`;
+    });
 
     const targetInsert = /function\s+insertTrayMenuItem\s*\(\s*position\s*,\s*options\s*\)\s*\{/;
     const replacementInsert = `function insertTrayMenuItem(position, options) {
@@ -400,9 +421,16 @@ function patchTrayJs(trayContent, useTw) {
         }
     }
     /* --- TRAY INSERT TRANSLATION END --- */`;
-    trayPatched = trayPatched.replace(targetInsert, replacementInsert);
+    trayPatched = trayPatched.replace(targetInsert, () => {
+        hitCount++;
+        return replacementInsert;
+    });
 
-    console.log(`[修改] 任务栏菜单汉化注入成功！`);
+    if (hitCount > 0) {
+        console.log(`[修改] 任务栏菜单汉化注入成功（${hitCount} 处）！`);
+    } else {
+        console.warn(`[警告] 未能在 tray.js 中命中任何任务栏注入点。`);
+    }
     return trayPatched;
 }
 
@@ -417,7 +445,13 @@ function patchLoadingOverlayJs(loadingContent, useTw) {
         .replace('<div class="text">反重力引擎已啟動，正在努力擺脫地心引力...</div>', replacementText)
         .replace('<div class="text">反重力引擎已启动，正在努力摆脱地心引力...</div>', replacementText);
 
-    console.log(`[修改] 加载页汉化注入成功！`);
+    if (out !== loadingContent) {
+        console.log(`[修改] 加载页汉化注入成功！`);
+    } else if (!loadingContent.includes('<div class="text">')) {
+        console.log(`[修改] 載入頁目前僅含圖形動畫，無須額外文字補丁。`);
+    } else {
+        console.warn(`[警告] 未能在 loadingOverlay.js 中找到加载页文本插入点。`);
+    }
     return out;
 }
 
@@ -440,7 +474,11 @@ function patchUpdaterJs(updaterContent, useTw) {
         .replace('MenuUpdateStep["CheckingForUpdates"] = "Checking for Updates...";', `MenuUpdateStep["CheckingForUpdates"] = ${useTw ? '"正在檢查更新..."' : '"正在检查更新..."'};`)
         .replace('MenuUpdateStep["DownloadingUpdate"] = "Downloading Update...";', `MenuUpdateStep["DownloadingUpdate"] = ${useTw ? '"正在下載更新..."' : '"正在下载更新..."'};`)
         .replace('MenuUpdateStep["RestartToUpdate"] = "Restart to Update";', `MenuUpdateStep["RestartToUpdate"] = ${useTw ? '"重新啟動以更新"' : '"重启以更新"'};`);
-    console.log(`[修改] 更新弹窗汉化注入成功！`);
+    if (out !== updaterContent) {
+        console.log(`[修改] 更新弹窗汉化注入成功！`);
+    } else {
+        console.warn(`[警告] 未能在 updater.js 中找到更新弹窗插入点。`);
+    }
     return out;
 }
 
@@ -504,6 +542,21 @@ function patchRemoteManagerJs(rmContent, useTw) {
     console.log(`[修改] 正在向 remoteManager.js 注入遠端伺服器對話框漢化...`);
     let out = rmContent;
     out = out.replace(/title:\s*'Choose an SSH config file'/g, useTw ? "title: '選擇 SSH 設定檔'" : "title: '选择 SSH 配置文件'")
+             .replace(/title:\s*'Choose another SSH config file'/g, useTw ? "title: '選取另一個 SSH 設定檔'" : "title: '选择另一个 SSH 配置文件'")
+             .replace(/buttons:\s*\['Choose Another File…',\s*'Cancel'\]/g, useTw ? "buttons: ['選取其他檔案…', '取消']" : "buttons: ['选择其他文件…', '取消']")
+             .replace(/title:\s*'Could not restart the SSH server'/g, useTw ? "title: '無法重新啟動 SSH 伺服器'" : "title: '无法重启 SSH 服务器'")
+             .replace(/'Could not restart the SSH server'/g, useTw ? "'無法重新啟動 SSH 伺服器'" : "'无法重启 SSH 服务器'")
+             .replace(/title:\s*'Microphone access'/g, useTw ? "title: '麥克風存取權限'" : "title: '麦克风访问权限'")
+             .replace(/message:\s*`Allow \$\{label\} to use your microphone\?`/g, useTw ? "message: `允許 ${label} 使用您的麥克風嗎？`" : "message: `允许 ${label} 使用您的麦克风吗？`")
+             .replace(/buttons:\s*\['Allow',\s*'Block'\]/g, useTw ? "buttons: ['允許', '封鎖']" : "buttons: ['允许', '阻止']")
+             .replace(/buttons:\s*\['Block',\s*'Allow'\]/g, useTw ? "buttons: ['封鎖', '允許']" : "buttons: ['阻止', '允许']")
+             .replace(/title:\s*'Shared home directory'/g, useTw ? "title: '共用家目錄'" : "title: '共享主目录'")
+             .replace(/buttons:\s*\['Take Over',\s*'Cancel'\]/g, useTw ? "buttons: ['接管', '取消']" : "buttons: ['接管', '取消']")
+             .replace(/title:\s*'Restart SSH server'/g, useTw ? "title: '重新啟動 SSH 伺服器'" : "title: '重启 SSH 服务器'")
+             .replace(/message:\s*`\$\{label\} is running server \$\{running\}; this app is \$\{expected\}\. Restart the server now\?`/g,
+                      useTw ? "message: `${label} 目前執行的伺服器版本為 ${running}；此應用程式為 ${expected}。要立即重新啟動伺服器嗎？`" : "message: `${label} 当前运行的服务器版本为 ${running}；此应用为 ${expected}。要立即重启服务器吗？`")
+             .replace(/detail:\s*`Any \$\{what\} still running on it stops\. The server starts again with this app's version\.`/g,
+                      useTw ? "detail: `目前仍在該伺服器執行的 ${what} 將會停止，之後會改以目前應用程式版本重新啟動。`" : "detail: `当前仍在其中运行的 ${what} 将停止，随后会以当前应用版本重新启动服务器。`")
              .replace(/title:\s*'SSH connection failed'/g, useTw ? "title: 'SSH 連線失敗'" : "title: 'SSH 连接失败'")
              .replace(/buttons:\s*\['Stop Server',\s*'Cancel'\]/g, useTw ? "buttons: ['停止伺服器', '取消']" : "buttons: ['停止服务器', '取消']")
              .replace(/title:\s*'Stop SSH server'/g, useTw ? "title: '停止 SSH 伺服器'" : "title: '停止 SSH 服务器'")
@@ -577,6 +630,36 @@ function patchProvisionSplashJs(psContent, useTw) {
     return out;
 }
 
+function patchWizardHtmlJs(whContent, useTw) {
+    console.log(`[修改] 正在向 wizardHtml.js 注入安裝導覽畫面漢化...`);
+    const out = whContent
+        .replace('<title>Welcome to Antigravity</title>', useTw ? '<title>歡迎使用 Antigravity</title>' : '<title>欢迎使用 Antigravity</title>')
+        .replace('>Setting up…<', useTw ? '>正在設定…<' : '>正在配置…<')
+        .replace('<h1>Welcome to the new Antigravity!</h1>', useTw ? '<h1>歡迎來到全新的 Antigravity！</h1>' : '<h1>欢迎来到全新的 Antigravity！</h1>')
+        .replace(
+            "<p>Antigravity has been redesigned to put agents first with new capabilities. If you'd still like a code editor, you can download it as a separate app named <b>Antigravity IDE</b>.</p>",
+            useTw
+                ? '<p>Antigravity 已重新設計為以代理為核心並具備全新能力。如果您仍需要程式碼編輯器，可另外下載名為 <b>Antigravity IDE</b> 的獨立應用程式。</p>'
+                : '<p>Antigravity 已重新设计为以智能体为核心并带来全新能力。如果您仍需要代码编辑器，可另行下载名为 <b>Antigravity IDE</b> 的独立应用。</p>'
+        )
+        .replace('<span>Download the Antigravity IDE</span>', useTw ? '<span>下載 Antigravity IDE</span>' : '<span>下载 Antigravity IDE</span>')
+        .replace('>Explore the new Antigravity</button>', useTw ? '>探索全新 Antigravity</button>' : '>探索全新 Antigravity</button>');
+    console.log(`[修改] 安裝導覽畫面漢化注入成功！`);
+    return out;
+}
+
+const MAIN_PROCESS_PATCH_TARGETS = [
+    'dist/main.js',
+    'dist/ipcHandlers.js',
+    'dist/remote/remoteManager.js',
+    'dist/remote/sshPrompts.js',
+    'dist/deviceChooser.js',
+    'dist/webauthn.js',
+    'dist/webviewPopupSecurity.js',
+    'dist/provisionSplash.js',
+    'dist/ideInstall/wizardHtml.js'
+];
+
 module.exports = {
     patchPreloadJs,
     patchUtilsJs,
@@ -591,5 +674,7 @@ module.exports = {
     patchDeviceChooserJs,
     patchWebauthnJs,
     patchWebviewPopupSecurityJs,
-    patchProvisionSplashJs
+    patchProvisionSplashJs,
+    patchWizardHtmlJs,
+    MAIN_PROCESS_PATCH_TARGETS
 };

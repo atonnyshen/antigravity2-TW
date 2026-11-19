@@ -19,7 +19,8 @@ const {
     patchDeviceChooserJs,
     patchWebauthnJs,
     patchWebviewPopupSecurityJs,
-    patchProvisionSplashJs
+    patchProvisionSplashJs,
+    patchWizardHtmlJs
 } = require('./src/main_patches');
 
 // macOS 环境下自动补全 PATH，确保 codesign 等工具能被顺利找到
@@ -93,7 +94,12 @@ function getOptionValue(name, defaultValue) {
     return defaultValue;
 }
 
-const BRAND_TITLE_MODE = BRAND_TITLE_ALIASES[String(getOptionValue('--brand-title', 'english')).toLowerCase()] || 'english';
+const HAS_BRAND_TITLE_ARG = process.argv.some(arg => arg === '--brand-title' || arg.startsWith('--brand-title='));
+const rawBrandTitle = String(getOptionValue('--brand-title', 'english')).toLowerCase();
+let BRAND_TITLE_MODE = BRAND_TITLE_ALIASES[rawBrandTitle] || 'english';
+if (!BRAND_TITLE_ALIASES[rawBrandTitle]) {
+    console.warn(`[警告] 未识别的 --brand-title 参数 "${rawBrandTitle}"，已回退为 english。`);
+}
 
 if (USE_TW) {
     const logTranslations = {
@@ -141,10 +147,10 @@ if (USE_TW) {
         "[启动] 客户端启动成功！": "[啟動] 用戶端啟動成功！",
         "[警告] 未找到客户端主程序: ": "[警告] 未找到用戶端主程式: ",
         "[警告] 客户端启动失败: ": "[警告] 用戶端啟動失敗: ",
-        "[代理] 检测到 proxy_config 配置目录，正在注入代理模块...": "[代理] 偵測到 proxy_config 設定目錄，正在注入代理模組...",
-        "[代理] 代理模块注入成功: ": "[代理] 代理模組注入成功: ",
-        "[代理] 已保留代理文件（无法确认其归属，请按需手动处理）: ": "[代理] 已保留代理檔案（無法確認其歸屬，請按需手動處理）: ",
-        "[代理警告] 注入文件 ": "[代理警告] 注入檔案 "
+        "[权限] 检测到当前用户对 Antigravity 安装目录缺少写入权限，无法覆盖资源文件。": "[權限] 偵測到目前使用者對 Antigravity 安裝目錄缺少寫入權限，無法覆寫資源檔案。",
+        "[提示] 请右键点击批次档 (.bat)，选择「以系统管理员身份运行」后再重试。": "[提示] 請對批次檔 (.bat) 按右鍵，選擇「以系統管理員身分執行」後再重試。",
+        "[任务] 检测到本机已安装 Antigravity 背景自动更新守护，正在同步刷新状态...": "[任務] 偵測到本機已安裝 Antigravity 背景自動更新守護，正在同步重新整理狀態...",
+        "[任务] 无法触发背景守护同步（可能权限不足或排程未启动），下次定时巡检仍会自动生效。": "[任務] 無法觸發背景守護同步（可能權限不足或排程未啟動），下次定時巡檢仍會自動生效。"
     };
     const translateMsg = (args) => {
         return args.map(arg => {
@@ -232,7 +238,7 @@ function checkIfAppIsRunning() {
             const stdout = child_process.execSync('tasklist /fi "imagename eq Antigravity.exe" /nh', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
             return stdout.toLowerCase().includes('antigravity.exe');
         } else if (process.platform === 'darwin') {
-            const stdout = child_process.execSync('pgrep -x Antigravity || pgrep -f "/Contents/MacOS/Antigravity"', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+            const stdout = child_process.execSync('pgrep -x Antigravity || pgrep -f "/Antigravity\\.app/Contents/MacOS/Antigravity"', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
             return stdout.trim().length > 0;
         }
     } catch (e) {
@@ -273,7 +279,7 @@ function closeAntigravityProcesses() {
         if (process.platform === 'win32') {
             child_process.execSync('taskkill /f /im Antigravity.exe /t >nul 2>nul');
         } else {
-            child_process.execSync('killall Antigravity >/dev/null 2>&1; killall "Antigravity Helper" >/dev/null 2>&1; pkill -x Antigravity >/dev/null 2>&1; pkill -f "/Contents/MacOS/Antigravity" >/dev/null 2>&1');
+            child_process.execSync('killall Antigravity >/dev/null 2>&1; killall "Antigravity Helper" >/dev/null 2>&1; pkill -x Antigravity >/dev/null 2>&1; pkill -f "/Antigravity\\.app/Contents/MacOS/Antigravity" >/dev/null 2>&1');
         }
     } catch (e) {}
     sleepSync(1200);
@@ -283,7 +289,7 @@ function detectInstallationDir(manualDir) {
     if (manualDir) {
         if (fs.existsSync(manualDir)) {
             let resolved = path.resolve(manualDir);
-            if (fs.statSync(resolved).isFile() && resolved.endsWith('app.asar')) {
+            if (fs.statSync(resolved).isFile() && /app\.asar$/i.test(resolved)) {
                 resolved = path.dirname(resolved);
             }
             return resolved;
@@ -321,7 +327,7 @@ function detectInstallationDir(manualDir) {
         ];
         for (const root of registryRoots) {
             try {
-                const output = child_process.execSync(`reg query "${root}" /s /f Antigravity /d`, { encoding: 'utf-8', stdio: 'pipe' });
+                const output = child_process.execFileSync('cmd', ['/d', '/u', '/c', `reg query "${root}" /s /f Antigravity /d`], { encoding: 'utf16le', stdio: 'pipe' });
                 for (const line of output.split(/\r?\n/)) {
                     const match = line.match(/^\s*(InstallLocation|DisplayIcon)\s+REG_\w+\s+(.+)$/i);
                     if (!match) continue;
@@ -337,13 +343,18 @@ function detectInstallationDir(manualDir) {
         const driveLetters = ['C', 'D', 'E', 'F'];
         for (const drive of driveLetters) {
             addCandidate(`${drive}:\\Programs\\Antigravity`);
+            addCandidate(`${drive}:\\Programs\\Antigravity IDE`);
             addCandidate(`${drive}:\\Antigravity`);
         }
+        addCandidate(process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'Antigravity'));
+        addCandidate(process.env['ProgramFiles(x86)'] && path.join(process.env['ProgramFiles(x86)'], 'Antigravity'));
         addCandidate("C:\\Program Files\\Antigravity");
+        addCandidate("C:\\Program Files (x86)\\Antigravity");
 
         const localAppdata = process.env.LOCALAPPDATA;
         if (localAppdata) {
             addCandidate(path.join(localAppdata, 'Programs', 'antigravity'));
+            addCandidate(path.join(localAppdata, 'Programs', 'Antigravity IDE'));
         }
     } else if (process.platform === 'darwin') {
         addCandidate("/Applications/Antigravity.app");
@@ -433,22 +444,30 @@ function cleanElectronCache() {
     }
 }
 
-function resignAppOnMac(anyPath) {
-    if (process.platform !== 'darwin') return;
-
-    let targetApp = "";
-    let current = path.resolve(anyPath);
+function resolveMacAppBundle(dir) {
+    const clean = String(dir || '').replace(/[\\/]+$/, '');
+    if (!clean) return null;
+    let current = path.resolve(clean);
     for (let i = 0; i < 10; i++) {
-        if (current.endsWith(".app")) {
-            targetApp = current;
-            break;
+        if (current.endsWith('.app') || fs.existsSync(path.join(current, 'Contents', 'MacOS'))) {
+            return current;
         }
         const parent = path.dirname(current);
         if (parent === current) break;
         current = parent;
     }
+    return null;
+}
 
-    if (targetApp && fs.existsSync(targetApp)) {
+function resignAppOnMac(anyPath) {
+    if (process.platform !== 'darwin') return true;
+
+    const targetApp = resolveMacAppBundle(anyPath);
+    const isRealMacBundle = targetApp && (
+        fs.existsSync(path.join(targetApp, 'Contents', 'MacOS')) ||
+        fs.existsSync(path.join(targetApp, 'Contents', 'Info.plist'))
+    );
+    if (isRealMacBundle) {
         try {
             const plistPath = path.join(targetApp, 'Contents', 'Info.plist');
             const macAsarPath = path.join(targetApp, 'Contents', 'Resources', 'app.asar');
@@ -476,15 +495,33 @@ function resignAppOnMac(anyPath) {
         const signRes = runCommandSync(`codesign --force --deep --sign - "${targetApp}"`);
         if (signRes.success) {
             console.log(`[签名] 重新签名成功！`);
+            return true;
         } else {
             console.warn(`[警告] 重新签名失败。可能会导致应用无法打开。详情:\n${signRes.stderr}\n${signRes.stdout}`);
+            return false;
         }
     } else {
         console.warn(`[警告] 未能从路径 ${anyPath} 识别到有效的 .app 路径，跳过重新签名。`);
+        return true;
     }
 }
 
 function ensureWritePermission(targetDir) {
+    if (process.platform === 'win32') {
+        try {
+            fs.accessSync(targetDir, fs.constants.W_OK);
+            const probePath = path.join(targetDir, `.ag_write_probe_${process.pid}_${Date.now()}`);
+            const fd = fs.openSync(probePath, 'wx');
+            fs.closeSync(fd);
+            fs.unlinkSync(probePath);
+            return true;
+        } catch (err) {
+            console.error("[权限] 检测到当前用户对 Antigravity 安装目录缺少写入权限，无法覆盖资源文件。");
+            console.error("[提示] 请右键点击批次档 (.bat)，选择「以系统管理员身份运行」后再重试。");
+            console.error(`详情: ${targetDir} (${err.code || err.message})`);
+            process.exit(1);
+        }
+    }
     if (process.platform !== 'darwin') return true;
     try {
         fs.accessSync(targetDir, fs.constants.W_OK);
@@ -510,7 +547,7 @@ function ensureWritePermission(targetDir) {
 // ==========================================
 // Antigravity 2.0 汉化部署引擎 (零依赖纯 Node.js 原生 ASAR 打包模式)
 // ==========================================
-function replaceFileWithRetry(srcPath, destPath) {
+function replaceFileWithRetry(srcPath, destPath, allowKill = false) {
     let lastErr;
     for (let attempt = 0; attempt < 10; attempt++) {
         try {
@@ -519,7 +556,7 @@ function replaceFileWithRetry(srcPath, destPath) {
         } catch (err) {
             lastErr = err;
             if (err.code === 'EPERM' || err.code === 'EBUSY' || err.code === 'EACCES') {
-                if (attempt === 2 && process.platform === 'win32') {
+                if (allowKill && attempt === 2 && process.platform === 'win32') {
                     try { child_process.execSync('taskkill /f /im Antigravity.exe /t >nul 2>nul'); } catch (e) {}
                 }
                 sleepSync(400);
@@ -532,7 +569,7 @@ function replaceFileWithRetry(srcPath, destPath) {
         fs.copyFileSync(srcPath, destPath);
         fs.unlinkSync(srcPath);
     } catch (copyErr) {
-        throw lastErr;
+        throw new Error(`文件替换失败 (${srcPath} -> ${destPath}): rename=${lastErr ? lastErr.message : 'unknown'}; fallback=${copyErr.message}`);
     }
 }
 
@@ -576,7 +613,8 @@ function install20(resourcesDir, noKill = false, staging = false) {
             ['dist/deviceChooser.js', content => patchDeviceChooserJs(content, USE_TW)],
             ['dist/webauthn.js', content => patchWebauthnJs(content, USE_TW)],
             ['dist/webviewPopupSecurity.js', content => patchWebviewPopupSecurityJs(content, USE_TW)],
-            ['dist/provisionSplash.js', content => patchProvisionSplashJs(content, USE_TW)]
+            ['dist/provisionSplash.js', content => patchProvisionSplashJs(content, USE_TW)],
+            ['dist/ideInstall/wizardHtml.js', content => patchWizardHtmlJs(content, USE_TW)]
         ]);
 
         console.log(`[打包] 正在使用原生引擎生成并校验汉化候选包...`);
@@ -591,24 +629,48 @@ function install20(resourcesDir, noKill = false, staging = false) {
         for (const [relPath, buf] of modifiedFiles.entries()) {
             const checkFile = path.join(buildDir, path.basename(relPath));
             fs.writeFileSync(checkFile, buf);
-            child_process.execFileSync(process.execPath, ['--check', checkFile], { stdio: 'pipe' });
+            try {
+                child_process.execFileSync(process.execPath, ['--check', checkFile], { stdio: 'pipe' });
+            } catch (syntaxErr) {
+                const detail = syntaxErr.stderr ? String(syntaxErr.stderr).trim() : syntaxErr.message;
+                throw new Error(`语法校验失败 (${relPath}): ${detail}`);
+            }
         }
 
         if (!fs.readFileSync(asarPath).equals(originalLive)) {
             throw new Error('App changed during localization; please retry after the update completes');
         }
 
-        replaceFileWithRetry(candidatePath, asarPath);
+        const macBundleForPlist = process.platform === 'darwin' ? resolveMacAppBundle(resourcesDir) : null;
+        const plistPath = macBundleForPlist ? path.join(macBundleForPlist, 'Contents', 'Info.plist') : null;
+        const plistBackup = plistPath && fs.existsSync(plistPath) ? fs.readFileSync(plistPath) : null;
+
+        replaceFileWithRetry(candidatePath, asarPath, !noKill);
         try {
-            if (refreshBackup) replaceFileWithRetry(sourceArchive, bakPath);
+            if (refreshBackup) replaceFileWithRetry(sourceArchive, bakPath, !noKill);
         } catch (error) {
             try {
-                replaceFileWithRetry(rollbackArchive, asarPath);
+                replaceFileWithRetry(rollbackArchive, asarPath, !noKill);
             } catch (rollbackError) {
                 retainRecoveryFiles = true;
                 throw new Error(`Backup promotion and rollback failed; original app retained at ${rollbackArchive}: ${rollbackError.message}`);
             }
             throw error;
+        }
+
+        if (!staging) {
+            cleanElectronCache();
+            if (!resignAppOnMac(resourcesDir)) {
+                try {
+                    replaceFileWithRetry(rollbackArchive, asarPath, !noKill);
+                    if (plistBackup && plistPath) fs.writeFileSync(plistPath, plistBackup);
+                    if (refreshBackup && fs.existsSync(bakPath)) fs.unlinkSync(bakPath);
+                } catch (rollbackError) {
+                    retainRecoveryFiles = true;
+                    throw new Error(`macOS 签名失败且回滚失败，原始文件保留于 ${rollbackArchive}: ${rollbackError.message}`);
+                }
+                return false;
+            }
         }
 
         if (buildDir && !retainRecoveryFiles) {
@@ -618,10 +680,6 @@ function install20(resourcesDir, noKill = false, staging = false) {
             } catch (error) {
                 console.warn(`[提示] 临时目录已保留: ${buildDir}`);
             }
-        }
-        if (!staging) {
-            cleanElectronCache();
-            resignAppOnMac(resourcesDir);
         }
         console.log(`[√] Antigravity 2.0 汉化部署完成！`);
         return true;
@@ -637,7 +695,7 @@ function install20(resourcesDir, noKill = false, staging = false) {
     }
 }
 
-function restore20(resourcesDir) {
+function restore20(resourcesDir, noKill = false) {
     const asarPath = path.join(resourcesDir, "app.asar");
     const bakPath = path.join(resourcesDir, "app.asar.bak");
 
@@ -647,15 +705,31 @@ function restore20(resourcesDir) {
     }
 
     console.log("[还原] 正在用官方备份文件恢复...");
+    let restoreDir;
+    let retainRestoreFiles = false;
     try {
-        const restoreDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-restore-'));
-        try {
-            const candidate = path.join(restoreDir, 'app.asar');
-            fs.copyFileSync(bakPath, candidate);
-            readAsarLayout(candidate);
-            replaceFileWithRetry(candidate, asarPath);
-        } finally {
-            fs.rmSync(restoreDir, { recursive: true, force: true });
+        restoreDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-restore-'));
+        const candidate = path.join(restoreDir, 'app.asar');
+        const previousBackup = path.join(restoreDir, 'previous.asar');
+        if (fs.existsSync(asarPath)) {
+            fs.copyFileSync(asarPath, previousBackup);
+        }
+        const macBundleForPlist = process.platform === 'darwin' ? resolveMacAppBundle(resourcesDir) : null;
+        const plistPath = macBundleForPlist ? path.join(macBundleForPlist, 'Contents', 'Info.plist') : null;
+        const plistBackup = plistPath && fs.existsSync(plistPath) ? fs.readFileSync(plistPath) : null;
+
+        fs.copyFileSync(bakPath, candidate);
+        readAsarLayout(candidate);
+        replaceFileWithRetry(candidate, asarPath, !noKill);
+        if (!resignAppOnMac(resourcesDir)) {
+            try {
+                if (fs.existsSync(previousBackup)) replaceFileWithRetry(previousBackup, asarPath, !noKill);
+                if (plistBackup && plistPath) fs.writeFileSync(plistPath, plistBackup);
+            } catch (rollbackError) {
+                retainRestoreFiles = true;
+                throw new Error(`macOS 恢复签名失败且回滚失败，原文件保留于 ${previousBackup}: ${rollbackError.message}`);
+            }
+            return false;
         }
     } catch (e) {
         console.error(`[错误] 恢复备份失败: ${e.message}`);
@@ -663,84 +737,68 @@ function restore20(resourcesDir) {
             console.error(`[提示] macOS 写入受限，请使用管理员权限运行脚本。`);
         }
         return false;
+    } finally {
+        if (restoreDir && !retainRestoreFiles) {
+            try { fs.rmSync(restoreDir, { recursive: true, force: true }); } catch (_e) {}
+        }
     }
-    resignAppOnMac(resourcesDir);
     console.log("[√] 官方 app.asar 已成功恢复！");
     return true;
 }
 
 // ==========================================
-// 代理模块管理 (Windows 平台可选注入)
+// 交互式品牌显示选单 & 入口
 // ==========================================
-function injectProxyIfNeeded(installDir) {
-    if (process.platform !== 'win32') return;
-    const proxyConfigDir = path.join(__dirname, 'proxy_config');
-    if (!fs.existsSync(proxyConfigDir)) return;
-
-    let files = [];
-    try {
-        files = fs.readdirSync(proxyConfigDir).filter(f => {
-            const fullPath = path.join(proxyConfigDir, f);
-            return fs.statSync(fullPath).isFile();
-        });
-    } catch (e) {
-        return;
-    }
-
-    if (files.length === 0) return;
-
-    console.log(`\n[代理] 检测到 proxy_config 配置目录，正在注入代理模块...`);
-    const injectedFiles = [];
-    for (const file of files) {
-        const src = path.join(proxyConfigDir, file);
-        const dest = path.join(installDir, file);
+function readLineSyncFromStdin() {
+    const chunks = [];
+    const buf = Buffer.alloc(1);
+    while (true) {
         try {
-            fs.copyFileSync(src, dest);
-            injectedFiles.push(file);
-        } catch (e) {
-            console.warn(`[代理警告] 注入文件 ${file} 失败: ${e.message}`);
-        }
-    }
-
-    if (injectedFiles.length > 0) {
-        console.log(`[代理] 代理模块注入成功: ${injectedFiles.join(', ')}`);
-    }
-}
-
-function restoreProxyIfNeeded(installDir) {
-    if (process.platform !== 'win32') return;
-    const proxyFiles = ['version.dll', 'dbghelp.dll', 'config.json'];
-    const proxyConfigDir = path.join(__dirname, 'proxy_config');
-    if (fs.existsSync(proxyConfigDir)) {
-        try {
-            const files = fs.readdirSync(proxyConfigDir);
-            for (const f of files) {
-                if (!proxyFiles.includes(f)) proxyFiles.push(f);
+            const bytesRead = fs.readSync(0, buf, 0, 1, null);
+            if (bytesRead === 0) break;
+            if (buf[0] === 0x0a) break;
+            if (buf[0] !== 0x0d) chunks.push(buf[0]);
+        } catch (err) {
+            if (err && err.code === 'EAGAIN') {
+                sleepSync(20);
+                continue;
             }
-        } catch (e) {}
-    }
-
-    const retainedFiles = [];
-    for (const file of proxyFiles) {
-        const dest = path.join(installDir, file);
-        if (fs.existsSync(dest)) {
-            retainedFiles.push(file);
+            break;
         }
     }
-
-    if (retainedFiles.length > 0) {
-        console.log(`[代理] 已保留代理文件（无法确认其归属，请按需手动处理）: ${retainedFiles.join(', ')}`);
-    }
+    return Buffer.from(chunks).toString('utf8').trim();
 }
 
-// ==========================================
-// 入口
-// ==========================================
+function promptBrandTitleInteractive() {
+    if (USE_TW) {
+        process.stdout.write('=======================================================\n');
+        process.stdout.write('  Antigravity 2.0 繁體中文化一鍵安裝程式 (台灣 zh-TW)\n');
+        process.stdout.write('=======================================================\n');
+        process.stdout.write('\n請選擇左上角品牌顯示方式：\n');
+        process.stdout.write('  [1] 保留官方英文「Antigravity」（預設，直接按 Enter）\n');
+        process.stdout.write('  [2] 隱藏品牌標題列\n');
+        process.stdout.write('  [3] 顯示為繁體中文譯名\n');
+        process.stdout.write('請輸入選項 [1/2/3]（預設 1）：');
+    } else {
+        process.stdout.write('\n请选择左上角品牌显示方式：\n');
+        process.stdout.write('  [1] 保留官方英文「Antigravity」（默认，直接按 Enter）\n');
+        process.stdout.write('  [2] 隐藏品牌标题栏\n');
+        process.stdout.write('  [3] 显示为简体中文译名\n');
+        process.stdout.write('请输入选项 [1/2/3]（默认 1）：');
+    }
+    const answer = readLineSyncFromStdin();
+    if (answer === '2') return 'hidden';
+    if (answer === '3') return 'translated';
+    return 'english';
+}
+
 function main() {
     let huifu = false;
     let manualDir = "";
     let noKill = false;
     let staging = false;
+    let interactive = false;
+    let syncWatcher = false;
 
     const args = process.argv.slice(2);
     for (let i = 0; i < args.length; i++) {
@@ -753,9 +811,17 @@ function main() {
             noKill = true;
         } else if (args[i] === '--staging') {
             staging = true;
+        } else if (args[i] === '--interactive') {
+            interactive = true;
+        } else if (args[i] === '--sync-watcher') {
+            syncWatcher = true;
         } else if (args[i] === '--brand-title') {
             i++;
         }
+    }
+
+    if (interactive && !HAS_BRAND_TITLE_ARG && !huifu && !staging) {
+        BRAND_TITLE_MODE = promptBrandTitleInteractive();
     }
 
     // 1. 探测路径
@@ -767,8 +833,6 @@ function main() {
         console.log("[跳过] 检测到 --no-kill 参数，跳过关闭 Antigravity 运行进程。");
     } else if (wasAppRunning) {
         closeAntigravityProcesses();
-    } else if (process.platform === 'win32') {
-        try { child_process.execSync('taskkill /f /im Antigravity.exe /t >nul 2>nul'); } catch (e) {}
     }
 
     // 3. 找到 resources 资源目录
@@ -799,29 +863,27 @@ function main() {
 
     if (huifu) {
         console.log("====== 正在卸载中文汉化，恢复官方原版 ======");
-        success = restore20(resourcesDir);
-        if (success) {
-            restoreProxyIfNeeded(installDir);
-        }
+        success = restore20(resourcesDir, noKill);
     } else {
         console.log("====== 正在安装 Antigravity 中文汉化 ======");
         success = install20(resourcesDir, noKill, staging);
-        if (success) {
-            injectProxyIfNeeded(installDir);
+    }
+
+    if (success && !huifu && !staging && syncWatcher && process.platform === 'win32') {
+        try {
+            child_process.execFileSync('schtasks.exe', ['/query', '/tn', 'AntigravityAutoLocalize'], { stdio: 'ignore' });
+            console.log("[任务] 检测到本机已安装 Antigravity 背景自动更新守护，正在同步刷新状态...");
+            try {
+                child_process.execFileSync('schtasks.exe', ['/run', '/tn', 'AntigravityAutoLocalize'], { stdio: 'ignore' });
+            } catch (runErr) {
+                console.warn("[任务] 无法触发背景守护同步（可能权限不足或排程未启动），下次定时巡检仍会自动生效。");
+            }
+        } catch (queryErr) {
+            // Task not registered; skip silently
         }
     }
 
     // 5. 校验通过且原来客户端在运行，则自动重新启动客户端（仅当目标为有效客户端包/可执行程序时触发，避免自定义目录误弹 Finder）
-    const resolveMacAppBundle = dir => {
-        const clean = String(dir || '').replace(/[\\/]+$/, '');
-        if (!clean) return null;
-        if (clean.endsWith('.app') || fs.existsSync(path.join(clean, 'Contents', 'MacOS'))) return clean;
-        const parent1 = path.dirname(clean);
-        const parent2 = path.dirname(parent1);
-        if (parent1.endsWith('.app') || fs.existsSync(path.join(parent1, 'Contents', 'MacOS'))) return parent1;
-        if (parent2.endsWith('.app') || fs.existsSync(path.join(parent2, 'Contents', 'MacOS'))) return parent2;
-        return null;
-    };
     const macAppBundle = process.platform === 'darwin' ? resolveMacAppBundle(installDir) : null;
     const canRestartApp = process.platform === 'win32'
         ? fs.existsSync(path.join(installDir, 'Antigravity.exe'))
@@ -861,7 +923,9 @@ if (typeof module !== 'undefined' && module.exports) {
         install20,
         detectInstallationDir,
         checkIfAppIsRunning,
-        closeAntigravityProcesses
+        closeAntigravityProcesses,
+        ensureWritePermission,
+        promptBrandTitleInteractive
     };
 }
 

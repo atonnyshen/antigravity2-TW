@@ -18,14 +18,17 @@
 
     const longEntries = Array.from(map.entries())
         .filter(([k]) => k.length > 15 && k.includes(' '))
-        .sort((a, b) => b[0].length - a[0].length);
+        .sort((a, b) => b[0].length - a[0].length)
+        .map(([k, v]) => [k, v, k.toLowerCase()]);
     const translatedValues = new WeakMap();
+    const unchangedTextValues = new WeakMap();
+    const longMissCache = new WeakMap();
 
     // 轻量级安全隔离：跳过脚本、样式、代码块(pre/code)
     const SKIP_TAGS = ['SCRIPT', 'STYLE', 'PRE', 'CODE'];
 
     // 代码、富文本输入框及对话内容隔离选择器：排除 Lexical 输入框、用户消息、AI 响应正文、思考内容、代码块、终端及文件路径
-    const CODE_ISOLATION_SELECTOR = 'pre, code, .monaco-editor, .cm-editor, .cm-line, [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-lexical-editor], .terminal, .xterm, .code-line, .code-block, .line-content, [aria-label="File Viewer"], [aria-label="文件查看器"], [aria-label="檔案檢視器"], [data-file-uri], [data-uri], [class*="diffEditor"], .token, .hljs, [class*="mtk"], .font-mono, [data-quotable-inline="true"], .context-scope-mention, [data-testid="file-title-name"], [data-testid="entity-pill"], [data-project-card="true"], [data-testid="conversation-row-sidebar"] span.truncate, [translate="no"], .notranslate, .md-divider-spacing, .cursor-edit, [data-testid="user-input-step"] [data-quotable="true"], [data-testid="user-input-step"] .whitespace-pre-wrap, [data-testid="planner-response-text"], [data-testid="thinking-collapsible-trigger"] + div, [data-testid="thinking-collapsible-trigger"] ~ div, .msg-body, .sys-text, .node-label, .raw-meta .path, .o2-mauth, .o2-wchip.bee > span:last-child, .o2-m[data-o2who]:not(.all) > span:last-child';
+    const CODE_ISOLATION_SELECTOR = 'script, style, pre, code, .monaco-editor, .cm-editor, .cm-line, [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-lexical-editor], .terminal, .xterm, .code-line, .code-block, .line-content, [aria-label="File Viewer"], [aria-label="文件查看器"], [aria-label="檔案檢視器"], [data-file-uri], [data-uri], [class*="diffEditor"], .token, .hljs, [class*="mtk"], .font-mono, [data-quotable-inline="true"], .context-scope-mention, [data-testid="file-title-name"], [data-testid="entity-pill"], [data-project-card="true"], [data-testid="conversation-row-sidebar"] span.truncate, [translate="no"], .notranslate, .md-divider-spacing, .cursor-edit, [data-testid="user-input-step"] [data-quotable="true"], [data-testid="user-input-step"] .whitespace-pre-wrap, [data-testid="planner-response-text"], [data-testid="thinking-collapsible-trigger"] + div, [data-testid="thinking-collapsible-trigger"] ~ div, .msg-body, .sys-text, .node-label, .raw-meta .path, .o2-mauth, .o2-wchip.bee > span:last-child, .o2-m[data-o2who]:not(.all) > span:last-child';
 
     function isCodeOrEditor(node) {
         try {
@@ -54,7 +57,7 @@
             }
             return false;
         } catch (e) {
-            return false;
+            return true;
         }
     }
 
@@ -691,12 +694,14 @@
         [/^(.+?)\s*\((Focus this tile|Back to all agents)\)$/i, (m, prefix, action) => prefix + "（" + (/^Focus/i.test(action) ? (USE_TW ? "聚焦此窗格" : "聚焦此视图") : (USE_TW ? "返回所有代理" : "返回全部智能体")) + "）"],
         [/^Sign-ins to (.+?) are kept in the cloud with your account\.(?:\s*(Other credentials stay on this machine\.))?(?:\s*(Credentials are only sent to the domains listed\.))?$/i, (m, providers, otherPart, domainPart) => {
             let res = USE_TW
-                ? (providers + " 的登入資訊會隨您的帳戶保存在雲端。")
+                ? (providers + " 的登入資訊會隨您的帳戶儲存在雲端。")
                 : (providers + " 的登录信息会随您的账户保存在云端。");
             if (otherPart) res += USE_TW ? "其他憑證保留在本機上。" : "其他凭据保留在本机上。";
             if (domainPart) res += USE_TW ? "憑證僅會傳送至所列出的網域。" : "凭据仅会发送至所列出的域名。";
             return res;
         }],
+        [/^No sites match [“"](.+?)[”"]\.$/i, (m, q) => USE_TW ? (`找不到符合「${q}」的網站。`) : (`未找到匹配“${q}”的站点。`)],
+        [/^Couldn't delete cookies for (.+?)\. Try again\.$/i, (m, site) => USE_TW ? (`無法刪除 ${site} 的 Cookie，請再試一次。`) : (`无法删除 ${site} 的 Cookie，请重试。`)],
         [/^(.+?)\s+needs?\s+the terminal sandbox,\s+which isn't available on this host\.$/i, (m, presets) => {
             const labels = presets.split(/\s+and\s+/i).map(p => {
                 const k = norm(p);
@@ -830,8 +835,8 @@
         if ((valNorm === 'Search conversations with' || valNorm === 'in the top left.') && pText.includes('in the top left')) {
             return valNorm === 'Search conversations with' ? (USE_TW ? "使用左上角的" : "可通过左上角的") : (USE_TW ? "搜尋對話。" : "搜索对话。");
         }
-        if ((valNorm === 'View archived in the sidebar' || valNorm === 'menu)') && pText.includes('View archived in the sidebar')) {
-            return valNorm === 'View archived in the sidebar' ? (USE_TW ? "已歸檔對話可在側邊欄" : "已归档对话可在侧边栏") : (USE_TW ? "選單中查看。" : "菜单中查看。");
+        if ((valNorm === 'View archived in the sidebar' || valNorm === 'menu)') && (pText.includes('View archived in the sidebar') || pText.includes('已归档对话可在侧边栏') || pText.includes('已封存對話可在側邊欄') || pText.includes('已歸檔對話可在側邊欄'))) {
+            return valNorm === 'View archived in the sidebar' ? (USE_TW ? "已封存對話可在側邊欄" : "已归档对话可在侧边栏") : (USE_TW ? "選單中檢視。" : "菜单中查看。");
         }
         if ((valNorm === 'For help, visit' || valNorm === 'or join the' || valNorm === 'chat space') && pText.includes('chat space')) {
             if (valNorm === 'For help, visit') return USE_TW ? "如需協助，請造訪" : "如需帮助，请访问";
@@ -1024,6 +1029,20 @@
         if (valNorm === "Couldn't connect to" && typeof p.closest === 'function' && p.closest('[data-testid="ssh-connect-error"]')) {
             return USE_TW ? '無法連線至 ' : '无法连接到 ';
         }
+        if (typeof p.getAttribute === 'function' && p.getAttribute('data-testid') === 'browser-site-data-delete-error') {
+            if (valNorm === "Couldn't delete cookies for") return USE_TW ? '無法刪除 ' : '无法删除 ';
+            if (valNorm === '. Try again.') return USE_TW ? ' 的 Cookie，請再試一次。' : ' 的 Cookie，请重试。';
+        }
+        if (typeof p.getAttribute === 'function' && p.getAttribute('data-testid') === 'browser-site-data-no-match') {
+            if (valNorm === 'No sites match "' || originalVal.startsWith('No sites match')) return USE_TW ? '找不到符合「' : '未找到匹配“';
+            if (valNorm === '".' || originalVal === '\u201d.') return USE_TW ? '」的網站。' : '”的站点。';
+        }
+        if (pText.includes('Inspect live bindings or record custom key chords filtered to')) {
+            if (valNorm === 'Inspect live bindings or record custom key chords filtered to') {
+                return USE_TW ? '檢視即時繫結或錄製僅篩選 ' : '查看实时绑定或录制筛选范围限定为 ';
+            }
+            if (valNorm === 'commands.') return USE_TW ? ' 指令的自訂按鍵組合。' : ' 命令的自定义快捷键组合。';
+        }
         if (valNorm === 'Layout' && p.parentElement && p.parentElement.hasAttribute && p.parentElement.hasAttribute('data-agy-layout-bar')) {
             return USE_TW ? '版面配置' : '布局';
         }
@@ -1033,6 +1052,31 @@
             if (valNorm === 'Grid') return USE_TW ? '網格' : '网格';
         }
         return null;
+    }
+
+    function replaceWithBoundary(text, key, replacement) {
+        const needStartBoundary = /[A-Za-z0-9_]/.test(key[0]);
+        const needEndBoundary = /[A-Za-z0-9_]/.test(key[key.length - 1]);
+        let pos = 0;
+        let out = '';
+        let replaced = false;
+        while (pos <= text.length - key.length) {
+            const idx = text.indexOf(key, pos);
+            if (idx === -1) break;
+            const prevCh = idx > 0 ? text[idx - 1] : '';
+            const nextCh = idx + key.length < text.length ? text[idx + key.length] : '';
+            const startOk = !needStartBoundary || !/[A-Za-z0-9_]/.test(prevCh);
+            const endOk = !needEndBoundary || !/[A-Za-z0-9_]/.test(nextCh);
+            if (startOk && endOk) {
+                out += text.slice(pos, idx) + replacement;
+                pos = idx + key.length;
+                replaced = true;
+            } else {
+                out += text.slice(pos, idx + 1);
+                pos = idx + 1;
+            }
+        }
+        return replaced ? out + text.slice(pos) : null;
     }
 
     function translateNode(node) {
@@ -1102,7 +1146,7 @@
                                 translatedValues.set(tc, tc.nodeValue);
                             }
                         }
-                    } else if (textChildren.length === 1) {
+                    } else if (textChildren.length === 1 && node.childNodes.length === 1) {
                         const m = elText.match(/^Show\s+(\d+)\s+more(?:\.\.\.|…)?$/i);
                         if (m) {
                             textChildren[0].nodeValue = USE_TW ? ('顯示另外 ' + m[1] + ' 個...') : ('显示另外 ' + m[1] + ' 个...');
@@ -1227,14 +1271,37 @@
                     }
                     return;
                 }
-                if (cachedValue === originalVal) return;
+                if (cachedValue === originalVal || unchangedTextValues.get(node) === originalVal) return;
 
-                // Material Symbol 字体缺失图标修复
+                // Material Symbol 字体缺失图标修复（保留 React TextNode 避免遍历失同步）
                 if (valNorm === 'restore_page' && node.parentElement && (
                     (typeof node.parentElement.classList?.contains === 'function' && node.parentElement.classList.contains('google-symbols')) ||
                     (typeof node.parentElement.className === 'string' && node.parentElement.className.includes('google-symbols'))
                 )) {
-                    node.parentElement.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0" style="display:inline-block;vertical-align:middle"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
+                    const iconHost = node.parentElement;
+                    if (!iconHost.querySelector?.('svg[data-ag-restore-icon]') && typeof document !== 'undefined' && typeof document.createElementNS === 'function') {
+                        const svgNs = 'http://www.w3.org/2000/svg';
+                        const svg = document.createElementNS(svgNs, 'svg');
+                        svg.setAttribute('data-ag-restore-icon', '1');
+                        svg.setAttribute('width', '16');
+                        svg.setAttribute('height', '16');
+                        svg.setAttribute('viewBox', '0 0 24 24');
+                        svg.setAttribute('fill', 'none');
+                        svg.setAttribute('stroke', 'currentColor');
+                        svg.setAttribute('stroke-width', '2');
+                        svg.setAttribute('stroke-linecap', 'round');
+                        svg.setAttribute('stroke-linejoin', 'round');
+                        svg.setAttribute('class', 'shrink-0');
+                        svg.setAttribute('style', 'display:inline-block;vertical-align:middle');
+                        for (const d of ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5']) {
+                            const pSvg = document.createElementNS(svgNs, 'path');
+                            pSvg.setAttribute('d', d);
+                            svg.appendChild(pSvg);
+                        }
+                        iconHost.insertBefore(svg, node);
+                    }
+                    translatedValues.set(node, '');
+                    node.nodeValue = '';
                     return;
                 }
 
@@ -1254,20 +1321,34 @@
                         const swarmComp = inSwarmText ? translateSwarmComposite(originalVal) : null;
                         if (swarmComp !== null) {
                             newVal = swarmComp;
-                        } else if (valNorm.length > 15 && valNorm.includes(' ')) {
-                            // 长句子串滑动替换与末尾截断智能匹配（动态正则兼容直弯引号/省略号与多子句连续替换）
+                        } else if (valNorm.length > 15 && valNorm.includes(' ') && longMissCache.get(node) !== valNorm) {
+                            // 长句子串滑动替换与末尾截断智能匹配（词边界防护 + 失败缓存）
                             const isTruncated = (valNorm.endsWith('...') || valNorm.endsWith('…')) && valNorm.length >= 35;
                             const cleanVal = isTruncated ? valNorm.replace(/(\.\.\.|…)$/, '').trim().toLowerCase() : '';
-                            for (const [key, translated] of longEntries) {
-                                if (key.length <= valNorm.length && valNorm.includes(key)) {
-                                    const flexRegex = makeFlexibleRegex(key);
-                                    if (flexRegex.test(newVal)) {
-                                        newVal = newVal.replace(flexRegex, translated);
+                            let matchedLong = false;
+                            for (const [key, translated, keyLower] of longEntries) {
+                                if (key.length <= valNorm.length) {
+                                    const replaced = replaceWithBoundary(newVal.includes(key) ? newVal : valNorm, key, translated);
+                                    if (replaced !== null) {
+                                        if (newVal.includes(key)) {
+                                            newVal = replaced;
+                                        } else {
+                                            const lead = originalVal.match(/^\s*/)[0];
+                                            const trail = originalVal.match(/\s*$/)[0];
+                                            newVal = lead + replaced + trail;
+                                        }
+                                        matchedLong = true;
+                                        break;
                                     }
-                                } else if (isTruncated && cleanVal.length >= 30 && key.toLowerCase().startsWith(cleanVal)) {
+                                }
+                                if (isTruncated && cleanVal.length >= 30 && keyLower.startsWith(cleanVal)) {
                                     newVal = translated;
+                                    matchedLong = true;
                                     break;
                                 }
+                            }
+                            if (!matchedLong) {
+                                longMissCache.set(node, valNorm);
                             }
                         }
                     }
@@ -1276,12 +1357,14 @@
                 if (newVal !== originalVal) {
                     translatedValues.set(node, newVal);
                     node.nodeValue = newVal;
+                } else {
+                    unchangedTextValues.set(node, originalVal);
                 }
             }
         } catch (e) {}
     }
 
-    const observer = new MutationObserver(mutations => {
+    const observer = typeof MutationObserver === 'function' ? new MutationObserver(mutations => {
         for (const m of mutations) {
             if (m.type === 'childList') {
                 for (const n of m.addedNodes) translateNode(n);
@@ -1294,18 +1377,19 @@
                 }
             }
         }
-    });
+    }) : null;
 
     const obsOpts = { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label', 'aria-labelledby', 'role'] };
     const observedRoots = new WeakSet();
 
     function observeRoot(root) {
-        if (!root || observedRoots.has(root)) return;
+        if (!observer || !root || observedRoots.has(root)) return;
         observer.observe(root, obsOpts);
         observedRoots.add(root);
     }
 
     const startEngine = () => {
+        if (typeof document === 'undefined') return;
         const target = document.body || document.documentElement;
         if (target) {
             try {
@@ -1318,23 +1402,29 @@
         window.__agCnRuntimeStart = startEngine;
     }
 
-    const origAttachShadow = Element.prototype.attachShadow;
-    Element.prototype.attachShadow = function() {
-        const sr = origAttachShadow.apply(this, arguments);
-        try { observeRoot(sr); } catch (e) {}
-        return sr;
-    };
+    if (typeof Element !== 'undefined' && Element.prototype && typeof Element.prototype.attachShadow === 'function' && !Element.prototype.attachShadow._agCnHooked) {
+        const origAttachShadow = Element.prototype.attachShadow;
+        const hookedAttachShadow = function() {
+            const sr = origAttachShadow.apply(this, arguments);
+            try { observeRoot(sr); } catch (e) {}
+            return sr;
+        };
+        hookedAttachShadow._agCnHooked = true;
+        Element.prototype.attachShadow = hookedAttachShadow;
+    }
 
     // 强力多阶段触发绑定
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', startEngine);
-    } else {
-        startEngine();
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading' && typeof document.addEventListener === 'function') {
+            document.addEventListener('DOMContentLoaded', startEngine);
+        } else {
+            startEngine();
+        }
+        if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+            window.addEventListener('load', startEngine);
+        }
+        for (const delay of [100, 300, 1000, 3000, 6000]) {
+            setTimeout(startEngine, delay);
+        }
     }
-    window.addEventListener('load', startEngine);
-    setTimeout(startEngine, 100);
-    setTimeout(startEngine, 300);
-    setTimeout(startEngine, 1000);
-    setTimeout(startEngine, 3000);
-    setTimeout(startEngine, 6000);
 })();

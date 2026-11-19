@@ -1,46 +1,36 @@
 @echo off
-chcp 65001 > nul
-title Antigravity - 安裝繁體中文（台灣）
-
-echo.
-echo ======================================================
-echo    正在安裝 Windows 版 Antigravity 繁體中文（台灣）套件
-echo ======================================================
-echo.
-echo 請選擇左上角品牌名稱顯示方式:
-echo [1] 顯示官方英文 Antigravity（推薦）
-echo [2] 隱藏品牌名稱
-echo [3] 顯示繁體中文品牌名（反重力）
-set "CHOICE_VAL=1"
-set /p "CHOICE_VAL=請輸入 [1/2/3]（直接按 Enter 預設為 1）: "
-set "BRAND_ARG=--brand-title english"
-if "%CHOICE_VAL%"=="2" set "BRAND_ARG=--brand-title hidden"
-if "%CHOICE_VAL%"=="3" set "BRAND_ARG=--brand-title translated"
-
-echo.
-echo [1/2] 正在注入繁體中文語系與資源...
+chcp 65001 >nul
+setlocal EnableExtensions
 cd /d "%~dp0"
-node localization_engine.js --tw %BRAND_ARG% %*
 
-if %errorlevel% neq 0 (
-    echo.
-    echo ❌ 錯誤: 注入繁體中文失敗，請確認是否已安裝 Node.js 以及是否以系統管理員身分執行！
-    pause
-    exit /b 1
-)
+where node >nul 2>nul
+if %errorlevel% equ 0 goto :check_node_ver
+
+if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+if exist "%ProgramFiles(x86)%\nodejs\node.exe" set "PATH=%ProgramFiles(x86)%\nodejs;%PATH%"
+if exist "%LOCALAPPDATA%\Programs\nodejs\node.exe" set "PATH=%LOCALAPPDATA%\Programs\nodejs;%PATH%"
+
+where node >nul 2>nul
+if %errorlevel% equ 0 goto :check_node_ver
+
+echo [ERROR] Node.js 22.12.0+ not found.
+echo Please install Node.js LTS from https://nodejs.org/ and re-run this file.
+pause
+exit /b 1
+
+:check_node_ver
+node -e "const v=process.versions.node.split('.').map(Number); if(v[0]<22||(v[0]===22&&v[1]<12)){console.error('[ERROR] Node.js >= 22.12.0 required. Current:',process.versions.node); process.exit(1);}"
+if errorlevel 1 goto :failed
+
+node localization_engine.js --tw --interactive --sync-watcher
+if errorlevel 1 goto :failed
 
 echo.
-echo [2/2] 繁體中文套用完成！
+pause
+exit /b 0
+
+:failed
 echo.
-echo 🎉 說明: Antigravity 繁體中文化已成功注入。
-schtasks /query /tn "AntigravityAutoLocalize" >nul 2>nul
-if %errorlevel% equ 0 (
-    echo ⚡ 偵測到已註冊 Windows 背景守護排程 [AntigravityAutoLocalize]：
-    echo    若您先前在其他資料夾安裝過舊版守護，請一併執行本目錄的「點兩下安裝Windows背景守護.bat」以同步更新！
-) else (
-    echo 💡 提示: 若需在 Antigravity 官方更新或詞庫發布時自動維持繁中化，
-    echo    可執行目錄內的「點兩下安裝Windows背景守護.bat」啟用背景服務。
-)
-echo.
-echo 視窗將於 5 秒後自動關閉...
-timeout /t 5
+echo [FAILED] Operation did not complete. Please check the messages above.
+pause
+exit /b 1

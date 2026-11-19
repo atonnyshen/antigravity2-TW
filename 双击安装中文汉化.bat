@@ -1,32 +1,36 @@
 @echo off
-title Antigravity 汉化安装工具
+chcp 65001 >nul
+setlocal EnableExtensions
+cd /d "%~dp0"
+
+where node >nul 2>nul
+if %errorlevel% equ 0 goto :check_node_ver
+
+if exist "%ProgramFiles%\nodejs\node.exe" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+if exist "%ProgramFiles(x86)%\nodejs\node.exe" set "PATH=%ProgramFiles(x86)%\nodejs;%PATH%"
+if exist "%LOCALAPPDATA%\Programs\nodejs\node.exe" set "PATH=%LOCALAPPDATA%\Programs\nodejs;%PATH%"
+
+where node >nul 2>nul
+if %errorlevel% equ 0 goto :check_node_ver
+
+echo [ERROR] Node.js 22.12.0+ not found.
+echo Please install Node.js LTS from https://nodejs.org/ and re-run this file.
+pause
+exit /b 1
+
+:check_node_ver
+node -e "const v=process.versions.node.split('.').map(Number); if(v[0]<22||(v[0]===22&&v[1]<12)){console.error('[ERROR] Node.js >= 22.12.0 required. Current:',process.versions.node); process.exit(1);}"
+if errorlevel 1 goto :failed
+
+node localization_engine.js --interactive --sync-watcher
+if errorlevel 1 goto :failed
 
 echo.
-echo 请选择左上角品牌显示方式：
-echo [1] 保持英文 Antigravity（推荐）
-echo [2] 隐藏品牌名
-echo [3] 汉化为品牌名（反重力）
-set "CHOICE_VAL=1"
-set /p "CHOICE_VAL=请选择 [1/2/3] (直接按 Enter 默认为 1): "
-set "BRAND_ARG=--brand-title english"
-if "%CHOICE_VAL%"=="2" set "BRAND_ARG=--brand-title hidden"
-if "%CHOICE_VAL%"=="3" set "BRAND_ARG=--brand-title translated"
+pause
+exit /b 0
 
+:failed
 echo.
-echo [1/2] 正在注入汉化...
-node "%~dp0localization_engine.js" %BRAND_ARG% %*
-
-if %errorlevel% neq 0 (
-    echo.
-    echo [×] 注入失败，请检查上方错误信息。
-    pause
-    exit /b 1
-)
-
-echo.
-echo [2/2] 注入完成！
-echo.
-echo 提示：汉化已成功安装。
-echo.
-echo 窗口将在 5 秒后自动关闭...
-timeout /t 5
+echo [FAILED] Operation did not complete. Please check the messages above.
+pause
+exit /b 1
