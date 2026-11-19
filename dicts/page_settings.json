@@ -576,5 +576,9 @@
   "Web (desktop, remote agents)": "网页端（桌面、远程智能体）",
   "Web (desktop, remote agents, PWA)": "网页端（桌面、远程智能体、PWA）",
   "Web (mobile, remote agents)": "网页端（移动端、远程智能体）",
-  "Web (mobile, remote agents, PWA)": "网页端（移动端、远程智能体、PWA）"
+  "Web (mobile, remote agents, PWA)": "网页端（移动端、远程智能体、PWA）",
+  "Manage your keybinding scheme and customize shortcuts in VS Code.": "在 VS Code 中管理按键映射配置与自定义快捷键。",
+  "Pick one of these themes under Preset in Settings > Appearance.": "请至「设置 > 外观」的「预设风格」中选择其中一种主题。",
+  "Only this conversation uses this preset.": "仅此对话使用此预设风格。",
+  "Default (Mendel)": "默认 (Mendel)"
 }

@@ -9,7 +9,7 @@
 
 👉 **[上游簡體中文專案 (Upstream Project)](https://github.com/qqxpee/antigravity2-cn)**
 
-目前套件版本：**3.7.0**。適配 Antigravity **v2.33.0**；台灣用語與背景守護由本分支持續維護。
+目前套件版本：**3.7.1**。適配 Antigravity **v2.33.0**；台灣用語與背景守護由本分支持續維護。
 
 ---
 
@@ -20,7 +20,7 @@
 | 原版簡中轉譯 | 台灣開發者標準繁體 | 規範說明 |
 | :--- | :--- | :--- |
 | **命令面板** | **命令選擇區** | 對齊 VS Code 繁體中文介面標準（Command Palette） |
-| **代碼倉庫 / Git 倉庫** | **儲存庫 / Git 儲存庫** | 對齊版本控制系統標準體例（Repository） |
+| **代碼倉庫 / Git 倉庫** | **存放庫 / Git 存放庫** | 對齊 VS Code 繁體中文介面標準體例（Repository） |
 | **智能體** | **代理** | AI 領域標準專用名詞（Agent） |
 | **未配置計劃任務** | **未設定排程任務** | 修正排程與設定語意搭配（Scheduled Tasks） |
 | **終端命令** | **終端機指令** | 對齊 macOS 終端機標準用法（Terminal Commands） |
@@ -213,5 +213,5 @@ Get-Content .\autolocalize.log -Tail 40 -Encoding UTF8
 開發者驗證：執行 `npm ci --ignore-scripts` 與 `npm test`。GitHub Actions 在 macOS、Windows 與 Linux 跑回歸測試；測試不代表已驗證真實 Windows 排程或每個官方版本的介面。
 
 - 特別感謝 [qqxpee/antigravity2-cn](https://github.com/qqxpee/antigravity2-cn) 原作者的開源貢獻與 ASAR 注入架構設計。
-- 本儲存庫為個人使用與分享版本，主要維護繁體中文語境字典與自動更新腳本。
+- 本存放庫為個人使用與分享版本，主要維護繁體中文語境字典與自動更新腳本。
 - 若使用時發現漏譯或語意不順的詞條，歡迎隨時提交 Issue 或 PR 共同補充！
