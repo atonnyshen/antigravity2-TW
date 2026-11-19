@@ -1092,22 +1092,22 @@
             const hasPeriod = /\.$/.test(m.trim());
             const period = hasPeriod ? "。" : "";
             return USE_TW
-                ? `${model.trim()}，可將常規步驟分派給 ${target.trim()} 處理。維持同等 ${qualityModel.trim()} 水準的品質，消耗更少 Token${period}`
-                : `${model.trim()}，可将常规步骤分派给 ${target.trim()} 处理。保持同等 ${qualityModel.trim()} 级别的质量，消耗更少 Token${period}`;
+                ? `${model.trim()} 可將例行步驟分流至 ${target.trim()}。維持 ${qualityModel.trim()} 同級品質，消耗更少 Token${period}`
+                : `${model.trim()} 可将例行步骤分流至 ${target.trim()}。维持 ${qualityModel.trim()} 同级品质，消耗更少 Token${period}`;
         }],
         [/^(.+?)\s+that may offload routine steps to\s+(.+?)\.?$/i, (m, model, target) => {
             const hasPeriod = /\.$/.test(m.trim());
             const period = hasPeriod ? "。" : "";
             return USE_TW
-                ? `${model.trim()}，可將常規步驟分派給 ${target.trim()} 處理${period}`
-                : `${model.trim()}，可将常规步骤分派给 ${target.trim()} 处理${period}`;
+                ? `${model.trim()} 可將例行步驟分流至 ${target.trim()}${period}`
+                : `${model.trim()} 可将例行步骤分流至 ${target.trim()}${period}`;
         }],
         [/^Same\s+(.+?)-level quality,\s*fewer tokens used\.?$/i, (m, qualityModel) => {
             const hasPeriod = /\.$/.test(m.trim());
             const period = hasPeriod ? "。" : "";
             return USE_TW
-                ? `維持同等 ${qualityModel.trim()} 水準的品質，消耗更少 Token${period}`
-                : `保持同等 ${qualityModel.trim()} 级别的质量，消耗更少 Token${period}`;
+                ? `維持 ${qualityModel.trim()} 同級品質，消耗更少 Token${period}`
+                : `维持 ${qualityModel.trim()} 同级品质，消耗更少 Token${period}`;
         }],
     ];
 

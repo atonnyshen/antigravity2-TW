@@ -614,19 +614,19 @@ test('model orchestrator offload dynamic rules, paid Ultra formatPlanAudience, a
     const cases = [
         [
             'Neon that may offload routine steps to Hydrogen. Same Neon-level quality, fewer tokens used.',
-            'Neon，可將常規步驟分派給 Hydrogen 處理。維持同等 Neon 水準的品質，消耗更少 Token。'
+            'Neon 可將例行步驟分流至 Hydrogen。維持 Neon 同級品質，消耗更少 Token。'
         ],
         [
             'Argon that may offload routine steps to Hydrogen. Same Argon-level quality, fewer tokens used.',
-            'Argon，可將常規步驟分派給 Hydrogen 處理。維持同等 Argon 水準的品質，消耗更少 Token。'
+            'Argon 可將例行步驟分流至 Hydrogen。維持 Argon 同級品質，消耗更少 Token。'
         ],
         [
             'Neon that may offload routine steps to Hydrogen.',
-            'Neon，可將常規步驟分派給 Hydrogen 處理。'
+            'Neon 可將例行步驟分流至 Hydrogen。'
         ],
         [
             'Same Argon-level quality, fewer tokens used',
-            '維持同等 Argon 水準的品質，消耗更少 Token'
+            '維持 Argon 同級品質，消耗更少 Token'
         ]
     ];
     for (const [input, expected] of cases) {

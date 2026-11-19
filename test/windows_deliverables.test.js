@@ -330,7 +330,7 @@ test('README.md and README_TW.md match repo files, terminology, and runtime prom
     const allTwJoined = Array.from(twValues).join('\n');
     const promisedTerms = [
         '命令選擇區',
-        '儲存庫',
+        '存放庫',
         '代理',
         '設定排程任務',
         '終端機指令',
