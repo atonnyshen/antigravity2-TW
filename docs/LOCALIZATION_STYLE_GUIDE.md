@@ -1,7 +1,7 @@
 # Antigravity 繁體中文在地化文字規範與體例指南 (Localization Style Guide)
 
-> **版本**：v3.7.0  
-> **維護依據**：Antigravity 繁體中文翻譯規範、L0 中文輸出底線層、老編輯統一出版體例  
+> **版本**：v3.7.1  
+> **維護依據**：Antigravity 繁體中文翻譯規範、L0 中文輸出底線層、老編輯統一出版體例、台灣軟體在地化業界行規（Apple / Google / Microsoft / VS Code zh-TW）  
 > **適用範圍**：所有靜態字典檔（`dicts_tw/*.json`、`dicts/*.json`）、核心執行期腳本（`src/preload_runtime.js`、`localization_engine.js`）及自動化守護程序
 
 ---
@@ -13,7 +13,7 @@
 1. **唯一事實源 (SSOT)**：
    - `dicts_tw/*.json` 為台灣繁體中文基準字典。
    - `dicts/*.json` 為簡體中文基準字典。
-   - 兩者必須維持 **100% 鍵值對齊**，任何鍵的增刪改必須兩側同步更新。
+   - 兩者必須維持 **100% 鍵值對齊**，無跨檔重複鍵，任何鍵的增刪改必須兩側同步更新。
 2. **驗證守門工具**：
    - 提交任何改動前，必須執行 `node scripts/compare_dicts.js`。該腳本嚴格禁止鍵值脫節、簡體字滲漏（`STRICT_SC_CHARS_REGEX`）以及非規範大陸黑話（`FORBIDDEN_TC_TERMS`）。
    - 必須執行 `npm test`，確保所有單元測試與迴歸驗證 100% 通過。
@@ -28,7 +28,7 @@
 1. **中文標點符號全形化**：
    - 中文介面一律使用全形標點符號：逗號 `，`、句號 `。`、問號 `？`、驚嘆號 `！`、冒號 `：`、分號 `；`、括號 `（` `）`、頓號 `、`、破折號 `——`。
    - 引用對話、專有名詞、選單項目或指令時，一律使用繁體中文標準雙角引號 `「` 與 `」`（次層引號使用 `『` 與 `』`），嚴禁直譯使用英文半形雙引號 `"` 或簡體引號 `“”`。
-2. **中英與中數空白隔離**：
+2. **中英與中數空白隔離（盤古之白）**：
    - 中文字與英文字母、中文字與阿拉伯數字之間，一律空半形空格。  
      *正確範例*：`Gemini 4 Argon 目前僅提供給 Pro 與 Ultra 付費訂閱者使用。`  
      *正確範例*：`已變更 3 個檔案。`  
@@ -46,19 +46,37 @@
   - ❌ `過長的大型自訂元件將被自動截斷。` ➔ ✔️ `系統將自動截斷過長的大型自訂元件。`
   - ❌ `在不安全或被注入內容上執行的風險也最高。` ➔ ✔️ `在不安全或遭惡意注入的內容上執行的風險也最高。`
   - ❌ `部分非圖片二進位內容已被截斷。` ➔ ✔️ `系統已截斷部分非圖片二進位內容。`
-  - ❌ `麥克風已被阻止` ➔ ✔️ `麥克風已封鎖`
+  - ❌ `麥克風已被阻止` ➔ ✔️ `麥克風權限受阻`
 
-### 2.3 拒絕生硬翻譯腔與輕動詞包裝
+### 2.3 拒絕生硬翻譯腔與輕動詞包裝 (去「進行…」化)
 - 嚴禁「進行……」、「完成對……的優化」、「實現……的提升」等空動詞包裝。
   - ❌ `手動下載除錯套件並進行分享` ➔ ✔️ `手動下載除錯套件並直接分享`
   - ❌ `持續執行，直到指定的目標完全完成` ➔ ✔️ `持續執行，直至達成指定目標`
   - ❌ `此提示詞較為直接，無需進行多方案對比` ➔ ✔️ `此提示詞直接明確，無須多方案比對`
+  - ❌ `請先啟用該外掛程式以進行登入` ➔ ✔️ `請先啟用該外掛程式以登入`
+  - ❌ `每個外掛程式都可以獨立進行管理` ➔ ✔️ `每個外掛程式都可以獨立管理`
+  - ❌ `作為知識圖譜進行查詢` ➔ ✔️ `作為知識圖譜查詢`
+
+### 2.4 軟體介面 UI 元件文體規範
+依台灣軟體在地化行規（Apple HIG 繁中版 / Microsoft 繁中本地化指引 / VS Code 繁中套件）：
+1. **選單項目 (Menu Items)**：簡短名詞或「動詞＋受詞」，動詞置於句首；帶後續輸入或彈出對話框者保留省略號 `...`（如 `開啟工作區...`、`儲存`、`關閉分頁`）。
+2. **按鈕動作詞 (Buttons)**：強動詞開頭，省略多餘主詞與贅字。動作明確時以具體動作命名（如 `儲存`、`建立`、`安裝`、`套用`、`取代`），嚴禁口語口吻（如「按我」、「點此」、「點擊」）。
+3. **確認對話框 (Confirmation Dialogs / Alerts)**：問句與按鈕嚴格對稱（如「要儲存對此檔案的變更嗎？」對應【儲存】、【不要儲存】、【取消】），避免問非所答的【是】／【否】。
+4. **工具提示 (Tooltips / Hover Help)**：動詞開頭，單句 Tooltip 末尾絕不加句號；僅當包含兩句以上時，才使用全形句號分隔。
+5. **狀態列 (Status Bar)**：正面簡短陳述當前狀態，進行中的任務統一使用「正在 [動詞]...」（如 `準備就緒`、`正在同步存放庫...`、`已變更 3 個檔案`）。
+6. **錯誤訊息 (Error Messages)**：遵循「發生原因＋解決建議」（Cause + Actionable Resolution）原則，不指責使用者，主動明確陳述狀態。
+
+### 2.5 語氣與人稱規範
+1. **第二人稱「您」的使用邊界**：
+   - 介面指示只要指涉清楚，一律省略多餘主詞（如「請輸入工作區路徑」，不寫「請您輸入您的工作區路徑」）。
+   - 指明歸屬權（`您的帳戶`、`您的自訂外掛程式`）或假設說明（`若管理員有提供憑證`）時使用「您」（敬稱）。介面文字嚴禁直呼「你」。
+2. **避免過度客套**：去除「親愛的使用者」等非必要客套詞彙。
 
 ---
 
 ## 3. 兩岸名詞標準對照與大陸黑話防護庫
 
-本專案已在 `scripts/compare_dicts.js` 中固化違禁詞攔截清單。以下名詞在繁體中文（`dicts_tw/`）中必須嚴格遵守台灣標準用法：
+本專案在 `scripts/compare_dicts.js` 中固化違禁詞攔截清單。以下名詞在繁體中文（`dicts_tw/`）中必須嚴格遵守台灣標準用法：
 
 | 英文術語 | 繁體中文標準 (台灣) | 簡體中文 (`dicts/`) | ❌ 嚴禁在繁中出現的大陸黑話 / 港式異體 |
 | :--- | :--- | :--- | :--- |
@@ -71,13 +89,13 @@
 | **File** (本機檔案) | **檔案** | 文件 | ❌ 文件（指 File 時） |
 | **Directory / Folder** | **資料夾** / **目錄** | 目录 / 文件夹 | - |
 | **Project** | **專案** | 项目 | ❌ 項目（指工程專案時） |
-| **Item** (清單項目) | **項目** | 项目 / 项 | - |
+| **Item / Entry** (清單項目) | **項目** | 项目 / 项 | ❌ 條目 |
 | **Default** | **預設** | 默认 | ❌ 默認 |
 | **Global** | **全域** | 全局 | ❌ 全局 |
 | **Settings / Preferences** | **設定** / **偏好設定** | 设置 / 首选项 | ❌ 設置 / 配置（非版面配置時） |
 | **Window** | **視窗** | 窗口 | ❌ 窗口 |
 | **Plugin / Extension** | **外掛程式** / **擴充功能** | 插件 / 扩展 | ❌ 插件 |
-| **Shortcut / Keybinding** | **快速鍵** / **按鍵綁定** | 快捷键 | ❌ 快捷鍵 |
+| **Shortcut / Keybinding** | **快速鍵** / **按鍵對應設定** | 快捷键 | ❌ 快捷鍵 |
 | **Terminal / Console** | **終端機** / **主控台** | 终端 / 控制台 | ❌ 終端 / 控制台 |
 | **Refresh** | **重新整理** | 刷新 | ❌ 刷新 |
 | **User** | **使用者** | 用户 | ❌ 用戶（指一般使用者時） |
@@ -92,49 +110,88 @@
 | **Publish / Post** | **發布**（發布訊息、發布概覽） | 发布 | ❌ 發佈 |
 | **Swarm** | **蜂群**（介面文字：蜂群看板／成員／時間軸） | 蜂群 | ❌ Swarm（一般介面文字殘留未翻；Slash `/swarm` 仍保留） |
 | **Variant Chars** | **啟用** / **啟動** / **為** | 启用 / 启动 / 为 | ❌ 啓用 / 啓動 / 爲（港式舊字形） |
+| **View** (動作/選單) | **檢視** | 查看 / 视图 | ❌ 查看（選單/操作動作時） |
+| **Select / Choose** | **選取** / **選擇** | 选中 / 选择 | ❌ 選中 |
+| **Apply** (動詞) | **套用** | 应用 | ❌ 應用（作為動詞時） |
+| **Change / Changes** | **變更**（已暫存的變更） | 更改 / 变更 | ❌ 更改 |
+| **Repository** | **存放庫**（對齊 VS Code 繁中體例） | 仓库 / 代码库 | ❌ 倉庫 / 儲存庫（一律對齊存放庫） |
+| **Workspace** | **工作區** | 工作区 / 工作空间 | ❌ 工作空間 |
+| **Kernel / Core** | **核心**（核心版本） | 内核 / 核心 | ❌ 內核 |
+| **Process** | **處理程序** | 进程 / 程序 | ❌ 進程 |
+| **Instance** | **執行個體** | 实例 | ❌ 實例 |
+| **License** | **授權**（授權清單、選擇授權） | 许可证 / 授权 | ❌ 許可證 |
+| **Capture** | **擷取**（擷取主控台記錄檔） | 捕获 / 抓取 | ❌ 捕獲 |
+| **Interrupt** | **中斷**（中斷代理並傳送） | 打断 / 中断 | ❌ 打斷 |
+| **Migrate / Moved** | **移轉** / **已移至** | 迁移 / 已移动 | ❌ 遷移 |
+| **Protocol** | **協定**（模型上下文協定） | 协议 | ❌ 協議 |
+| **Compatible / Support** | **相容** / **支援** | 适配 / 兼容 | ❌ 適配 |
+| **Response / Remediation** | **應變** / **應對與修復** | 响应 | ❌ 響應 |
+| **Token** | **標記** / **Token** | 令牌 / 符号 | ❌ 令牌 / 符記 |
+| **Click** | **點選** / **按一下** | 点击 / 单击 | ❌ 點擊 / 單擊 |
+| **No need / without** | **無須** | 无需 | ❌ 無需 |
+| **Unmount** | **卸除**（卸除工作區） | 卸载 | ❌ 卸載（非軟體解除安裝時） |
+| **Plan** (名詞/規劃) | **計畫**（名詞）/ **規劃**（動詞） | 计划 | ❌ 計劃 |
+| **Bookmark** | **書籤** | 书签 | ❌ 書簽 |
+| **Weekly** | **每週** | 每周 | ❌ 每周 |
+| **Assist** | **協助** / **支援** | 助力 / 辅助 | ❌ 助力 |
+| **Empower** | **賦予能力** | 赋能 | ❌ 賦能 |
+| **Exit with error** | **結束並出現錯誤** | 异常退出 | ❌ 異常退出 |
 
 ---
 
 ## 4. Slash 指令與不翻譯詞彙白名單 (Protected Tokens)
 
-### 4.1 Slash 指令保留原則
+### 4.1 Slash 指令保留原則與單字鍵防撞
 所有以 `/` 開頭之系統命令識別碼均直接由 Antigravity 核心解析器攔截，**一律嚴禁翻譯**：
-- `/swarm`
-- `/swarm-autonomous-pipeline`
 - `/goal`
+- `/swarm`
 - `/boost`
-- `/egm-boost`
 - `/learn`
 - `/schedule`
-- `/clear`
+- `/plan`
+- `/browser`
 - `/compact`
+- `/grill-me`
+- `/teamwork`
+- `/automation`
+- `/plugin`
+- `/btw`
+- `/clear`
 - `/help`
 - `/init`
 
-在 `src/preload_runtime.js` 中已設有安全屏障：
-```javascript
-if (/^\/[a-zA-Z0-9_.-]+$/.test(valNorm)) {
-    unchangedTextValues.set(node, originalVal);
-    return;
-}
-```
+**關鍵防撞原則**：
+1. 嚴禁在靜態字典中收錄與 Slash 指令同名的全小寫單字鍵（如 `goal`, `swarm`, `schedule`, `plan`, `clear`, `automation`, `browser`）。
+2. 在 `src/preload_runtime.js` 中對 `[data-mention-menu] [data-testid="menu-option-label"]` 與 `/^\/[a-zA-Z0-9_.-]+$/` 全面實施標籤硬保護，絕對不翻譯指令名稱，僅翻譯 `menu-option-description` 說明文字。
+3. `lowerMap` 單字轉換中，嚴禁將大寫單字鍵流向全域覆蓋同名小寫指令。
+
 ### 4.2 指令說明文字規範
 Slash 指令名稱保持英文字串，但其輔助說明文字一律採用精煉出版級繁體中文：
 - `/goal` ➔ 說明：`持續執行，直至達成指定目標`
 - `/schedule` ➔ 說明：`依週期排程或一次性計時器執行指令`
 - `/boost` ➔ 說明：`呼叫 Boost 多代理編排器以應對複雜任務`
 - `/swarm` ➔ 說明：`啟動蜂群協作：多位代理在各自對話中平行處理同一任務`
+- `/btw` ➔ 說明：`在不中斷目前主對話流程的情況下快速提問`
 
 ### 4.3 系統專有名詞與代碼保留清單
 - **品牌名**：`Antigravity`、`Google`、`Firebase`、`Gemini`、`Claude`、`Android`、`Chrome DevTools`、`Puppeteer`。
 - **協定與路徑**：`plugin://*`、`vscode://*`、`~/.gemini/*`、檔案路徑指標。
 - **程式語言與關鍵字**：`Python`、`JavaScript`、`TypeScript`、`Go`、`Dart`、`Flutter`、`JSON`、`Markdown`、`agent`、`parallel`、`pipeline`、`phase`。
 
+### 4.4 Thinking Effort 白名單（使用者最新指示：嚴格保留英文不翻譯）
+模型選單中的 Thinking Effort 相關文字與選項標籤**一律保留英文原文、絕對不翻譯**：
+- `Thinking Effort`（設定標籤）
+- `Low`（低思考強度）
+- `Medium`（中思考強度）
+- `High`（高思考強度）
+- `Extra`（極高思考強度）
+- `Max`（最大思考強度）
+
 ---
 
 ## 5. 模型選單與動態訂閱方案規範 (Model Selector Specifications)
 
-在模型選擇器與模型提示資訊中，Google Antigravity 具有多種方案組合與動態下架警告。必須保證動態函數 `formatPlanAudience`、正規規則 `DYNAMIC_RULES` 與靜態字典 `page_main.json` 完全一致。
+在模型選擇器與模型提示資訊中，Google Antigravity 具有多種方案組合與動態提示。必須保證動態函數 `formatPlanAudience`、正規規則 `DYNAMIC_RULES` 與靜態字典 `page_main.json` 完全一致。
 
 ### 5.1 英文語序與中文對稱對照表
 中文嚴格對齊英文原本詞彙與先後順序，絕不倒裝或混淆「方案」與「訂閱者」：
@@ -167,6 +224,20 @@ Slash 指令名稱保持英文字串，但其輔助說明文字一律採用精�
    - `Third-party model access will no longer be available on your current plan starting on November 30, 2026.`  
      ➔ `自 2026 年 11 月 30 日起，您目前的方案將不再提供第三方模型存取權限。`
 
+### 5.3 模型選單 Tooltip 與分流提示標準範本 (v2.33.0+ 新增)
+1. **Gemini 4 Neon**：
+   - `For most deep reasoning and complex problems`  
+     ➔ `適用於深度推理與高度複雜的問題`
+2. **Gemini 4 Hydrogen**：
+   - `For speed and efficiency in execution tasks`  
+     ➔ `適用於執行任務時的高速與高效率`
+3. **Orchestrator (Neon)**：
+   - `Neon that may offload routine steps to Hydrogen. Same Neon-level quality, fewer tokens used.`  
+     ➔ `Neon 可將例行步驟分流至 Hydrogen。維持 Neon 同級品質，消耗更少 Token。`
+4. **Orchestrator (Argon)**：
+   - `Argon that may offload routine steps to Hydrogen. Same Argon-level quality, fewer tokens used.`  
+     ➔ `Argon 可將例行步驟分流至 Hydrogen。維持 Argon 同級品質，消耗更少 Token。`
+
 ---
 
 ## 6. 品質驗證與發布工程清單 (Release Checklist)
@@ -183,21 +254,21 @@ Slash 指令名稱保持英文字串，但其輔助說明文字一律採用精�
    ```bash
    npm test
    ```
-   *必須保證*：所有測試通過（46/46 passed，0 failed）。
+   *必須保證*：所有測試通過（49/49 passed，0 failed）。
 
 3. **打包發布產物**：
    ```bash
-   zip -r -q dist/antigravity2-TW-v3.7.0.zip . -x "*.git*" "node_modules/*" "dist/*.zip" "build_app/*" "scratch/*"
+   zip -r -q dist/antigravity2-TW-v3.7.1.zip . -x "*.git*" "node_modules/*" "dist/*.zip" "build_app/*" "scratch/*"
    ```
 
 4. **Git 與 GitHub Release 同步**：
    ```bash
    git add -A
    git commit -m "..."
-   git tag -fa v3.7.0 -m "Release v3.7.0"
+   git tag -fa v3.7.1 -m "Release v3.7.1"
    git push origin main
-   git push origin v3.7.0 --force
-   gh release upload v3.7.0 dist/antigravity2-TW-v3.7.0.zip --clobber
+   git push origin v3.7.1 --force
+   gh release upload v3.7.1 dist/antigravity2-TW-v3.7.1.zip --clobber
    ```
 
 5. **本機應用程式即時重套**：

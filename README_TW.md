@@ -213,5 +213,5 @@ Get-Content .\autolocalize.log -Tail 40 -Encoding UTF8
 開發者驗證：執行 `npm ci --ignore-scripts` 與 `npm test`。GitHub Actions 在 macOS、Windows 與 Linux 跑回歸測試；測試不代表已驗證真實 Windows 排程或每個官方版本的介面。
 
 - 特別感謝 [qqxpee/antigravity2-cn](https://github.com/qqxpee/antigravity2-cn) 原作者的開源貢獻與 ASAR 注入架構設計。
-- 本儲存庫為個人使用與分享版本，主要維護繁體中文語境字典與自動更新腳本。
+- 本存放庫為個人使用與分享版本，主要維護繁體中文語境字典與自動更新腳本。
 - 若使用時發現漏譯或語意不順的詞條，歡迎隨時提交 Issue 或 PR 共同補充！

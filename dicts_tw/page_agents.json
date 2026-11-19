@@ -35,5 +35,9 @@
   "When enabled, this agent will be able to access past conversations to inform its responses.": "啟用後，此代理將能存取過去的對話記錄，以作為其回應的參考依據。",
   "Coordinator instructions": "協調器指令",
   "Summarizing call…": "正在摘要通話…",
-  "Coordinators": "協調器"
+  "Coordinators": "協調器",
+  "Remove bundle": "移除套件組合",
+  "Enable recommended skills": "啟用推薦技能",
+  "Skill download success": "技能下載成功",
+  "Error fetching available skills:": "擷取可用技能清單時發生錯誤："
 }
