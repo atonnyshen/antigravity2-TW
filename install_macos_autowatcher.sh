@@ -211,6 +211,7 @@ else
     chmod 644 "$LOG_DIR/autolocalize.log"
     
     RUNTIME="$BASE/runtime"
+    /bin/launchctl bootout "gui/$CURRENT_UID/$LABEL" 2>/dev/null || true
     mkdir -p "$RUNTIME"
     for file in auto_localize_watcher.js localization_engine.js package.json package-lock.json; do
         cp "$DIR/$file" "$RUNTIME/$file"

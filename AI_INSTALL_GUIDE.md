@@ -31,8 +31,8 @@
      - 除選用的 24 小時 GitHub 版本檢測外，無上傳本機資料的網路行為。
 3. **向使用者回報並提供選項**：
    用簡明繁體中文列出環境檢查與安全確認結果，接著請使用者直接回覆數字 **1～4**：
-   - **`1` 一鍵安裝繁體中文 + 啟用背景自動更新守護（推薦）**
-   - **`2` 僅安裝繁體中文（不裝背景守護）**
+   - **`1` 一鍵安裝繁體中文 + 啟用背景自動更新守護（推薦，官方更新或套件升版時可自動同步與自我更新）**
+   - **`2` 僅安裝繁體中文（若本機曾裝過背景守護，引擎會自動同步刷新守護快照以防回滾）**
    - **`3` 只看檢查結果，暫不修改**
    - **`4` 卸載背景自動守護並還原官方原版英文**
 
@@ -43,11 +43,11 @@
 收到使用者明確選擇後，進入專案目錄執行對應指令：
 
 ### 選項 `1`：安裝繁體中文 + 啟用背景守護
-- **步驟 A（套用繁中）**：
+- **步驟 A（套用繁中並同步既有背景守護快照）**：
   ```bash
-  node localization_engine.js --tw --no-kill --brand-title english
+  node localization_engine.js --tw --no-kill --sync-watcher --brand-title english
   ```
-- **步驟 B（啟用背景守護，每 5 分鐘自動巡檢，官方更新時重套）**：
+- **步驟 B（啟用或更新背景守護，每 5 分鐘自動巡檢，並支援安全校驗自我更新）**：
   - **macOS**：
     ```bash
     bash install_macos_autowatcher.sh
@@ -59,9 +59,9 @@
 
 ### 選項 `2`：僅安裝繁體中文
 ```bash
-node localization_engine.js --tw --no-kill --brand-title english
+node localization_engine.js --tw --no-kill --sync-watcher --brand-title english
 ```
-*(若使用者日後希望官方更新時自動重套，可再回來執行背景守護安裝。)*
+*(若本機已安裝舊版 macOS `LaunchAgent` 或 Windows `AntigravityAutoLocalize` 排程，`--sync-watcher` 與版本保護機制會自動將背景守護更新至目前版本，避免舊版守護將 `app.asar` 反向回滾。若使用者日後希望官方更新時自動重套，可再回來執行背景守護安裝。)*
 
 ### 選項 `3`：僅做唯讀檢查
 不執行任何寫入指令，結束任務。
@@ -93,4 +93,4 @@ node localization_engine.js --tw --no-kill --brand-title english
 ## 完成回報
 
 1. 回報實際執行成功的動作與日誌路徑（macOS：`/Library/Logs/Antigravity2TW/autolocalize.log` 或 `~/Library/Logs/Antigravity2TW/autolocalize.log`；Windows：專案目錄下的 `autolocalize.log`）。
-2. **提醒使用者**：請**完全關閉並重新啟動 Antigravity**，即可看到套用後的新介面。
+2. **提醒使用者**：請**完全結束並重新開啟 Antigravity**（macOS 請按 `Cmd+Q` 或從系統匣選擇「結束」，勿僅關閉視窗，以免舊程序仍駐留記憶體），即可看到套用後的新介面。

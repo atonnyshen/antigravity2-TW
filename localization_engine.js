@@ -98,7 +98,9 @@ const HAS_BRAND_TITLE_ARG = process.argv.some(arg => arg === '--brand-title' || 
 const rawBrandTitle = String(getOptionValue('--brand-title', 'english')).toLowerCase();
 let BRAND_TITLE_MODE = BRAND_TITLE_ALIASES[rawBrandTitle] || 'english';
 if (!BRAND_TITLE_ALIASES[rawBrandTitle]) {
-    console.warn(`[警告] 未识别的 --brand-title 参数 "${rawBrandTitle}"，已回退为 english。`);
+    console.warn(USE_TW
+        ? `[警告] 未識別的 --brand-title 參數 "${rawBrandTitle}"，已回退為 english。`
+        : `[警告] 未识别的 --brand-title 参数 "${rawBrandTitle}"，已回退为 english。`);
 }
 
 if (USE_TW) {
@@ -124,7 +126,7 @@ if (USE_TW) {
         "[警告] 未能在 utils.js 中找到 Sidecar 钩子插入点。": "[警告] 未能在 utils.js 中找到 Sidecar 掛鉤插入點。",
         "[打包] 正在使用原生引擎生成并校验汉化候选包...": "[打包] 正在使用原生引擎產生並校驗漢化候選包...",
         "[√] Antigravity 2.0 汉化部署完成！": "[√] Antigravity 2.0 繁體中文化套用完成！",
-        "[!] 未找到备份文件 app.asar.bak，可能尚未安装过汉化或备份被删除。": "[!] 未找到備份檔案 app.asar.bak，可能尚未安裝過繁中化或備份已被刪除。",
+        "[!] 未找到备份文件 app.asar.bak，可能尚未安装过汉化或备份被删除。": "[!] 未找到備份檔案 app.asar.bak，可能尚未安裝過繁中化，或備份檔案已刪除。",
         "[还原] 正在用官方备份文件恢复...": "[還原] 正在使用官方備份檔案還原...",
         "[权限] 检测到当前用户对 macOS 应用目录缺少写入权限，正在尝试请求管理员权限 (sudo) 重新运行...": "[權限] 偵測到目前使用者對 macOS 應用程式目錄缺少寫入權限，正在嘗試請求管理員權限 (sudo) 重新執行...",
         "[√] 官方 app.asar 已成功恢复！": "[√] 官方 app.asar 已成功還原！",
@@ -142,15 +144,25 @@ if (USE_TW) {
         "[探测] 成功自动识别到 Antigravity 安装目录: ": "[偵測] 成功自動識別到 Antigravity 安裝目錄: ",
         "[错误] 未找到默认安装目录，请使用 --install-dir 手动指定您的安装路径！": "[錯誤] 未找到預設安裝目錄，請使用 --install-dir 手動指定您的安裝路徑！",
         "详情: ": "詳情: ",
-        "[跳过] 检测到 --no-kill 参数，跳过关闭 Antigravity 运行进程。": "[跳過] 偵測到 --no-kill 參數，跳過關閉 Antigravity 執行進程。",
-        "[启动] 检测到安装前反重力客户端处于开启状态，正在重新启动客户端...": "[啟動] 偵測到安裝前反重力用戶端處於開啟狀態，正在重新啟動用戶端...",
+        "[跳过] 检测到 --no-kill 参数，跳过关闭 Antigravity 运行进程。": "[跳過] 偵測到 --no-kill 參數，跳過關閉 Antigravity 執行程序。",
+        "[启动] 检测到安装前反重力客户端处于开启状态，正在重新启动客户端...": "[啟動] 偵測到安裝前 Antigravity 用戶端處於開啟狀態，正在重新啟動用戶端...",
         "[启动] 客户端启动成功！": "[啟動] 用戶端啟動成功！",
         "[警告] 未找到客户端主程序: ": "[警告] 未找到用戶端主程式: ",
         "[警告] 客户端启动失败: ": "[警告] 用戶端啟動失敗: ",
         "[权限] 检测到当前用户对 Antigravity 安装目录缺少写入权限，无法覆盖资源文件。": "[權限] 偵測到目前使用者對 Antigravity 安裝目錄缺少寫入權限，無法覆寫資源檔案。",
         "[提示] 请右键点击批次档 (.bat)，选择「以系统管理员身份运行」后再重试。": "[提示] 請對批次檔 (.bat) 按右鍵，選擇「以系統管理員身分執行」後再重試。",
         "[任务] 检测到本机已安装 Antigravity 背景自动更新守护，正在同步刷新状态...": "[任務] 偵測到本機已安裝 Antigravity 背景自動更新守護，正在同步重新整理狀態...",
-        "[任务] 无法触发背景守护同步（可能权限不足或排程未启动），下次定时巡检仍会自动生效。": "[任務] 無法觸發背景守護同步（可能權限不足或排程未啟動），下次定時巡檢仍會自動生效。"
+        "[任务] 已同步更新 macOS 背景守护快照并刷新状态，避免旧版回滚。": "[任務] 已同步更新 macOS 背景守護快照並重新整理狀態，避免舊版回滾。",
+        "[任务] 已重新注册 Windows 排程路径至当前目录，避免旧版目录回滚。": "[任務] 已重新註冊 Windows 排程路徑至目前目錄，避免舊版目錄回滾。",
+        "[警告] 检测到系统级背景守护 (LaunchDaemon) 无写入权限，请执行 sudo bash ./install_macos_autowatcher.sh --daemon 同步更新，以免旧版守护回滚 app.asar。": "[警告] 偵測到系統級背景守護 (LaunchDaemon) 缺乏寫入權限，請執行 sudo bash ./install_macos_autowatcher.sh --daemon 同步更新，以免舊版守護回滾 app.asar。",
+        "[任务] 无法触发背景守护同步（可能权限不足或排程未启动），下次定时巡检仍会自动生效。": "[任務] 無法觸發背景守護同步（可能權限不足或排程未啟動），下次排程巡檢仍會自動生效。",
+        "[错误] 管理员提权执行失败或用户取消了密码输入。": "[錯誤] 管理員提權執行失敗或使用者取消了密碼輸入。",
+        "语法校验失败 (": "語法校驗失敗 (",
+        "[提示] 临时目录已保留: ": "[提示] 暫存目錄已保留: ",
+        "[错误] 汉化未完成，未提交的候选包不会替换客户端: ": "[錯誤] 繁中化尚未完成，未提交的候選包不會覆寫用戶端: ",
+        "[错误] 恢复备份失败: ": "[錯誤] 還原備份失敗: ",
+        "[提示] macOS 写入受限，请使用管理员权限运行脚本。": "[提示] macOS 寫入受限，請以管理員權限執行指令碼。",
+        "[提醒] Antigravity 目前仍在运行，内存仍加载旧版资源。请完全退出应用（macOS 请按 Cmd+Q 或从菜单栏图标选择「结束」，勿仅关闭窗口）后再重新打开，新翻译才会完整生效。": "[提醒] Antigravity 目前仍在執行，記憶體仍載入舊版套件。請完全結束應用程式（macOS 請按 Cmd+Q 或從系統匣選擇「結束」，勿僅關閉視窗）再重新開啟，新翻譯才會完整生效。"
     };
     const translateMsg = (args) => {
         return args.map(arg => {
@@ -217,6 +229,16 @@ function loadDictionary() {
     return totalMap;
 }
 
+function getPackageVersion() {
+    try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+        if (pkg && typeof pkg.version === 'string' && pkg.version.trim()) {
+            return pkg.version.trim();
+        }
+    } catch (e) {}
+    return '3.7.1';
+}
+
 function generateJs() {
     const fullDict = loadDictionary();
     const dictJson = JSON.stringify(fullDict);
@@ -227,7 +249,8 @@ function generateJs() {
         .replace('__USE_TW_PLACEHOLDER__', () => (USE_TW ? 'true' : 'false'))
         .replace('DICT_PLACEHOLDER', () => dictJson);
 
-    return `${SIGNATURE_START}\n${body}\n${SIGNATURE_END}`;
+    const metaComment = `/* --- ANTIGRAVITY L10N META:${JSON.stringify({ version: getPackageVersion(), buildTime: Date.now() })} --- */`;
+    return `${SIGNATURE_START}\n${metaComment}\n${body}\n${SIGNATURE_END}`;
 }
 
 let wasAppRunning = false;
@@ -238,7 +261,7 @@ function checkIfAppIsRunning() {
             const stdout = child_process.execSync('tasklist /fi "imagename eq Antigravity.exe" /nh', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
             return stdout.toLowerCase().includes('antigravity.exe');
         } else if (process.platform === 'darwin') {
-            const stdout = child_process.execSync('pgrep -x Antigravity || pgrep -f "/Antigravity\\.app/Contents/MacOS/Antigravity"', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+            const stdout = child_process.execSync('pgrep -x Antigravity || pgrep -f "/Antigravity(?: IDE)?\\.app/Contents/"', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
             return stdout.trim().length > 0;
         }
     } catch (e) {
@@ -263,7 +286,7 @@ function closeAntigravityProcesses() {
         if (process.platform === 'win32') {
             child_process.execSync('taskkill /im Antigravity.exe >nul 2>nul');
         } else {
-            child_process.execSync('killall -TERM Antigravity >/dev/null 2>&1; pkill -TERM -x Antigravity >/dev/null 2>&1');
+            child_process.execSync('osascript -e \'tell application id "com.google.antigravity" to quit\' >/dev/null 2>&1; killall -TERM Antigravity >/dev/null 2>&1; pkill -TERM -x Antigravity >/dev/null 2>&1');
         }
     } catch (e) {}
 
@@ -274,12 +297,12 @@ function closeAntigravityProcesses() {
         if (!checkIfAppIsRunning()) break;
     }
 
-    // 第二阶段：无论主窗口是否已关闭，都必须执行 /f /t 彻底清理所有残余的 Electron GPU/渲染子进程，彻底释放 app.asar 文件锁
+    // 第二阶段：无论主窗口是否已关闭，都必须彻底清理所有残余的 Electron GPU/渲染/Helper 子进程，彻底释放 app.asar 文件锁
     try {
         if (process.platform === 'win32') {
             child_process.execSync('taskkill /f /im Antigravity.exe /t >nul 2>nul');
         } else {
-            child_process.execSync('killall Antigravity >/dev/null 2>&1; killall "Antigravity Helper" >/dev/null 2>&1; pkill -x Antigravity >/dev/null 2>&1; pkill -f "/Antigravity\\.app/Contents/MacOS/Antigravity" >/dev/null 2>&1');
+            child_process.execSync('killall -KILL Antigravity >/dev/null 2>&1; pkill -KILL -f "/Antigravity(?: IDE)?\\.app/Contents/" >/dev/null 2>&1');
         }
     } catch (e) {}
     sleepSync(1200);
@@ -384,38 +407,40 @@ function runCommandSync(cmd) {
     }
 }
 
-function cleanElectronCache() {
-    let appSupportDirs = [];
-    if (process.platform === 'darwin') {
-        let userHome = os.homedir();
-        if (process.env.SUDO_USER && process.env.SUDO_USER !== 'root') {
-            const sudoHome = path.join('/Users', process.env.SUDO_USER);
-            if (fs.existsSync(sudoHome)) {
-                userHome = sudoHome;
+function cleanElectronCache(customAppSupportDirs) {
+    let appSupportDirs = Array.isArray(customAppSupportDirs) ? customAppSupportDirs : [];
+    if (!Array.isArray(customAppSupportDirs)) {
+        if (process.platform === 'darwin') {
+            let userHome = os.homedir();
+            if (process.env.SUDO_USER && process.env.SUDO_USER !== 'root') {
+                const sudoHome = path.join('/Users', process.env.SUDO_USER);
+                if (fs.existsSync(sudoHome)) {
+                    userHome = sudoHome;
+                }
             }
+            appSupportDirs.push(
+                path.join(userHome, 'Library', 'Application Support', 'Antigravity'),
+                path.join(userHome, 'Library', 'Application Support', 'Antigravity IDE')
+            );
+        } else if (process.platform === 'win32') {
+            const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
+            appSupportDirs.push(
+                path.join(appData, 'Antigravity'),
+                path.join(appData, 'Antigravity IDE')
+            );
+        } else {
+            appSupportDirs.push(
+                path.join(os.homedir(), '.config', 'Antigravity'),
+                path.join(os.homedir(), '.config', 'Antigravity IDE')
+            );
         }
-        appSupportDirs.push(
-            path.join(userHome, 'Library', 'Application Support', 'Antigravity'),
-            path.join(userHome, 'Library', 'Application Support', 'Antigravity IDE')
-        );
-    } else if (process.platform === 'win32') {
-        const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-        appSupportDirs.push(
-            path.join(appData, 'Antigravity'),
-            path.join(appData, 'Antigravity IDE')
-        );
-    } else {
-        appSupportDirs.push(
-            path.join(os.homedir(), '.config', 'Antigravity'),
-            path.join(os.homedir(), '.config', 'Antigravity IDE')
-        );
     }
 
-    const toDeleteNames = new Set(['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'GraphiteDawnCache', 'DawnWebGPUCache', 'ScriptCache']);
+    const toDeleteNames = new Set(['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'GraphiteDawnCache', 'DawnWebGPUCache', 'ScriptCache', 'CacheStorage', 'Shared Dictionary']);
     let cleanedCount = 0;
 
-    function purgeDir(dir, depth = 0) {
-        if (depth > 4 || !fs.existsSync(dir)) return;
+    function purgeDir(dir, depth = 0, forceRecurse = false) {
+        if (depth > 6 || !fs.existsSync(dir)) return;
         try {
             const entries = fs.readdirSync(dir, { withFileTypes: true });
             for (const entry of entries) {
@@ -426,8 +451,15 @@ function cleanElectronCache() {
                             fs.rmSync(full, { recursive: true, force: true });
                             cleanedCount++;
                         } catch (e) {}
-                    } else if (entry.name === 'Partitions' || entry.name.startsWith('hub-browser') || entry.name === 'Service Worker') {
-                        purgeDir(full, depth + 1);
+                    } else if (
+                        forceRecurse ||
+                        entry.name === 'Partitions' ||
+                        entry.name === 'Default' ||
+                        /^Profile \d+$/i.test(entry.name) ||
+                        entry.name.startsWith('hub-browser') ||
+                        entry.name === 'Service Worker'
+                    ) {
+                        purgeDir(full, depth + 1, entry.name === 'Partitions');
                     }
                 }
             }
@@ -440,8 +472,9 @@ function cleanElectronCache() {
     }
 
     if (cleanedCount > 0) {
-        console.log(`[快取] 已自動清理 ${cleanedCount} 個應用快取目錄（含多分區 Code Cache），避免新舊版本位元碼衝突。`);
+        console.log(`[快取] 已自動清理 ${cleanedCount} 個應用程式快取目錄（含多分區 Code Cache），避免新舊版本位元組碼衝突。`);
     }
+    return cleanedCount;
 }
 
 function resolveMacAppBundle(dir) {
@@ -573,7 +606,233 @@ function replaceFileWithRetry(srcPath, destPath, allowKill = false) {
     }
 }
 
-function install20(resourcesDir, noKill = false, staging = false) {
+function getMacUserHome() {
+    let userHome = os.homedir();
+    if (process.env.SUDO_USER && process.env.SUDO_USER !== 'root') {
+        const sudoHome = path.join('/Users', process.env.SUDO_USER);
+        if (fs.existsSync(sudoHome)) userHome = sudoHome;
+    }
+    return userHome;
+}
+
+function isRealAppInstallDir(targetPath) {
+    if (!targetPath) return false;
+    const resolved = path.resolve(targetPath);
+    const tmpBase = path.resolve(os.tmpdir());
+    if (resolved.startsWith(tmpBase + path.sep) || resolved.startsWith('/tmp/') || resolved.startsWith('/private/tmp/') || resolved.startsWith('/var/folders/')) {
+        return false;
+    }
+    if (process.platform === 'darwin') {
+        const bundle = resolveMacAppBundle(resolved);
+        if (!bundle) return false;
+        const userApps = path.join(getMacUserHome(), 'Applications') + path.sep;
+        return bundle.startsWith('/Applications/') || bundle.startsWith(userApps);
+    }
+    if (process.platform === 'win32') {
+        return fs.existsSync(path.join(resolved, 'Antigravity.exe'));
+    }
+    return false;
+}
+
+function computeDirRecipeHash(dir) {
+    const files = ['package.json', 'package-lock.json', 'localization_engine.js', 'auto_localize_watcher.js'];
+    for (const folder of ['dicts', 'dicts_tw', 'src']) {
+        const folderPath = path.join(dir, folder);
+        if (fs.existsSync(folderPath)) {
+            for (const name of fs.readdirSync(folderPath).sort()) {
+                if (name.endsWith('.json') || name.endsWith('.js')) files.push(path.join(folder, name));
+            }
+        }
+    }
+    const hash = crypto.createHash('sha256');
+    for (const file of files) {
+        const fullPath = path.join(dir, file);
+        if (fs.existsSync(fullPath)) {
+            hash.update(file).update(fs.readFileSync(fullPath));
+        }
+    }
+    return hash.digest('hex');
+}
+
+function copyDirTree(src, dest) {
+    fs.mkdirSync(dest, { recursive: true });
+    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+        const s = path.join(src, entry.name);
+        const d = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+            copyDirTree(s, d);
+        } else if (entry.isFile()) {
+            fs.copyFileSync(s, d);
+        }
+    }
+}
+
+function acquireWatcherLockSync(lockPath, waitMs = 4000) {
+    const deadline = Date.now() + waitMs;
+    while (true) {
+        try {
+            fs.mkdirSync(lockPath, { mode: 0o755 });
+            fs.writeFileSync(path.join(lockPath, 'pid'), String(process.pid), { flag: 'wx' });
+            return () => {
+                try { fs.rmSync(lockPath, { recursive: true, force: true }); } catch {}
+            };
+        } catch (err) {
+            if (err.code !== 'EEXIST') return null;
+            let pid;
+            try { pid = Number(fs.readFileSync(path.join(lockPath, 'pid'), 'utf8')); } catch {}
+            let alive = false;
+            if (Number.isInteger(pid) && pid > 0 && pid !== process.pid) {
+                try { process.kill(pid, 0); alive = true; } catch (ke) {
+                    if (ke.code !== 'ESRCH') alive = true;
+                }
+            }
+            if (!alive || Date.now() >= deadline) {
+                try { fs.rmSync(lockPath, { recursive: true, force: true }); } catch {}
+                if (Date.now() >= deadline && alive) return null;
+                continue;
+            }
+            sleepSync(150);
+        }
+    }
+}
+
+function discoverMacWatcherRuntimes({
+    userHome = getMacUserHome(),
+    systemPlistPath = '/Library/LaunchDaemons/com.antigravity.autolocalize.plist',
+    userPlistPath = path.join(userHome, 'Library', 'LaunchAgents', 'com.antigravity.autolocalize.plist')
+} = {}) {
+    const targets = [];
+    if (fs.existsSync(userPlistPath)) {
+        const rt = path.join(userHome, 'Library', 'Application Support', 'Antigravity2TW', 'runtime');
+        if (fs.existsSync(rt)) targets.push({ kind: 'user', runtimeDir: rt });
+    }
+    if (fs.existsSync(systemPlistPath)) {
+        try {
+            const plistRaw = fs.readFileSync(systemPlistPath, 'utf8');
+            const m = plistRaw.match(/<key>WorkingDirectory<\/key>\s*<string>([^<]+)<\/string>/);
+            if (m && m[1] && fs.existsSync(m[1])) {
+                targets.push({ kind: 'system', runtimeDir: m[1] });
+            }
+        } catch {}
+    }
+    return targets;
+}
+
+function prepareMacWatcherSync({
+    sourceDir = __dirname,
+    runtimes = discoverMacWatcherRuntimes()
+} = {}) {
+    const session = { synced: [], locks: [], unwritableSystem: false };
+    if (!fs.existsSync(path.join(sourceDir, 'auto_localize_watcher.js'))) return session;
+
+    for (const item of runtimes) {
+        const rtDir = item.runtimeDir;
+        try {
+            fs.accessSync(rtDir, fs.constants.W_OK);
+        } catch {
+            if (item.kind === 'system') session.unwritableSystem = true;
+            continue;
+        }
+        const stateDir = path.join(rtDir, '.watcher-state');
+        fs.mkdirSync(stateDir, { recursive: true, mode: 0o755 });
+        const release = acquireWatcherLockSync(path.join(stateDir, 'run.lock'));
+        if (release) session.locks.push(release);
+
+        for (const file of ['auto_localize_watcher.js', 'localization_engine.js', 'package.json', 'package-lock.json']) {
+            const srcFile = path.join(sourceDir, file);
+            if (fs.existsSync(srcFile)) {
+                fs.copyFileSync(srcFile, path.join(rtDir, file));
+            }
+        }
+        for (const folder of ['dicts', 'dicts_tw', 'src', 'scripts']) {
+            const srcFolder = path.join(sourceDir, folder);
+            const dstFolder = path.join(rtDir, folder);
+            if (fs.existsSync(srcFolder)) {
+                fs.rmSync(dstFolder, { recursive: true, force: true });
+                copyDirTree(srcFolder, dstFolder);
+            }
+        }
+        session.synced.push(rtDir);
+    }
+    if (session.unwritableSystem) {
+        console.warn("[警告] 检测到系统级背景守护 (LaunchDaemon) 无写入权限，请执行 sudo bash ./install_macos_autowatcher.sh --daemon 同步更新，以免旧版守护回滚 app.asar。");
+    }
+    return session;
+}
+
+function commitMacWatcherSync(session, macAppBundle, asarPath) {
+    if (!session || !session.synced || session.synced.length === 0) return;
+    const asarHash = crypto.createHash('sha256').update(fs.readFileSync(asarPath)).digest('hex');
+    const appKey = crypto.createHash('sha256').update(macAppBundle).digest('hex');
+    for (const rtDir of session.synced) {
+        try {
+            const stateDir = path.join(rtDir, '.watcher-state');
+            fs.mkdirSync(stateDir, { recursive: true, mode: 0o755 });
+            const recipe = computeDirRecipeHash(rtDir);
+            const statePath = path.join(stateDir, appKey + '.json');
+            fs.writeFileSync(statePath, JSON.stringify({
+                recipe,
+                output: asarHash,
+                version: getPackageVersion(),
+                updatedAt: new Date().toISOString()
+            }) + '\n');
+        } catch {}
+    }
+    if (session.synced.length > 0) {
+        console.log("[任务] 已同步更新 macOS 背景守护快照并刷新状态，避免旧版回滚。");
+    }
+}
+
+function cleanupMacWatcherSync(session) {
+    if (!session || !Array.isArray(session.locks)) return;
+    while (session.locks.length > 0) {
+        const release = session.locks.pop();
+        try { release(); } catch {}
+    }
+}
+
+function syncActiveWindowsWatcher(installDir, resourcesDir, {
+    baseDir = __dirname,
+    execFileSyncFn = child_process.execFileSync,
+    installTaskFn = null
+} = {}) {
+    try {
+        execFileSyncFn('schtasks.exe', ['/query', '/tn', 'AntigravityAutoLocalize'], { stdio: 'ignore' });
+    } catch {
+        return { synced: false, reason: 'not_registered' };
+    }
+    console.log("[任务] 检测到本机已安装 Antigravity 背景自动更新守护，正在同步刷新状态...");
+    try {
+        const asarPath = path.join(resourcesDir, 'app.asar');
+        if (fs.existsSync(asarPath)) {
+            const stateDir = path.join(baseDir, '.watcher-state');
+            fs.mkdirSync(stateDir, { recursive: true });
+            const appKey = crypto.createHash('sha256').update(installDir).digest('hex');
+            const asarHash = crypto.createHash('sha256').update(fs.readFileSync(asarPath)).digest('hex');
+            const recipe = computeDirRecipeHash(baseDir);
+            fs.writeFileSync(path.join(stateDir, appKey + '.json'), JSON.stringify({
+                recipe,
+                output: asarHash,
+                version: getPackageVersion(),
+                updatedAt: new Date().toISOString()
+            }) + '\n');
+        }
+        const scriptPath = path.join(baseDir, 'auto_localize_watcher.js');
+        if (typeof installTaskFn === 'function') {
+            installTaskFn({ scriptPath, baseDir, execFileSyncFn });
+        } else {
+            const watcher = require(scriptPath);
+            watcher.installWindowsTask({ scriptPath, baseDir, execFileSyncFn });
+        }
+        console.log("[任务] 已重新注册 Windows 排程路径至当前目录，避免旧版目录回滚。");
+        return { synced: true };
+    } catch (runErr) {
+        console.warn("[任务] 无法触发背景守护同步（可能权限不足或排程未启动），下次定时巡检仍会自动生效。");
+        return { synced: false, error: runErr.message };
+    }
+}
+
+function install20(resourcesDir, noKill = false, staging = false, options = {}) {
     const asarPath = path.join(resourcesDir, "app.asar");
     const bakPath = path.join(resourcesDir, "app.asar.bak");
 
@@ -584,6 +843,7 @@ function install20(resourcesDir, noKill = false, staging = false) {
 
     let buildDir;
     let retainRecoveryFiles = false;
+    let macWatcherSession = null;
     try {
         const originalLive = fs.readFileSync(asarPath);
         const isAlreadyLocalized = originalLive.indexOf(Buffer.from(SIGNATURE_START, "utf8")) !== -1;
@@ -645,6 +905,10 @@ function install20(resourcesDir, noKill = false, staging = false) {
         const plistPath = macBundleForPlist ? path.join(macBundleForPlist, 'Contents', 'Info.plist') : null;
         const plistBackup = plistPath && fs.existsSync(plistPath) ? fs.readFileSync(plistPath) : null;
 
+        if (process.platform === 'darwin' && !staging && macBundleForPlist && (options.syncWatcher || isRealAppInstallDir(macBundleForPlist))) {
+            macWatcherSession = prepareMacWatcherSync();
+        }
+
         replaceFileWithRetry(candidatePath, asarPath, !noKill);
         try {
             if (refreshBackup) replaceFileWithRetry(sourceArchive, bakPath, !noKill);
@@ -671,6 +935,9 @@ function install20(resourcesDir, noKill = false, staging = false) {
                 }
                 return false;
             }
+            if (macWatcherSession && macBundleForPlist) {
+                commitMacWatcherSync(macWatcherSession, macBundleForPlist, asarPath);
+            }
         }
 
         if (buildDir && !retainRecoveryFiles) {
@@ -687,6 +954,7 @@ function install20(resourcesDir, noKill = false, staging = false) {
         console.error(`[错误] 汉化未完成，未提交的候选包不会替换客户端: ${error.message}`);
         return false;
     } finally {
+        cleanupMacWatcherSync(macWatcherSession);
         if (buildDir && !retainRecoveryFiles) {
             try { fs.rmSync(buildDir, { recursive: true, force: true }); } catch (error) {
                 console.warn(`[提示] 临时目录已保留: ${buildDir}`);
@@ -866,21 +1134,11 @@ function main() {
         success = restore20(resourcesDir, noKill);
     } else {
         console.log("====== 正在安装 Antigravity 中文汉化 ======");
-        success = install20(resourcesDir, noKill, staging);
+        success = install20(resourcesDir, noKill, staging, { syncWatcher });
     }
 
-    if (success && !huifu && !staging && syncWatcher && process.platform === 'win32') {
-        try {
-            child_process.execFileSync('schtasks.exe', ['/query', '/tn', 'AntigravityAutoLocalize'], { stdio: 'ignore' });
-            console.log("[任务] 检测到本机已安装 Antigravity 背景自动更新守护，正在同步刷新状态...");
-            try {
-                child_process.execFileSync('schtasks.exe', ['/run', '/tn', 'AntigravityAutoLocalize'], { stdio: 'ignore' });
-            } catch (runErr) {
-                console.warn("[任务] 无法触发背景守护同步（可能权限不足或排程未启动），下次定时巡检仍会自动生效。");
-            }
-        } catch (queryErr) {
-            // Task not registered; skip silently
-        }
+    if (success && !huifu && !staging && process.platform === 'win32' && (syncWatcher || isRealAppInstallDir(installDir))) {
+        syncActiveWindowsWatcher(installDir, resourcesDir);
     }
 
     // 5. 校验通过且原来客户端在运行，则自动重新启动客户端（仅当目标为有效客户端包/可执行程序时触发，避免自定义目录误弹 Finder）
@@ -912,6 +1170,10 @@ function main() {
         }
     }
 
+    if (success && !huifu && !staging && noKill && wasAppRunning) {
+        console.warn("[提醒] Antigravity 目前仍在运行，内存仍加载旧版资源。请完全退出应用（macOS 请按 Cmd+Q 或从菜单栏图标选择「结束」，勿仅关闭窗口）后再重新打开，新翻译才会完整生效。");
+    }
+
     if (!success) {
         process.exit(1);
     }
@@ -925,7 +1187,15 @@ if (typeof module !== 'undefined' && module.exports) {
         checkIfAppIsRunning,
         closeAntigravityProcesses,
         ensureWritePermission,
-        promptBrandTitleInteractive
+        promptBrandTitleInteractive,
+        cleanElectronCache,
+        getPackageVersion,
+        isRealAppInstallDir,
+        discoverMacWatcherRuntimes,
+        prepareMacWatcherSync,
+        commitMacWatcherSync,
+        cleanupMacWatcherSync,
+        syncActiveWindowsWatcher
     };
 }
 

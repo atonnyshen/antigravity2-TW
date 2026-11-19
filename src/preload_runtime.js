@@ -7,7 +7,15 @@
     const USE_TW = __USE_TW_PLACEHOLDER__;
     const map = new Map(Object.entries(DICT_PLACEHOLDER));
     const lowerMap = new Map();
-    const LOWER_WORDS_EXCLUDE = new Set(['on', 'in', 'to', 'at', 'by', 'for', 'with', 'as', 'system', 'review', 'active', 'browser', 'global', 'including', 'and', 'or', 'file', 'files', 'help', 'app', 'plan', 'search', 'coordinator']);
+    const LOWER_WORDS_EXCLUDE = new Set([
+        'on', 'in', 'to', 'at', 'by', 'for', 'with', 'as', 'system', 'review', 'active',
+        'browser', 'global', 'including', 'and', 'or', 'file', 'files', 'help', 'app',
+        'plan', 'search', 'coordinator', 'goal', 'goals', 'swarm', 'boost', 'learn',
+        'schedule', 'compact', 'automation', 'plugin', 'plugins', 'btw', 'clear', 'init',
+        'teamwork', 'grill-me', 'egm-boost', 'split', 'commit', 'reset', 'stop', 'status',
+        'filter', 'new', 'open', 'start', 'manage', 'custom', 'default', 'rules',
+        'low', 'medium', 'high', 'extra', 'max', 'thinking effort'
+    ]);
     for (const [k, v] of map.entries()) {
         const lowerK = k.toLowerCase();
         if (LOWER_WORDS_EXCLUDE.has(lowerK) && k !== lowerK) {
@@ -24,11 +32,11 @@
     const unchangedTextValues = new WeakMap();
     const longMissCache = new WeakMap();
 
-    // 轻量级安全隔离：跳过脚本、样式、代码块(pre/code)
-    const SKIP_TAGS = ['SCRIPT', 'STYLE', 'PRE', 'CODE'];
+    // 轻量级安全隔离：跳过脚本、样式、代码块(pre/code)及文档头元数据
+    const SKIP_TAGS = ['SCRIPT', 'STYLE', 'PRE', 'CODE', 'HEAD', 'LINK', 'META', 'NOSCRIPT'];
 
-    // 代码、富文本输入框及对话内容隔离选择器：排除 Lexical 输入框、用户消息、AI 响应正文、思考内容、代码块、终端及文件路径
-    const CODE_ISOLATION_SELECTOR = 'script, style, pre, code, .monaco-editor, .cm-editor, .cm-line, [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-lexical-editor], .terminal, .xterm, .code-line, .code-block, .line-content, [aria-label="File Viewer"], [aria-label="文件查看器"], [aria-label="檔案檢視器"], [data-file-uri], [data-uri], [class*="diffEditor"], .token, .hljs, [class*="mtk"], .font-mono, [data-quotable-inline="true"], .context-scope-mention, [data-testid="file-title-name"], [data-testid="entity-pill"], [data-project-card="true"], [data-testid="conversation-row-sidebar"] span.truncate, [translate="no"], .notranslate, .md-divider-spacing, .cursor-edit, [data-testid="user-input-step"] [data-quotable="true"], [data-testid="user-input-step"] .whitespace-pre-wrap, [data-testid="planner-response-text"], [data-testid="thinking-collapsible-trigger"] + div, [data-testid="thinking-collapsible-trigger"] ~ div, .msg-body, .sys-text, .node-label, .raw-meta .path, .o2-mauth, .o2-wchip.bee > span:last-child, .o2-m[data-o2who]:not(.all) > span:last-child';
+    // 代码、富文本输入框及对话内容隔离选择器：排除 Lexical 输入框、用户消息、AI 响应正文、思考内容、代码块、终端、文件路径及模型思考強度選項
+    const CODE_ISOLATION_SELECTOR = 'script, style, pre, code, .monaco-editor, .cm-editor, .cm-line, [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-lexical-editor], .terminal, .xterm, .code-line, .code-block, .line-content, [aria-label="File Viewer"], [aria-label="文件查看器"], [aria-label="檔案檢視器"], [data-file-uri], [data-uri], [class*="diffEditor"], .token, .hljs, [class*="mtk"], .font-mono, [data-quotable-inline="true"], .context-scope-mention, [data-mention-menu] [data-testid="menu-option-label"], [role="listbox"][aria-label="Mentions"] [data-testid="menu-option-label"], [data-testid="model-selector-effort-option"], [data-testid*="model-selector-effort"], [data-testid*="effort-option"], [data-testid="file-title-name"], [data-testid="entity-pill"], [data-project-card="true"], [data-testid="conversation-row-sidebar"] span.truncate, [translate="no"], .notranslate, .md-divider-spacing, .cursor-edit, [data-testid="user-input-step"] [data-quotable="true"], [data-testid="user-input-step"] .whitespace-pre-wrap, [data-testid="planner-response-text"], [data-testid="thinking-collapsible-trigger"] + div, [data-testid="thinking-collapsible-trigger"] ~ div, .msg-body, .sys-text, .node-label, .raw-meta .path, .o2-mauth, .o2-wchip.bee > span:last-child, .o2-m[data-o2who]:not(.all) > span:last-child';
 
     function isCodeOrEditor(node) {
         try {
@@ -231,7 +239,7 @@
     }
 
     function isModelMenuText(node) {
-        const menu = node.parentElement && node.parentElement.closest('[role="menu"]');
+        const menu = node.parentElement && node.parentElement.closest('[role="menu"], [role="listbox"]');
         if (!menu) return false;
         let label = menu.getAttribute('aria-label');
         if (!label) {
@@ -242,6 +250,91 @@
             }).join(' ');
         }
         return /^(Select model|选择模型|選擇模型)/i.test(norm(label || ''));
+    }
+
+    const PROTECTED_MODEL_EFFORT_LABELS = new Set(['Low', 'Medium', 'High', 'Extra', 'Max', 'Thinking Effort']);
+
+    function isModelEffortLabelProtected(node, valNorm) {
+        try {
+            if (!PROTECTED_MODEL_EFFORT_LABELS.has(valNorm)) return false;
+            const el = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+            if (!el || typeof el.closest !== 'function') return false;
+            return Boolean(
+                isModelMenuText(node) ||
+                el.closest('[data-testid="model-selector-effort-option"], [data-testid*="model-selector"], [aria-label^="Select model" i], [aria-label^="選擇模型"], [aria-label^="选择模型"]')
+            );
+        } catch (e) {}
+        return false;
+    }
+
+    const KNOWN_SLASH_COMMANDS = new Set([
+        'goal', 'swarm', 'boost', 'egm-boost', 'learn', 'schedule', 'plan', 'browser',
+        'compact', 'grill-me', 'teamwork', 'automation', 'plugin', 'btw', 'clear',
+        'help', 'init', 'review', 'split', 'commit', 'reset', 'stop', 'status', 'filter',
+        'swarm-autonomous-pipeline'
+    ]);
+    const SLASH_ITEM_SELECTOR = '[role="option"], [cmdk-item], [data-testid*="slash"], [data-testid*="typeahead"], [data-testid*="autocomplete"], [data-testid*="mention"], [data-testid*="fastpick"], [class*="typeahead"], [class*="autocomplete"], [class*="mention"], [class*="fastpick" i]';
+    const SLASH_LIST_SELECTOR = '[role="listbox"], [cmdk-list], [data-lexical-typeahead-menu], [data-mention-menu], [data-testid*="slash"], [data-testid*="typeahead"], [data-testid*="autocomplete"], [data-testid*="mention"], [data-testid*="fastpick"], [class*="typeahead"], [class*="autocomplete"], [class*="mention"], [class*="fastpick" i]';
+
+    function isSlashCommandNameNode(node, valNorm) {
+        try {
+            if (!valNorm) return false;
+            if (/^\/[a-zA-Z0-9_.:-]+$/.test(valNorm)) return true;
+            const el = node && (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement);
+            if (!el) return false;
+            if (typeof el.closest === 'function') {
+                if (el.closest('[data-testid="menu-option-description"], [data-testid="menu-option-trailing-label"], [class*="desc" i], [data-testid*="desc" i], [class*="subtitle" i], [class*="detail" i], [class*="hint" i]')) {
+                    return false;
+                }
+            }
+            // 拆分節點（如 <span>/</span><span>goal</span> 或 <span>/<span>goal</span></span>）
+            let cur = el;
+            for (let depth = 0; depth < 3 && cur; depth++) {
+                const txt = norm(cur.textContent || '');
+                if (/^\/[a-zA-Z][a-zA-Z0-9_.:-]*$/.test(txt)) return true;
+                cur = cur.parentElement;
+            }
+            const prevSib = (node.previousSibling && node.previousSibling.textContent) || (el.previousSibling && el.previousSibling.textContent) || '';
+            if (prevSib.trim() === '/' && /^[a-zA-Z][a-zA-Z0-9_.:-]*$/.test(valNorm)) return true;
+
+            if (typeof el.closest !== 'function') return false;
+            const item = el.closest(SLASH_ITEM_SELECTOR);
+            const list = el.closest(SLASH_LIST_SELECTOR);
+            if (!item && !list) return false;
+
+            if (el.closest('[data-mention-menu] [data-testid="menu-option-label"], [role="listbox"][aria-label="Mentions"] [data-testid="menu-option-label"]')) {
+                return true;
+            }
+            if (!/^\/?[a-zA-Z][a-zA-Z0-9_.:-]{0,48}$/.test(valNorm)) return false;
+
+            const itemText = item ? String(item.textContent || '').trimStart() : '';
+            const itemVal = item ? ((item.getAttribute && (item.getAttribute('data-value') || item.getAttribute('value'))) || '') : '';
+            const listLabel = list && list.getAttribute ? (list.getAttribute('aria-label') || '') : '';
+            const isConfirmedSlashMenu = Boolean(
+                el.closest('[data-lexical-typeahead-menu], [data-mention-menu], [data-testid*="slash"], [data-testid*="typeahead"], [data-testid*="command-menu"], [class*="typeahead"], [class*="slash-command"]') ||
+                /slash|command|typeahead|autocomplete|mention/i.test(listLabel) ||
+                itemText.startsWith('/') ||
+                itemVal.trim().startsWith('/')
+            );
+
+            const hasNameMarker = Boolean(
+                (el.matches && el.matches('code, kbd, .font-mono, [data-testid="menu-option-label"], [class*="name" i], [class*="title" i], [class*="label" i], [class*="command" i], [class*="cmd" i], [data-testid*="name" i], [data-testid*="command" i], [data-testid*="title" i], [data-testid*="label" i]')) ||
+                el.closest('code, kbd, .font-mono, [data-testid="menu-option-label"], [data-testid*="command" i]')
+            );
+            const lowerVal = valNorm.toLowerCase();
+            if (isConfirmedSlashMenu) {
+                if (hasNameMarker || valNorm === lowerVal || KNOWN_SLASH_COMMANDS.has(lowerVal)) {
+                    return true;
+                }
+            }
+            if (KNOWN_SLASH_COMMANDS.has(lowerVal)) {
+                const hasDescSibling = Boolean(item && item.querySelector && item.querySelector('[data-testid="menu-option-description"], [class*="desc" i], [data-testid*="desc" i], [class*="subtitle" i], [class*="detail" i]'));
+                if (valNorm === lowerVal || valNorm.includes('-') || hasDescSibling) {
+                    return true;
+                }
+            }
+        } catch (e) {}
+        return false;
     }
 
     function refreshMenusLabelledBy(target) {
@@ -337,11 +430,19 @@
         }
         if (lower.includes('ultra')) {
             if (isSubscribers) {
+                if (hasPaid && hasPlanWord) {
+                    return USE_TW ? 'Ultra 付費方案訂閱者' : 'Ultra 付费方案订阅者';
+                }
+                if (hasPaid) {
+                    return USE_TW ? 'Ultra 付費訂閱者' : 'Ultra 付费订阅者';
+                }
                 return hasPlanWord
                     ? (USE_TW ? 'Ultra 方案訂閱者' : 'Ultra 方案订阅者')
                     : (USE_TW ? 'Ultra 訂閱者' : 'Ultra 订阅者');
             }
-            return USE_TW ? 'Ultra 方案' : 'Ultra 方案';
+            return hasPaid
+                ? (USE_TW ? 'Ultra 付費方案' : 'Ultra 付费方案')
+                : (USE_TW ? 'Ultra 方案' : 'Ultra 方案');
         }
         if (lower.includes('pro')) {
             if (isSubscribers) {
@@ -598,8 +699,8 @@
         [/^Voice\s+speed,\s+([0-9.]+x)$/i, (m, spd) => USE_TW ? ("語速，" + spd) : ("语速，" + spd)],
 
         // 按钮与快捷提示
-        [/^Send message\s+(Enter|⏎|\u23ce)$/i, (m, key) => (USE_TW ? "發送消息 " : "发送消息 ") + key],
-        [/^Queue message\s+(Enter|⏎|\u23ce)$/i, (m, key) => (USE_TW ? "排隊發送消息 " : "排队发送消息 ") + key],
+        [/^Send message\s+(Enter|⏎|\u23ce)$/i, (m, key) => (USE_TW ? "傳送訊息 " : "发送消息 ") + key],
+        [/^Queue message\s+(Enter|⏎|\u23ce)$/i, (m, key) => (USE_TW ? "佇列傳送訊息 " : "排队发送消息 ") + key],
         [/^Send all\s*\((\d+)\)$/i, (m, num) => USE_TW ? ("全部傳送 (" + num + ")") : ("全部发送 (" + num + ")")],
         [/^Open (Live transcript|Voice transcript),\s*(.+?)(?:\.\s*Summarizing call)?$/i, (m, kind, dur) => {
             const kZh = /^Live/i.test(kind) ? (USE_TW ? "即時逐字稿" : "实时转录") : (USE_TW ? "語音逐字稿" : "语音转录");
@@ -608,7 +709,7 @@
         }],
         [/^Select all in$/i, () => USE_TW ? "全選 " : "全选 "],
         [/^Uses your local clone,$/i, () => USE_TW ? "使用本機複製版本，" : "使用本地克隆版本，"],
-        [/^to have the agent generate a plan\.?$/i, () => USE_TW ? "讓代理生成計劃。" : "让智能体生成计划。"],
+        [/^to have the agent generate a plan\.?$/i, () => USE_TW ? "讓代理產生計畫。" : "让智能体生成计划。"],
 
         // 配额刷新与 AI 额度提示
         [/^(?:Refreshes|You have (?:used (?:some|all) of|reached) your (?:weekly|5-hour) limit, it will fully refresh) in (\d+) days?, (\d+) hours?\.?$/i, (m, d, h) => USE_TW ? (d + " 天 " + h + " 小時後更新") : (d + " 天 " + h + " 小时后刷新")],
@@ -618,9 +719,9 @@
         [/^(?:Refreshes|You have (?:used (?:some|all) of|reached) your (?:weekly|5-hour) limit, it will fully refresh) in (\d+) minutes?\.?$/i, (m, min) => USE_TW ? (min + " 分鐘後更新") : (min + " 分钟后刷新")],
         [/^(?:Refreshes|You have (?:used (?:some|all) of|reached) your (?:weekly|5-hour) limit, it will fully refresh) in less than a minute\.?$/i, () => USE_TW ? "不到 1 分鐘後更新" : "不到 1 分钟后刷新"],
         [/^(?:Refreshes|You have (?:used (?:some|all) of|reached) your (?:weekly|5-hour) limit, it will fully refresh) in a few seconds\.?$/i, () => USE_TW ? "幾秒後更新" : "几秒后刷新"],
-        [/^Available AI Credits: (\d+)$/i, (m, num) => USE_TW ? ("可用 AI 額度: " + num) : ("可用 AI 额度: " + num)],
-        [/^Your plan's baseline quota will refresh on (.+?)\.?\s*To continue using this model now, enable AI Credit overages\.?$/i, (m, when) => USE_TW ? ("您方案的基準配額將於 " + when + " 刷新。如需立即繼續使用此模型，請啟用 AI 點數超額使用。") : ("您方案的基础配额将于 " + when + " 刷新。如需立即继续使用此模型，请启用 AI 额度超量使用。")],
-        [/^You have hit your weekly limit, it refreshes in (.+?)\. If on a supported paid plan, you can use AI credits in the interim or upgrade to a higher tier\.$/i, (m, when) => USE_TW ? ("您已達到每週額度限制，將於 " + when + " 刷新。若您使用受支援的付費方案，可在此期間使用 AI 點數，或升級至更高層級。") : ("您已达到每周额度限制，将于 " + when + " 刷新。若您使用受支持的付费计划，可在此期间使用 AI 额度，或升级至更高层级。")],
+        [/^Available AI Credits: (\d+)$/i, (m, num) => USE_TW ? ("可用 AI 點數：" + num) : ("可用 AI 额度: " + num)],
+        [/^Your plan's baseline quota will refresh on (.+?)\.?\s*To continue using this model now, enable AI Credit overages\.?$/i, (m, when) => USE_TW ? ("您方案的基準配額將於 " + when + " 重設。如需立即繼續使用此模型，請啟用 AI 點數超額使用。") : ("您方案的基础配额将于 " + when + " 刷新。如需立即继续使用此模型，请启用 AI 额度超量使用。")],
+        [/^You have hit your weekly limit, it refreshes in (.+?)\. If on a supported paid plan, you can use AI credits in the interim or upgrade to a higher tier\.$/i, (m, when) => USE_TW ? ("您已達到每週額度限制，將於 " + when + " 重設。若您使用受支援的付費方案，可在此期間使用 AI 點數，或升級至更高層級。") : ("您已达到每周额度限制，将于 " + when + " 刷新。若您使用受支持的付费计划，可在此期间使用 AI 额度，或升级至更高层级。")],
         [/^You have hit your weekly limit, the (\d+)-hour limit does not currently apply\. Your weekly limit will fully refresh in (.+?)\.$/i, (m, h, when) => USE_TW ? ("您已達到每週額度限制，" + h + " 小時限制目前不適用。您的每週額度限制將於 " + when + " 完全更新。") : ("您已达到每周额度限制，" + h + " 小时限制目前不适用。您的每周额度限制将于 " + when + " 完全刷新。")],
 
         // 预设、权限与工具 Token 预算
@@ -644,7 +745,7 @@
         [/^Hide\s+tools$/i, () => "收起工具"],
         [/^(\d+)\s+tools$/i, (m, num) => num + (USE_TW ? " 個工具" : " 个工具")],
         [/^(\d+)\s+tools?\s+excluded$/i, (m, num) => num + (USE_TW ? " 個工具已排除" : " 个工具已排除")],
-        [/^Exceeded the rules token budget\.\s+Full rule content\s+\(([\d,]+)\s+tokens?\)\s+was replaced with a lightweight file-path pointer in context\.$/i, (m, num) => USE_TW ? ("已超出規則 Token 預算。完整規則內容 (" + num + " 個 Token) 已在上下文中替換為輕量級檔案路徑指標。") : ("已超出规则 Token 预算。完整规则内容 (" + num + " 个 Token) 已在上下文中替换为轻量级文件路径指针。")],
+        [/^Exceeded the rules token budget\.\s+Full rule content\s+\(([\d,]+)\s+tokens?\)\s+was replaced with a lightweight file-path pointer in context\.$/i, (m, num) => USE_TW ? ("已超出規則 Token 預算。完整規則內容 (" + num + " 個 Token) 已在上下文中換成輕量級檔案路徑指標。") : ("已超出规则 Token 预算。完整规则内容 (" + num + " 个 Token) 已在上下文中替换为轻量级文件路径指针。")],
         [/^All tools in this MCP server\s+\(([\d,]+)\s+tokens?\)\s+exceeded the customization budget and were excluded from context\.$/i, (m, num) => USE_TW ? ("此 MCP 伺服器中的所有工具 (" + num + " 個 Token) 均已超出自訂項預算，並已從上下文中排除。") : ("此 MCP 服务器中的所有工具 (" + num + " 个 Token) 均已超出自定义项预算，并已从上下文中排除。")],
         [/^(\d+)\s+tools?\s+in this MCP server\s+\(([\d,]+)\s+tokens?\)\s+exceeded the customization budget and were excluded from context\.$/i, (m, tCount, num) => USE_TW ? ("此 MCP 伺服器中有 " + tCount + " 個工具 (" + num + " 個 Token) 超出自訂項預算，並已從上下文中排除。") : ("此 MCP 服务器中有 " + tCount + " 个工具 (" + num + " 个 Token) 超出自定义项预算，并已从上下文中排除。")],
         [/^Exceeded the customization token budget\s+\(([\d,]+)\s+tokens?\)\s+and was excluded from context\.$/i, (m, num) => USE_TW ? ("超出自訂項 Token 預算 (" + num + " 個 Token)，已從上下文中排除。") : ("超出自定义项 Token 预算 (" + num + " 个 Token)，已从上下文中排除。")],
@@ -729,7 +830,7 @@
                 ? { exploring: '正在探索', explored: '已探索', editing: '正在編輯', edited: '已編輯', running: '正在執行', ran: '已執行' }
                 : { exploring: '正在探索', explored: '已探索', editing: '正在编辑', edited: '已编辑', running: '正在运行', ran: '已运行' };
             const nounMap = USE_TW
-                ? { file: '個檔案', files: '個檔案', folder: '個資料夾', folders: '個資料夾', search: '次搜尋', searches: '次搜尋', command: '個指令', commands: '個指令', task: '個任務', tasks: '個任務', page: '個網頁', pages: '個網頁', browser: '次瀏覽器操作', browsers: '次瀏覽器操作', image: '張圖片', images: '張圖片', action: '項操作', actions: '項操作', artifact: '個產物', artifacts: '個產物' }
+                ? { file: '個檔案', files: '個檔案', folder: '個資料夾', folders: '個資料夾', search: '次搜尋', searches: '次搜尋', command: '個指令', commands: '個指令', task: '個任務', tasks: '個任務', page: '個網頁', pages: '個網頁', browser: '次瀏覽器操作', browsers: '次瀏覽器操作', image: '張圖片', images: '張圖片', action: '項操作', actions: '項操作', artifact: '個成品', artifacts: '個成品' }
                 : { file: '个文件', files: '个文件', folder: '个文件夹', folders: '个文件夹', search: '次搜索', searches: '次搜索', command: '个命令', commands: '个命令', task: '个任务', tasks: '个任务', page: '个网页', pages: '个网页', browser: '次浏览器操作', browsers: '次浏览器操作', image: '张图片', images: '张图片', action: '项操作', actions: '项操作', artifact: '个工件', artifacts: '个工件' };
             return m.split(/\s*,\s*/).map(part => {
                 const pm = part.match(/^(?:(Exploring|Explored|Editing|Edited|Running|Ran)\s+)?(\d+)\s+(files?|folders?|searches?|commands?|tasks?|pages?|browsers?|images?|actions?|artifacts?)$/i);
@@ -745,7 +846,7 @@
         [/^(\d+)\s+posts?\s+since the view was updated$/i, (m, n) => USE_TW ? ("自檢視上次更新以來有 " + n + " 則新訊息") : ("自视图上次更新以来有 " + n + " 条新消息")],
         [/^Narrator read up to #(\d+) of (\d+)$/i, (m, a, b) => USE_TW ? ("解說員已讀至 #" + a + " / " + b) : ("解说员已读至 #" + a + " / " + b)],
         [/^read #(\d+)(?:\s*·\s*updated\s+(.+?)\s+ago)?$/i, (m, seq, dur) => (USE_TW ? "已讀至 #" : "已读至 #") + seq + (dur ? (" · " + formatCompactDuration(dur) + "前更新") : "")],
-        [/^Posted in #([^\s;]+);\s*click to show only #([^\s;]+)$/i, (m, c1, c2) => USE_TW ? ("發佈於 #" + c1 + "；按一下僅顯示 #" + c2) : ("发布于 #" + c1 + "；点击仅显示 #" + c2)],
+        [/^Posted in #([^\s;]+);\s*click to show only #([^\s;]+)$/i, (m, c1, c2) => USE_TW ? ("發布於 #" + c1 + "；按一下僅顯示 #" + c2) : ("发布于 #" + c1 + "；点击仅显示 #" + c2)],
         [/^#([^\s]+)\s+\(archived\)$/i, (m, ch) => "#" + ch + (USE_TW ? "（已封存）" : "（已归档）")],
         [/^#([^\s]+)\s+is archived:\s*this addresses nobody$/i, (m, ch) => "#" + ch + (USE_TW ? " 已封存：不會通知任何成員" : " 已归档：不会通知任何成员")],
         [/^Everyone in #([^\s]+)$/i, (m, ch) => "#" + ch + (USE_TW ? " 中的所有成員" : " 中的所有成员")],
@@ -985,6 +1086,29 @@
             const dZh = formatEnglishDate(dateStr);
             return USE_TW ? ("自 " + dZh + "起將不再提供第三方模型存取權限" + period) : ("自 " + dZh + "起将不再提供第三方模型访问权限" + period);
         }],
+
+        // 模型選擇器動態分派提示與思考強度
+        [/^(.+?)\s+that may offload routine steps to\s+(.+?)\.\s*Same\s+(.+?)-level quality,\s*fewer tokens used\.?$/i, (m, model, target, qualityModel) => {
+            const hasPeriod = /\.$/.test(m.trim());
+            const period = hasPeriod ? "。" : "";
+            return USE_TW
+                ? `${model.trim()}，可將常規步驟分派給 ${target.trim()} 處理。維持同等 ${qualityModel.trim()} 水準的品質，消耗更少 Token${period}`
+                : `${model.trim()}，可将常规步骤分派给 ${target.trim()} 处理。保持同等 ${qualityModel.trim()} 级别的质量，消耗更少 Token${period}`;
+        }],
+        [/^(.+?)\s+that may offload routine steps to\s+(.+?)\.?$/i, (m, model, target) => {
+            const hasPeriod = /\.$/.test(m.trim());
+            const period = hasPeriod ? "。" : "";
+            return USE_TW
+                ? `${model.trim()}，可將常規步驟分派給 ${target.trim()} 處理${period}`
+                : `${model.trim()}，可将常规步骤分派给 ${target.trim()} 处理${period}`;
+        }],
+        [/^Same\s+(.+?)-level quality,\s*fewer tokens used\.?$/i, (m, qualityModel) => {
+            const hasPeriod = /\.$/.test(m.trim());
+            const period = hasPeriod ? "。" : "";
+            return USE_TW
+                ? `維持同等 ${qualityModel.trim()} 水準的品質，消耗更少 Token${period}`
+                : `保持同等 ${qualityModel.trim()} 级别的质量，消耗更少 Token${period}`;
+        }],
     ];
 
     function translateExactOrDynamic(t) {
@@ -1155,7 +1279,7 @@
             return USE_TW ? " 外掛程式。" : " 插件。";
         }
         if (valNorm === 'Not referenced by any feature (' && pText.includes('Not referenced by any feature')) {
-            return "未被任何功能引用 (";
+            return USE_TW ? "尚無任何功能參照 (" : "未被任何功能引用 (";
         }
         if (valNorm === 'Only for' && (pText.includes('overrides Global') || pText.includes('覆盖全局') || pText.includes('覆寫全域'))) {
             return USE_TW ? "僅針對 " : "仅针对 ";
@@ -1238,7 +1362,7 @@
         if (valNorm === "Couldn't connect to" && typeof p.closest === 'function' && p.closest('[data-testid="ssh-connect-error"]')) {
             return USE_TW ? '無法連線至 ' : '无法连接到 ';
         }
-        if (typeof p.getAttribute === 'function' && p.getAttribute('data-testid') === 'browser-site-data-delete-error') {
+        if ((typeof p.getAttribute === 'function' && p.getAttribute('data-testid') === 'browser-site-data-delete-error') || (typeof p.closest === 'function' && p.closest('[data-testid="browser-site-data-delete-error"]'))) {
             if (valNorm === "Couldn't delete cookies for") return USE_TW ? '無法刪除 ' : '无法删除 ';
             if (valNorm === '. Try again.') return USE_TW ? ' 的 Cookie，請再試一次。' : ' 的 Cookie，请重试。';
         }
@@ -1301,12 +1425,13 @@
             if (node.nodeType === Node.ELEMENT_NODE) {
                 const tag = node.tagName.toUpperCase();
                 if (SKIP_TAGS.includes(tag)) return;
-                // 翻译属性：placeholder, title, aria-label (即使输入框获焦时也应正常汉化 placeholder 提示)
+                // 翻译属性：placeholder, title, aria-label, aria-description (即使输入框获焦时也应正常汉化 placeholder 提示)
                 const inSwarmEl = isSwarmUiContext(node);
-                for (const attr of ['placeholder', 'title', 'aria-label']) {
+                for (const attr of ['placeholder', 'title', 'aria-label', 'aria-description']) {
                     const v = node.getAttribute(attr);
                     if (v) {
                         const t = norm(v);
+                        if (/^\/[a-zA-Z0-9_.:-]+$/.test(t)) continue;
                         let newAttr = translatePermissionChoice(v);
                         if (!newAttr && inSwarmEl && Object.prototype.hasOwnProperty.call(SCOPED_SWARM_MAP, t)) {
                             newAttr = SCOPED_SWARM_MAP[t][USE_TW ? 1 : 0];
@@ -1488,8 +1613,8 @@
                 }
                 if (cachedValue === originalVal || unchangedTextValues.get(node) === originalVal) return;
 
-                // Slash 指令標記（例如 /goal, /swarm, /boost 等）不得漢化，保留原生命令識別碼以防觸發異常
-                if (/^\/[a-zA-Z0-9_.-]+$/.test(valNorm)) {
+                // Slash 指令標記（例如 /goal, /swarm, /boost 等，含選單／補全清單內無前綴指令名稱）與模型 Thinking Effort 等級保留英文不翻
+                if (isSlashCommandNameNode(node, valNorm) || isModelEffortLabelProtected(node, valNorm)) {
                     unchangedTextValues.set(node, originalVal);
                     return;
                 }
@@ -1531,7 +1656,12 @@
                 const scopedSwarmHit = (inSwarmText && Object.prototype.hasOwnProperty.call(SCOPED_SWARM_MAP, valNorm))
                     ? SCOPED_SWARM_MAP[valNorm][USE_TW ? 1 : 0]
                     : null;
-                const commonTrans = scopedSwarmHit !== null ? scopedSwarmHit : translateExactOrDynamic(valNorm);
+                const scopedModelHit = (scopedSwarmHit === null && valNorm === 'Recommended' && isModelMenuText(node))
+                    ? (USE_TW ? '推薦' : '推荐')
+                    : null;
+                const commonTrans = scopedSwarmHit !== null
+                    ? scopedSwarmHit
+                    : (scopedModelHit !== null ? scopedModelHit : translateExactOrDynamic(valNorm));
                 if (commonTrans !== null) {
                     newVal = commonTrans;
                 } else {
@@ -1588,7 +1718,19 @@
     const observer = typeof MutationObserver === 'function' ? new MutationObserver(mutations => {
         for (const m of mutations) {
             if (m.type === 'childList') {
-                for (const n of m.addedNodes) translateNode(n);
+                for (const n of m.addedNodes) {
+                    translateNode(n);
+                    if (n && n.nodeType === Node.ELEMENT_NODE && !n.shadowRoot && typeof queueMicrotask === 'function') {
+                        queueMicrotask(() => {
+                            try {
+                                if (n.shadowRoot) {
+                                    observeRoot(n.shadowRoot);
+                                    translateNode(n.shadowRoot);
+                                }
+                            } catch (e) {}
+                        });
+                    }
+                }
             } else if (m.type === 'characterData') {
                 translateNode(m.target);
             } else if (m.type === 'attributes') {
@@ -1600,7 +1742,7 @@
         }
     }) : null;
 
-    const obsOpts = { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label', 'aria-labelledby', 'role'] };
+    const obsOpts = { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label', 'aria-description', 'aria-labelledby', 'role'] };
     const observedRoots = new WeakSet();
 
     function observeRoot(root) {
@@ -1611,11 +1753,17 @@
 
     const startEngine = () => {
         if (typeof document === 'undefined') return;
-        const target = document.body || document.documentElement;
-        if (target) {
+        const obsTarget = document.documentElement || document.body;
+        const walkTarget = document.body || document.documentElement;
+        if (obsTarget) {
             try {
-                observeRoot(target);
-                translateNode(target);
+                observeRoot(obsTarget);
+                if (walkTarget) translateNode(walkTarget);
+                if (obsTarget !== walkTarget) {
+                    for (const child of obsTarget.childNodes) {
+                        if (child !== walkTarget) translateNode(child);
+                    }
+                }
             } catch (e) {}
         }
     };
