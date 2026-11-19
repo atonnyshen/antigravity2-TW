@@ -270,6 +270,41 @@
         yr: ['年', '年']
     };
 
+    const EN_MONTHS = {
+        january: 1, jan: 1,
+        february: 2, feb: 2,
+        march: 3, mar: 3,
+        april: 4, apr: 4,
+        may: 5,
+        june: 6, jun: 6,
+        july: 7, jul: 7,
+        august: 8, aug: 8,
+        september: 9, sep: 9, sept: 9,
+        october: 10, oct: 10,
+        november: 11, nov: 11,
+        december: 12, dec: 12
+    };
+
+    function formatEnglishDate(dateStr) {
+        if (!dateStr) return '';
+        const trimmed = String(dateStr).trim().replace(/[.]+$/, '');
+        const m1 = trimmed.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+        if (m1) {
+            const mon = EN_MONTHS[m1[1].toLowerCase()];
+            if (mon) return m1[3] + ' 年 ' + mon + ' 月 ' + m1[2] + ' 日';
+        }
+        const m2 = trimmed.match(/^(\d{1,2})\s+([A-Za-z]+),?\s+(\d{4})$/);
+        if (m2) {
+            const mon = EN_MONTHS[m2[2].toLowerCase()];
+            if (mon) return m2[3] + ' 年 ' + mon + ' 月 ' + m2[1] + ' 日';
+        }
+        const m3 = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (m3) {
+            return m3[1] + ' 年 ' + parseInt(m3[2], 10) + ' 月 ' + parseInt(m3[3], 10) + ' 日';
+        }
+        return trimmed;
+    }
+
     function formatCompactDuration(str) {
         return String(str || '').trim()
             .replace(/(\d+)\s*d\b/gi, '$1 天')
@@ -776,6 +811,37 @@
         [/^When toggled on,\s*(.+?)\s+collects usage data to help Google enhance performance and features\.?$/i, (m, app) => USE_TW ? ("開啟後，" + app + " 將收集使用量資料以協助 Google 改進效能與功能。") : ("开启后，" + app + " 将收集使用数据以帮助 Google 改进性能和功能。")],
         [/^When toggled on,\s*(.+?)\s+will use your AI credits to fulfill model requests once you['’]re out of model quota\.\s*\1\s+will always use your model quota first before using AI credits\.?$/i, (m, app) => USE_TW ? ("開啟後，當模型配額用盡時，" + app + " 將使用您的 AI 點數來完成模型請求。" + app + " 永遠會優先使用您的模型配額，再使用 AI 點數。") : ("开启后，当模型配额用尽时，" + app + " 将使用您的 AI 额度来完成模型请求。" + app + " 始终会优先使用您的模型配额，然后再使用 AI 额度。")],
         [/^Receive product updates,\s*tips,\s*and promotions from Google\s+(.+?)\s+via email\.?$/i, (m, app) => USE_TW ? ("透過電子郵件接收 Google " + app + " 的產品更新、使用技巧與優惠活動。") : ("通过电子邮件接收 Google " + app + " 的产品更新、技巧和促销信息。")],
+
+        // 模型選擇器付費方案可用性與第三方模型移除警示 (動態日期適配)
+        [/^(.+?)\s+is (?:currently|now) available (?:to|on) paid Pro and Ultra (plans|subscribers)\.\s*(.+?)\s+will no longer be available on your current plan starting on\s+(.+?)\.?$/i, (m, m1, kind, m3, dateStr) => {
+            const model = m1.trim();
+            const part1 = /plan/i.test(kind)
+                ? (USE_TW ? (model + " 現已在 Pro 與 Ultra 付費方案中提供。") : (model + " 现已在 Pro 与 Ultra 付费方案中提供。"))
+                : (USE_TW ? (model + " 目前僅提供給 Pro 與 Ultra 付費訂閱者使用。") : (model + " 目前仅提供给 Pro 与 Ultra 付费订阅者使用。"));
+            const dZh = formatEnglishDate(dateStr);
+            const isThirdParty = /third-party model access/i.test(m3.trim());
+            const part2 = isThirdParty
+                ? (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供第三方模型存取權限。") : ("自 " + dZh + " 起，您当前的方案将不再提供第三方模型访问权限。"))
+                : (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供 " + m3.trim() + "。") : ("自 " + dZh + " 起，您当前的方案将不再提供 " + m3.trim() + "。"));
+            return part1 + " " + part2;
+        }],
+        [/^(.+?)\s+is (?:currently|now) available (?:to|on) paid Pro and Ultra (plans|subscribers)\.?$/i, (m, m1, kind) => {
+            const model = m1.trim();
+            return /plan/i.test(kind)
+                ? (USE_TW ? (model + " 現已在 Pro 與 Ultra 付費方案中提供。") : (model + " 现已在 Pro 与 Ultra 付费方案中提供。"))
+                : (USE_TW ? (model + " 目前僅提供給 Pro 與 Ultra 付費訂閱者使用。") : (model + " 目前仅提供给 Pro 与 Ultra 付费订阅者使用。"));
+        }],
+        [/^(.+?)\s+will no longer be available on your current plan starting on\s+(.+?)\.?$/i, (m, m1, dateStr) => {
+            const dZh = formatEnglishDate(dateStr);
+            const isThirdParty = /third-party model access/i.test(m1.trim());
+            return isThirdParty
+                ? (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供第三方模型存取權限。") : ("自 " + dZh + " 起，您当前的方案将不再提供第三方模型访问权限。"))
+                : (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供 " + m1.trim() + "。") : ("自 " + dZh + " 起，您当前的方案将不再提供 " + m1.trim() + "。"));
+        }],
+        [/^Third-party model access will no longer be available starting on\s+(.+?)\.?$/i, (m, dateStr) => {
+            const dZh = formatEnglishDate(dateStr);
+            return USE_TW ? ("自 " + dZh + " 起將不再提供第三方模型存取權限。") : ("自 " + dZh + " 起将不再提供第三方模型访问权限。");
+        }],
     ];
 
     function translateExactOrDynamic(t) {

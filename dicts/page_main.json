@@ -1192,6 +1192,7 @@
   "URLs the agent can read or open in this workspace.": "智能体在此工作区中可读取或打开的 URL。",
   "Unable to load PDF:": "无法加载 PDF：",
   "Unable to resolve PDF source URL": "无法解析 PDF 源 URL",
+  "Unavailable": "不可用",
   "Unable to resolve audio source URL": "无法解析音频源 URL",
   "Uncommitted": "未提交",
   "Undo To Here": "撤销至此处",

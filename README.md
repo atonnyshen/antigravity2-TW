@@ -7,7 +7,7 @@
 [![Locale](https://img.shields.io/badge/Locale-繁體中文%20(台灣%20zh--TW)-brightgreen.svg)](#-術語對照標準)
 [![Upstream](https://img.shields.io/badge/Upstream-qqxpee%2Fantigravity2--cn-lightgrey.svg)](https://github.com/qqxpee/antigravity2-cn)
 
-👉 **[原版簡體中文說明 (Upstream README)](README_CN.md)**
+👉 **[上游簡體中文專案 (Upstream Project)](https://github.com/qqxpee/antigravity2-cn)**
 
 目前套件版本：**3.7.0**。適配 Antigravity **v2.33.0**；台灣用語與背景守護由本分支持續維護。
 

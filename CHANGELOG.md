@@ -6,13 +6,19 @@
   - 補齊 v2.33.0 新增介面譯文：內建瀏覽器資料與 Cookie 管理、快速鍵配置方案、麥克風診斷、組合包（bundle）市集、分支提問、`remoteManager.js` 的 5 組 SSH／麥克風／共用家目錄對話框，並新增 `patchWizardHtmlJs()` 翻譯首次導覽視窗。
   - 同步上游 ASAR 標頭校驗、詞邊界取代（`replaceWithBoundary`）、Sidecar／Tray 缺值防護、`restore_page` 圖示保留 React 節點，以及簽署失敗回滾；`scripts/compare_dicts.js` 增加非物件 JSON 檢查。
   - 台灣術語依上游 `805bc52` 校訂。
+- 模型選擇器警示與動態下架日期翻譯支援：
+  - 新增模型狀態標籤 `Unavailable`（繁體中文：`無法使用`，簡體中文：`不可用`）。
+  - 新增動態模型付費可用性與第三方模型移除警示規則，支援各類動態日期（如 `starting on November 30, 2026` 自動在地化為 `自 2026 年 11 月 30 日 起，您目前的方案將不再提供第三方模型存取權限。`），自動因應上游變動時間與不同模型名稱。
+- 專案檔案整頓與全面繁體中文命名統一：
+  - 清理上游遺留之舊版簡體中文腳本（`双击安装中文汉化.bat`、`双击安装中文汉化.command`、`双击安装繁体中文.bat`、`双击安装繁体中文.command`、`双击卸载还原官方英文.bat`、`双击卸载还原官方英文.command`）與舊版 `README_CN.md`。
+  - 全專案批次檔與指令檔統一採用標準繁體中文命名的 8 大腳本（`點兩下安裝繁體中文.bat/.command`、`點兩下還原官方英文.bat/.command`、`點兩下安裝Windows/macOS背景守護.bat/.command`、`點兩下卸載Windows/macOS背景守護.bat/.command`），徹底消除簡繁重複與混淆。
 - Windows 交付修復（根因：批次檔 LF 換行與 4-byte Emoji、GBK 編碼、`.ps1` 缺 BOM、防毒啟發式特徵）：
   - 所有 `.bat` 改為純 ASCII、`CRLF`、`chcp 65001`，互動選單與訊息改由 Node.js 輸出；`.ps1` 改為 UTF-8 BOM + `CRLF`；`.gitattributes` 強制 `.bat`／`.ps1` 為 `crlf`、`.command`／`.sh` 為 `lf`。
   - 移除 `proxy_config` DLL 注入（`version.dll`、`dbghelp.dll`、`config.json`）、未執行時的盲目 `taskkill /f` 與 `powershell -ExecutionPolicy Bypass`。
   - 新增 `--install-windows-task`／`--uninstall-windows-task`：以 UTF-16LE XML 透過 `schtasks /create /xml` 註冊排程，依是否為系統管理員決定 `RunLevel`；新增 Windows 寫入權限預檢與 `Program Files (x86)`、`Antigravity IDE` 路徑偵測。
   - 新增 `--interactive`（品牌標題選單）與 `--sync-watcher`。
 - 新增 `AI_INSTALL_GUIDE.md` 與 `AGENTS.md`：交給 AI 工具時先唯讀檢查，再由使用者從 1–4 選項決定；README 改以此為首選安裝方式，並修正已過時的說明與失效連結。
-- 測試：新增 `test/windows_deliverables.test.js`，`npm test` 共 44 項。
+- 測試：擴充 `test/windows_deliverables.test.js` 與 `test/engine.test.js`，`npm test` 共 45 項全部通過。
 
 ## 3.6.1 — 2026-11-18
 

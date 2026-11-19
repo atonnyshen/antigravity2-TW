@@ -29,21 +29,19 @@ Whenever you modify, add, or delete any translation keys in `dicts/` (Simplified
 3. Do not complete your task until `node scripts/compare_dicts.js` exits with code `0` and prints:
    `All dictionaries are perfectly aligned!`
 
-### Rule B: Do NOT Run Installer Scripts
-- You **MUST NOT** run `node localization_engine.js` or any other command that applies, injects, or installs the translation into the client application.
-- After finishing dictionary/engine changes and validating them, inform the user. The user will manually run `双击安装中文汉化.bat` or `双击安装繁体中文.bat` to install them.
+### Rule B: Do NOT Run Destructive Injections Directly Without Mocking
+- During development and regression testing, you **MUST NOT** inject into the user's primary `/Applications/Antigravity.app` or `C:\Program Files\Antigravity` without `--install-dir` pointing to an isolated test bundle.
+- Standard installation is triggered by the user or AI agent via `點兩下安裝繁體中文.bat` or `點兩下安裝繁體中文.command`.
 
 ### Rule C: Cross-Platform Script Encodings & Line Endings
 1. **Windows Batch Files (`.bat`):**
-   - **Line Endings:** MUST strictly use **CRLF (`\r\n`)**. Unix LF (`\n`) causes syntax errors and character shifting in `cmd.exe`.
-   - **Encodings:** `双击安装中文汉化.bat` and `双击卸载还原官方英文.bat` MUST be **GBK (CP936)**; `双击安装繁体中文.bat` MUST be **Big5 (CP950)**. Never add `chcp` commands.
-2. **macOS Command Scripts (`.command`):**
-   - **Line Endings & Encoding:** MUST strictly use **LF (`\n`)** and **UTF-8 without BOM**. Never save `.command` files with CRLF (`\r\n`), or macOS `/bin/bash` will fail with `bad interpreter: ^M`.
+   - **Line Endings & Encoding:** MUST strictly use **CRLF (`\r\n`)** and **Pure ASCII (7-bit)** with `chcp 65001 >nul`.
+2. **Windows PowerShell Scripts (`.ps1`):**
+   - **Line Endings & Encoding:** MUST strictly use **CRLF (`\r\n`)** and **UTF-8 with BOM** (`\xEF\xBB\xBF`) for compatibility with Windows PowerShell 5.1.
+3. **macOS Command Scripts (`.command`):**
+   - **Line Endings & Encoding:** MUST strictly use **LF (`\n`)** and **UTF-8 without BOM**.
    - **Git Executable Bit:** Must preserve Git mode `100755`.
-   - **Syntax Verification:** After modifying any `.command` file on Windows, verify syntax using Git Bash:
-     ```powershell
-     $gitDir = Split-Path (Split-Path (Get-Command git).Source); $bash = Join-Path $gitDir "bin\bash.exe"; & $bash -n "双击安装中文汉化.command"; & $bash -n "双击安装繁体中文.command"; & $bash -n "双击卸载还原官方英文.command"
-     ```
+   - **Syntax Verification:** Verify syntax using `bash -n "點兩下安裝繁體中文.command"` and `bash -n "點兩下還原官方英文.command"`.
 3. **Editing `localization_engine.js` (CRLF Pitfall):**
    - `localization_engine.js` uses CRLF (`\r\n`). If multi-line `edit_file` fails due to CRLF normalization, write a small Node script in `scratch/` that normalizes `\r\n` to `\n`, performs exact replacements, restores `\r\n`, and **immediately deletes the temporary script in `scratch/`**.
 

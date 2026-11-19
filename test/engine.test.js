@@ -316,5 +316,38 @@ test('user greeting handles dynamic user name and fragmented DOM nodes', () => {
     assert.equal(fragNode2.nodeValue, '，今天我們要打造什麼？');
 });
 
+test('model availability and dynamic deprecation date warnings are localized accurately', () => {
+    const js = generateJs();
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 } };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    const cases = [
+        ['Unavailable', '無法使用'],
+        [
+            'Gemini 4 Hydrogen is currently available to paid Pro and Ultra subscribers.',
+            'Gemini 4 Hydrogen 目前僅提供給 Pro 與 Ultra 付費訂閱者使用。'
+        ],
+        [
+            'Sonnet 5.5 is now available on paid Pro and Ultra plans. Third-party model access will no longer be available on your current plan starting on November 30, 2026.',
+            'Sonnet 5.5 現已在 Pro 與 Ultra 付費方案中提供。 自 2026 年 11 月 30 日 起，您目前的方案將不再提供第三方模型存取權限。'
+        ],
+        [
+            'Third-party model access will no longer be available on your current plan starting on December 15, 2026.',
+            '自 2026 年 12 月 15 日 起，您目前的方案將不再提供第三方模型存取權限。'
+        ],
+        [
+            'Claude 3.5 Sonnet will no longer be available on your current plan starting on January 1, 2027.',
+            '自 2027 年 1 月 1 日 起，您目前的方案將不再提供 Claude 3.5 Sonnet。'
+        ]
+    ];
+    for (const [input, expected] of cases) {
+        const node = { nodeType: 3, nodeValue: input };
+        translateNode(node);
+        assert.equal(node.nodeValue, expected, input);
+    }
+});
+
 
 

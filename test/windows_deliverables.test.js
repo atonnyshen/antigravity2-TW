@@ -26,7 +26,20 @@ function hasUtf8Bom(buf) {
 
 test('Windows .bat files are pure ASCII with strict CRLF, no BOM, and safe cmd patterns', () => {
     const batFiles = fs.readdirSync(repo).filter(f => f.toLowerCase().endsWith('.bat'));
-    assert.ok(batFiles.length >= 7, 'Expected all TW and SC .bat launchers');
+    assert.deepEqual(batFiles.sort(), [
+        '點兩下卸載Windows背景守護.bat',
+        '點兩下安裝Windows背景守護.bat',
+        '點兩下安裝繁體中文.bat',
+        '點兩下還原官方英文.bat'
+    ], 'Expected exactly the 4 Traditional Chinese .bat launchers');
+
+    const commandFiles = fs.readdirSync(repo).filter(f => f.toLowerCase().endsWith('.command'));
+    assert.deepEqual(commandFiles.sort(), [
+        '點兩下卸載macOS背景守護.command',
+        '點兩下安裝macOS背景守護.command',
+        '點兩下安裝繁體中文.command',
+        '點兩下還原官方英文.command'
+    ], 'Expected exactly the 4 Traditional Chinese .command launchers');
 
     for (const file of batFiles) {
         const buf = fs.readFileSync(path.join(repo, file));
@@ -60,7 +73,14 @@ test('Windows .ps1 files have UTF-8 BOM, strict CRLF, zero 4-byte Emojis, and no
 
 test('macOS .command and .sh files use strict LF and valid bash syntax', () => {
     const unixScripts = fs.readdirSync(repo).filter(f => f.endsWith('.command') || f.endsWith('.sh'));
-    assert.ok(unixScripts.length >= 7);
+    assert.deepEqual(unixScripts.sort(), [
+        'install_macos_autowatcher.sh',
+        'uninstall_macos_autowatcher.sh',
+        '點兩下卸載macOS背景守護.command',
+        '點兩下安裝macOS背景守護.command',
+        '點兩下安裝繁體中文.command',
+        '點兩下還原官方英文.command'
+    ], 'Expected exactly the 4 Traditional Chinese .command and 2 .sh scripts');
     for (const file of unixScripts) {
         const full = path.join(repo, file);
         const buf = fs.readFileSync(full);
@@ -264,25 +284,22 @@ test('stress: CLI interactive brand modes, CJK+space paths, restore, and missing
     assert.deepEqual(fs.readFileSync(archive), officialBuf);
 });
 
-test('Windows read-only Program Files ACL triggers admin guidance cleanly', t => {
-    if (typeof process.getuid === 'function' && process.getuid() === 0) {
-        t.skip('Cannot reliably assert non-root EACCES when running tests as root');
-        return;
-    }
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-win-acl-'));
-    const roDir = path.join(root, 'Program Files', 'Antigravity', 'resources');
-    fs.mkdirSync(roDir, { recursive: true });
-    fs.chmodSync(roDir, 0o555);
-    t.after(() => {
-        try { fs.chmodSync(roDir, 0o755); } catch {}
-        fs.rmSync(root, { recursive: true, force: true });
-    });
-
+test('Windows read-only Program Files ACL triggers admin guidance cleanly', () => {
     const script = `
         Object.defineProperty(process, 'platform', { value: 'win32' });
         process.argv = [process.execPath, 'engine', '--tw'];
+        const fs = require('fs');
+        const origWrite = fs.writeFileSync;
+        fs.writeFileSync = function(p, ...args) {
+            if (typeof p === 'string' && p.includes('.permission_probe')) {
+                const err = new Error('EPERM: operation not permitted, open ' + p);
+                err.code = 'EPERM';
+                throw err;
+            }
+            return origWrite.apply(this, [p, ...args]);
+        };
         const { ensureWritePermission } = require(${JSON.stringify(path.join(repo, 'localization_engine.js'))});
-        ensureWritePermission(${JSON.stringify(roDir)});
+        ensureWritePermission('C:\\\\Program Files\\\\Antigravity\\\\resources');
     `;
     const run = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
     assert.equal(run.status, 1);
