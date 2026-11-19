@@ -478,6 +478,13 @@ function safeReplaceFile(src, dst, mode, uid, gid, { atomicRequired = false } = 
 }
 
 function fsyncFile(file) {
+    if (process.platform === 'win32') {
+        try {
+            const fd = fs.openSync(file, 'r+');
+            try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+        } catch {}
+        return;
+    }
     const fd = fs.openSync(file, 'r');
     try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
 }
