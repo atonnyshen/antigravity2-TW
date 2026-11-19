@@ -1,5 +1,31 @@
 # 更新紀錄
 
+## 3.7.1 — 2026-11-19
+
+- 徹底解決背景守護程序覆寫新版本問題（四道防回滾架構）：
+  - 診斷並修復 macOS LaunchAgent / Windows Task Scheduler 背景守護在手動安裝後數秒內因比對快照雜湊而將新版 `app.asar` 覆寫回舊版的根本衝突。
+  - 元數據防偽標記 (`ANTIGRAVITY L10N META`)：在產出之 `app.asar` 中寫入版本號、雜湊與時間戳，使守護程序與安裝腳本能精準判定套件版本。
+  - 守護防降級守門：`auto_localize_watcher.js` 偵測到目標檔案版本大於或等於自身版本時自動安全略過，終結回滾。
+  - 主動同步快照：安裝程序會自動同步更新 LaunchAgent 快照目錄（`~/Library/Application Support/Antigravity2TW/runtime/`）並重新向 Windows Task Scheduler 註冊當前正確路徑。
+  - 多分區 Electron 快取自動清理：安裝後自動清除 5 處快取與多分區 Code Cache，避免 V8 bytecode 與 UI 快取衝突。
+- 守護程序自動升級機制 (Self Auto-Updater)：
+  - 全新實作 `scripts/auto_updater.js` 並深度整合至 `auto_localize_watcher.js`。
+  - 背景守護在定時檢查官方 updates 時，可自動偵測本專案之 GitHub 最新版本，支援嚴格網域白名單與 SHA-256 校驗，自動原子化下載並更新守護程式碼（保留 `node_modules` 與狀態），免去手動更新守護之繁瑣。
+- Slash 指令與 Thinking Effort 硬性保護：
+  - Slash 指令純英文化：徹底解決 `/goal` 等 Slash 指令被中文化為「目標」而在選單輸入時引發指令解析失敗的問題。白名單保護涵蓋所有 Slash 指令 token（如 `/goal`, `/swarm`, `/boost`, `/learn`, `/schedule`, `/compact`, `/btw` 等），保留純英文指令名稱，僅翻譯說明文字。
+  - Thinking Effort 嚴格保留英文：使用者明確指示「Thinking Effort 不修改」，模型選擇器中思考強度等級（`Low`, `Medium`, `High`, `Extra`, `Max`）及 `Thinking Effort` 標籤完全維持官方英文，不被字典或模糊規則篡改。
+- 模型提示補齊與 L0 出版級自然繁體中文校對：
+  - 補齊最新截圖中漏翻之模型 Tooltip：
+    - `"For most deep reasoning and complex problems"` ➔ `"適合大多數深度推理與複雜難題"`
+    - `"For speed and efficiency in execution tasks"` ➔ `"適合追求速度與效率的執行任務"`
+    - `"Neon that may offload routine steps to Hydrogen. Same Neon-level quality, fewer tokens used."` ➔ `"Neon 可將例行步驟分流至 Hydrogen。維持 Neon 同級品質，消耗更少 Token。"`
+    - `"Argon that may offload routine steps to Hydrogen. Same Argon-level quality, fewer tokens used."` ➔ `"Argon 可將例行步驟分流至 Hydrogen。維持 Argon 同級品質，消耗更少 Token。"`
+  - 補齊 52 個全新 UI 詞條至 `dicts_tw/` 與 `dicts/`，字典達成 100% 對齊。
+  - 徹底依據 L0 出版級標準去除被動式（「被...」）、大陸黑話與空動詞（如「進行...」），校對全數短句，統一正字與半形引號轉全形「」引號。
+- 台灣軟體在地化標準體例指南確立 (`docs/LOCALIZATION_STYLE_GUIDE.md`)：
+  - 整合 Google、Apple、Microsoft、VS Code 等國際軟體在台灣的在地化行規與體例指南，固化詞彙對照表（如全面採用 VS Code 繁中標準「存放庫」替代「倉庫／儲存庫」）。
+  - 在專案規範中建立長久遵循的標準檔案。
+
 ## 3.7.0 — 2026-11-19
 
 - 出版級繁體中文體例全面校對與 L0 底線守護：
