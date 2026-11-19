@@ -8,9 +8,9 @@
   - 停用自動更新方式為標準卸載守護程序，無須額外設定開關。
 - Google ShipIt 官方更新競爭防護（P0-01）：
   - 引入跨平台原生原子交換機制（macOS `renamex_np(RENAME_SWAP)`、Windows `ReplaceFileW`、Linux `renameat2(RENAME_EXCHANGE)`）。
-  - 若在原子置換前最後一刻偵測到官方更新，自動執行反向原子交換保全官方最新檔案，絕不遺失官方新版。
+  - 原子交換後核對被換出的 ASAR。若偵測到官方更新，會嘗試換回官方檔案；恢復失敗時保留原始檔案並記錄復原位置。
 - 官方 ASAR 備份安全強制守門（P0-02）：
-  - 備份檔案強制寫入後 `fsync`，並以原子方式置入 `app.asar.bak`。
+  - 備份寫入後執行 `fsync`，並以原子方式置入 `app.asar.bak`；Windows 同步失敗會中止套用。
   - 備份寫入失敗（如磁碟空間不足 ENOSPC）或讀回驗證雜湊不符時，立即終止流程，正式 `app.asar` 保持未修改狀態。
 - GitHub Release 發布安全隔離與預檢閘門：
   - 針對舊版 v3.7.1 任意 ZIP 選取漏洞，建立 Release Assets 唯一性規範：有且僅有單一純翻譯包，嚴禁夾帶可執行程式 ZIP。
