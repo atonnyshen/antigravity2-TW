@@ -330,12 +330,32 @@ test('model availability and dynamic deprecation date warnings are localized acc
             'Gemini 4 Argon 目前僅提供給 Ultra 與 Pro 付費方案訂閱者使用。'
         ],
         [
+            'Gemini 4 Argon is currently available to paid Pro and Ultra subscribers.',
+            'Gemini 4 Argon 目前僅提供給 Pro 與 Ultra 付費訂閱者使用。'
+        ],
+        [
+            'Gemini 4 Argon is currently available to paid Pro and Ultra plan subscribers.',
+            'Gemini 4 Argon 目前僅提供給 Pro 與 Ultra 付費方案訂閱者使用。'
+        ],
+        [
+            'Gemini 4 Argon is currently available to Ultra and paid Pro subscribers.',
+            'Gemini 4 Argon 目前僅提供給 Ultra 與 Pro 付費訂閱者使用。'
+        ],
+        [
+            'Gemini 4 Argon is currently available to Ultra and paid Pro plan subscribers',
+            'Gemini 4 Argon 目前僅提供給 Ultra 與 Pro 付費方案訂閱者使用'
+        ],
+        [
             'Gemini 4 Carbon is currently available to Ultra plan subscribers.',
             'Gemini 4 Carbon 目前僅提供給 Ultra 方案訂閱者使用。'
         ],
         [
             'Gemini 4 Hydrogen is currently available to paid Pro and Ultra subscribers.',
             'Gemini 4 Hydrogen 目前僅提供給 Pro 與 Ultra 付費訂閱者使用。'
+        ],
+        [
+            'Gemini 4 Hydrogen is currently available to paid Pro and Ultra subscribers',
+            'Gemini 4 Hydrogen 目前僅提供給 Pro 與 Ultra 付費訂閱者使用'
         ],
         [
             'Sonnet 5.5 is now available on paid Pro and Ultra plans. Third-party model access will no longer be available on your current plan starting on November 30, 2026.',
@@ -388,6 +408,22 @@ test('model availability and dynamic deprecation date warnings are localized acc
         [
             '/boost',
             '/boost'
+        ],
+        [
+            '/learn',
+            '/learn'
+        ],
+        [
+            '/schedule',
+            '/schedule'
+        ],
+        [
+            '/swarm-autonomous-pipeline',
+            '/swarm-autonomous-pipeline'
+        ],
+        [
+            '/egm-boost',
+            '/egm-boost'
         ]
     ];
     for (const [input, expected] of cases) {
@@ -395,6 +431,58 @@ test('model availability and dynamic deprecation date warnings are localized acc
         translateNode(node);
         assert.equal(node.nodeValue, expected, input);
     }
+});
+
+test('coordinator welcome text translates with parallel agent and no mainland terms', () => {
+    const js = generateJs();
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    class FakeTextNode {
+        constructor(text) {
+            this.nodeType = 3;
+            this.nodeValue = text;
+        }
+    }
+    class FakeElement {
+        constructor(tagName, attrs = {}, textContent = '') {
+            this.tagName = tagName;
+            this.nodeType = 1;
+            this.attrs = attrs;
+            this.textContent = textContent;
+            this.children = [];
+        }
+        getAttribute(name) { return this.attrs[name] || null; }
+        setAttribute(name, val) { this.attrs[name] = val; }
+        querySelectorAll(sel) {
+            if (sel === 'p') return this.children.filter(c => c.tagName === 'p');
+            return [];
+        }
+        querySelector(sel) {
+            if (sel === 'strong') return this.children.find(c => c.tagName === 'strong') || null;
+            return null;
+        }
+        appendChild(child) { this.children.push(child); }
+        cloneNode() { return new FakeElement(this.tagName, { ...this.attrs }, this.textContent); }
+    }
+    const document = {
+        createTextNode: text => new FakeTextNode(text)
+    };
+    const context = {
+        Node: { ELEMENT_NODE: 1, TEXT_NODE: 3 },
+        document
+    };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    const coordEl = new FakeElement('div', { 'data-testid': 'coordinator-welcome' });
+    const p1 = new FakeElement('p', {}, 'Welcome to MyProject. I coordinate the work for this project.');
+    const strongEl = new FakeElement('strong', {}, 'MyProject');
+    p1.children.push(strongEl);
+    coordEl.children.push(p1);
+
+    translateNode(coordEl);
+    const fullText = p1.children.map(c => c.nodeValue || c.textContent).join('');
+    assert.match(fullText, /啟動平行工作代理/);
+    assert.doesNotMatch(fullText, /並行/);
 });
 
 

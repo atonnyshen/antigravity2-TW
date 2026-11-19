@@ -28,6 +28,7 @@ Whenever you modify, add, or delete any translation keys in `dicts/` (Simplified
    - **Zero Simplified Character Leaks in `dicts_tw/`:** `dicts_tw/*.json` values are scanned against a strict Simplified-only character regex. If any Simplified character (e.g. `们这来个时后会里为么...`) leaks into `dicts_tw/`, the script will fail and report the exact key.
 3. Do not complete your task until `node scripts/compare_dicts.js` exits with code `0` and prints:
    `All dictionaries are perfectly aligned!`
+4. All translations must strictly adhere to [`docs/LOCALIZATION_STYLE_GUIDE.md`](./docs/LOCALIZATION_STYLE_GUIDE.md) (L0 output floor, no passive voice '被...', no mainland terms '並行/定時任務/定時器', Slash commands and native tokens protected).
 
 ### Rule B: Do NOT Run Destructive Injections Directly Without Mocking
 - During development and regression testing, you **MUST NOT** inject into the user's primary `/Applications/Antigravity.app` or `C:\Program Files\Antigravity` without `--install-dir` pointing to an isolated test bundle.

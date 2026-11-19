@@ -4,3 +4,5 @@
    - 請直接讀取並嚴格遵循同目錄下的 [`AI_INSTALL_GUIDE.md`](./AI_INSTALL_GUIDE.md)（第一階段先唯讀檢查環境與安全性，待使用者從 1–4 選擇後再執行；Antigravity 執行中務必加上 `--no-kill`）。
 2. **開發者修改本專案字典（`dicts/`、`dicts_tw/`）或核心程式時**：
    - 請遵循同目錄下的 `.cursorrules`（`node scripts/compare_dicts.js` 必須通過、`npm test` 必須全部通過，且僅對暫存隔離目錄執行引擎測試）。
+3. **在地化文字規範、台灣繁中體例（L0 底線）、Slash 指令保護與動態方案標準**：
+   - 任何詞彙變更、翻譯調整、新功能適配均須嚴格查閱並遵循 [`docs/LOCALIZATION_STYLE_GUIDE.md`](./docs/LOCALIZATION_STYLE_GUIDE.md)。

@@ -931,47 +931,59 @@
             return part1 + " " + part2;
         }],
         [/^(.+?)\s+is (?:currently|now) available (?:to|on)\s+(.+?)\.?$/i, (m, m1, aud) => {
+            const hasPeriod = /[.]$/.test(m.trim());
+            const period = hasPeriod ? "。" : "";
             const model = m1.trim();
             const audZh = formatPlanAudience(aud);
             const isSubscribers = /subscriber/i.test(aud);
             const isCurrently = /currently/i.test(m);
             if (isSubscribers) {
                 return USE_TW
-                    ? (model + (isCurrently ? " 目前僅提供給 " : " 現已提供給 ") + audZh + "使用。")
-                    : (model + (isCurrently ? " 目前仅提供给 " : " 现已提供给 ") + audZh + "使用。");
+                    ? (model + (isCurrently ? " 目前僅提供給 " : " 現已提供給 ") + audZh + "使用" + period)
+                    : (model + (isCurrently ? " 目前仅提供给 " : " 现已提供给 ") + audZh + "使用" + period);
             }
             return USE_TW
-                ? (model + (isCurrently ? " 目前在 " : " 現已在 ") + audZh + "中提供。")
-                : (model + (isCurrently ? " 目前在 " : " 现已在 ") + audZh + "中提供。");
+                ? (model + (isCurrently ? " 目前在 " : " 現已在 ") + audZh + "中提供" + period)
+                : (model + (isCurrently ? " 目前在 " : " 现已在 ") + audZh + "中提供" + period);
         }],
         [/^(.+?)\s+will be removed from\s+(.+?)\s+on\s+(.+?)\.?$/i, (m, m1, app, dateStr) => {
+            const hasPeriod = /[.]$/.test(m.trim());
+            const period = hasPeriod ? "。" : "";
             const dZh = formatEnglishDate(dateStr);
             return USE_TW
-                ? (m1.trim() + " 將於 " + dZh + "自 " + app.trim() + " 下架。")
-                : (m1.trim() + " 将于 " + dZh + "自 " + app.trim() + " 下架。");
+                ? (m1.trim() + " 將於 " + dZh + "自 " + app.trim() + " 下架" + period)
+                : (m1.trim() + " 将于 " + dZh + "自 " + app.trim() + " 下架" + period);
         }],
         [/^(.+?)\s+will be removed on\s+(.+?)\.?$/i, (m, m1, dateStr) => {
+            const hasPeriod = /[.]$/.test(m.trim());
+            const period = hasPeriod ? "。" : "";
             const dZh = formatEnglishDate(dateStr);
             return USE_TW
-                ? (m1.trim() + " 將於 " + dZh + "下架。")
-                : (m1.trim() + " 将于 " + dZh + "下架。");
+                ? (m1.trim() + " 將於 " + dZh + "下架" + period)
+                : (m1.trim() + " 将于 " + dZh + "下架" + period);
         }],
         [/^(.+?)\s+will be (?:discontinued|deprecated) on\s+(.+?)\.?$/i, (m, m1, dateStr) => {
+            const hasPeriod = /[.]$/.test(m.trim());
+            const period = hasPeriod ? "。" : "";
             const dZh = formatEnglishDate(dateStr);
             return USE_TW
-                ? (m1.trim() + " 將於 " + dZh + "停止提供。")
-                : (m1.trim() + " 将于 " + dZh + "停止提供。");
+                ? (m1.trim() + " 將於 " + dZh + "停止提供" + period)
+                : (m1.trim() + " 将于 " + dZh + "停止提供" + period);
         }],
         [/^(.+?)\s+will no longer be available on your current plan starting on\s+(.+?)\.?$/i, (m, m1, dateStr) => {
+            const hasPeriod = /[.]$/.test(m.trim());
+            const period = hasPeriod ? "。" : "";
             const dZh = formatEnglishDate(dateStr);
             const isThirdParty = /third-party model access/i.test(m1.trim());
             return isThirdParty
-                ? (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供第三方模型存取權限。") : ("自 " + dZh + " 起，您当前的方案将不再提供第三方模型访问权限。"))
-                : (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供 " + m1.trim() + "。") : ("自 " + dZh + " 起，您当前的方案将不再提供 " + m1.trim() + "。"));
+                ? (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供第三方模型存取權限" + period) : ("自 " + dZh + " 起，您当前的方案将不再提供第三方模型访问权限" + period))
+                : (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供 " + m1.trim() + period) : ("自 " + dZh + " 起，您当前的方案将不再提供 " + m1.trim() + period));
         }],
         [/^Third-party model access will no longer be available starting on\s+(.+?)\.?$/i, (m, dateStr) => {
+            const hasPeriod = /[.]$/.test(m.trim());
+            const period = hasPeriod ? "。" : "";
             const dZh = formatEnglishDate(dateStr);
-            return USE_TW ? ("自 " + dZh + " 起將不再提供第三方模型存取權限。") : ("自 " + dZh + " 起将不再提供第三方模型访问权限。");
+            return USE_TW ? ("自 " + dZh + " 起將不再提供第三方模型存取權限" + period) : ("自 " + dZh + " 起将不再提供第三方模型访问权限" + period);
         }],
     ];
 
@@ -1376,7 +1388,7 @@
                             p.appendChild(document.createTextNode(USE_TW ? '歡迎使用 ' : '欢迎使用 '));
                             if (nameClone) p.appendChild(nameClone);
                             p.appendChild(document.createTextNode(USE_TW
-                                ? '。我負責協調此專案的工作。您可以向我提問或交辦任務，我會直接回覆或啟動並行工作代理。'
+                                ? '。我負責協調此專案的工作。您可以向我提問或交辦任務，我會直接回覆或啟動平行工作代理。'
                                 : '。我负责协调此项目的工作。您可以向我提问或交办任务，我会直接回答或启动并行工作代理。'));
                             p.setAttribute('translate', 'no');
                         } else if (/^(?:You|您)\s+can follow the workers in the Dashboard/i.test(pNorm)) {

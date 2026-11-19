@@ -2,6 +2,16 @@
 
 ## 3.7.0 — 2026-11-19
 
+- 出版級繁體中文體例全面校對與 L0 底線守護：
+  - 全面消除大陸用語殘留：「並行」統一校訂為「平行」（涵蓋工作流程指令碼與協調器歡迎語中之「啟動平行工作代理」）、「定時任務」統一校訂為「排程任務」、「定時器」統一校訂為「計時器」。
+  - 徹底移除被動語態「被…」殘留：成品審查設定「被注入內容」優化為主動語境「遭惡意注入的內容」。
+- 模型選擇器提示文字與訂閱方案標準對齊：
+  - 規範化英文原序與中文對稱對應標準：嚴格區分「Pro 與 Ultra」與「Ultra 與 Pro」、「付費訂閱者」（`paid ... subscribers`）與「付費方案訂閱者」（`paid ... plan subscribers`）。
+  - 同步對齊並擴充 `formatPlanAudience`、`DYNAMIC_RULES`、`dicts_tw/page_main.json`、`dicts/page_main.json` 及 `test/engine.test.js`，雙向覆蓋 Argon、Carbon、Hydrogen 與 Sonnet 等所有主流模型之帶句點／無句點變體。
+- Slash 指令與原生標記白名單保護：
+  - 確認所有 Slash 指令（`/swarm`、`/goal`、`/boost`、`/learn`、`/schedule`、`/swarm-autonomous-pipeline`、`/egm-boost` 等）絕對不被翻譯，保留原生指令標記以防觸發異常；指令說明文字全量維持自然出版級台灣繁體中文。
+- 專案在地化規範沉澱：
+  - 新增專案繁中在地化文字規範與體例指南 [`docs/LOCALIZATION_STYLE_GUIDE.md`](./docs/LOCALIZATION_STYLE_GUIDE.md)，完整沉澱架構原則、L0 標點與去腔體例、名詞對照表、Slash 白名單、動態模板規範與驗收清單，並與 `AGENTS.md`、`.cursorrules`、`.clinerules` 及 `scripts/compare_dicts.js` 形成自動防護機制。
 - 適配 Antigravity **v2.33.0**，並整合上游 `qqxpee/antigravity2-cn` 至 `91529e3`：
   - 補齊 v2.33.0 新增介面譯文：內建瀏覽器資料與 Cookie 管理、快速鍵配置方案、麥克風診斷、組合包（bundle）市集、分支提問、`remoteManager.js` 的 5 組 SSH／麥克風／共用家目錄對話框，並新增 `patchWizardHtmlJs()` 翻譯首次導覽視窗。
   - 同步上游 ASAR 標頭校驗、詞邊界取代（`replaceWithBoundary`）、Sidecar／Tray 缺值防護、`restore_page` 圖示保留 React 節點，以及簽署失敗回滾；`scripts/compare_dicts.js` 增加非物件 JSON 檢查。
