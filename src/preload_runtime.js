@@ -305,6 +305,64 @@
         return trimmed;
     }
 
+    function formatPlanAudience(audienceStr) {
+        if (!audienceStr || typeof audienceStr !== 'string') return audienceStr;
+        const s = norm(audienceStr).replace(/[.]+$/, '');
+        const isSubscribers = /subscriber/i.test(s);
+        const hasPlanWord = /\bplans?\b/i.test(s);
+        const hasPaid = /\bpaid\b/i.test(s);
+        const lower = s.toLowerCase();
+
+        if (lower.includes('pro') && lower.includes('ultra')) {
+            const proFirst = lower.indexOf('pro') < lower.indexOf('ultra');
+            const tierPair = proFirst
+                ? (USE_TW ? 'Pro 與 Ultra' : 'Pro 与 Ultra')
+                : (USE_TW ? 'Ultra 與 Pro' : 'Ultra 与 Pro');
+            if (isSubscribers) {
+                if (hasPaid && hasPlanWord) {
+                    return tierPair + (USE_TW ? ' 付費方案訂閱者' : ' 付费方案订阅者');
+                }
+                if (hasPaid) {
+                    return tierPair + (USE_TW ? ' 付費訂閱者' : ' 付费订阅者');
+                }
+                if (hasPlanWord) {
+                    return tierPair + (USE_TW ? ' 方案訂閱者' : ' 方案订阅者');
+                }
+                return tierPair + (USE_TW ? ' 訂閱者' : ' 订阅者');
+            }
+            if (hasPaid) {
+                return tierPair + (USE_TW ? ' 付費方案' : ' 付费方案');
+            }
+            return tierPair + (USE_TW ? ' 方案' : ' 方案');
+        }
+        if (lower.includes('ultra')) {
+            if (isSubscribers) {
+                return hasPlanWord
+                    ? (USE_TW ? 'Ultra 方案訂閱者' : 'Ultra 方案订阅者')
+                    : (USE_TW ? 'Ultra 訂閱者' : 'Ultra 订阅者');
+            }
+            return USE_TW ? 'Ultra 方案' : 'Ultra 方案';
+        }
+        if (lower.includes('pro')) {
+            if (isSubscribers) {
+                if (hasPaid && hasPlanWord) {
+                    return USE_TW ? 'Pro 付費方案訂閱者' : 'Pro 付费方案订阅者';
+                }
+                if (hasPaid) {
+                    return USE_TW ? 'Pro 付費訂閱者' : 'Pro 付费订阅者';
+                }
+                if (hasPlanWord) {
+                    return USE_TW ? 'Pro 方案訂閱者' : 'Pro 方案订阅者';
+                }
+                return USE_TW ? 'Pro 訂閱者' : 'Pro 订阅者';
+            }
+            return hasPaid
+                ? (USE_TW ? 'Pro 付費方案' : 'Pro 付费方案')
+                : (USE_TW ? 'Pro 方案' : 'Pro 方案');
+        }
+        return audienceStr;
+    }
+
     function formatCompactDuration(str) {
         return String(str || '').trim()
             .replace(/(\d+)\s*d\b/gi, '$1 天')
@@ -362,7 +420,26 @@
         'blocked': ['受阻', '受阻'],
         'done': ['已完成', '已完成'],
         'active': ['活跃', '執行中'],
-        'paused': ['已暂停', '已暫停']
+        'paused': ['已暂停', '已暫停'],
+        'Overview': ['概览', '概覽'],
+        'Members': ['成员', '成員'],
+        'Live': ['实时', '即時'],
+        'Timeline': ['时间线', '時間軸'],
+        'Roster': ['成员名单', '成員名單'],
+        'Swarm': ['蜂群', '蜂群'],
+        'Swarm (Preview)': ['蜂群（预览版）', '蜂群（預覽版）'],
+        'Stalled': ['已停滞', '已停滯'],
+        'stalled': ['已停滞', '已停滯'],
+        'Failed': ['失败', '失敗'],
+        'failed': ['失败', '失敗'],
+        'Error': ['错误', '錯誤'],
+        'error': ['错误', '錯誤'],
+        'Quota': ['配额', '配額'],
+        'quota': ['配额', '配額'],
+        'Offline': ['离线', '離線'],
+        'offline': ['离线', '離線'],
+        'Idle': ['空闲', '閒置'],
+        'idle': ['空闲', '閒置']
     };
 
     function isSwarmUiContext(el) {
@@ -715,6 +792,17 @@
             const isCjk = /[\u4e00-\u9fff]/.test(sZh);
             return (isCjk ? (USE_TW ? '來自' : '来自') : (USE_TW ? '來自 ' : '来自 ')) + sZh + (isCjk ? (USE_TW ? '的訊息' : '的消息') : (USE_TW ? ' 的訊息' : ' 的消息'));
         }],
+        [/^@([^\s]+)\s+was stopped$/i, (m, who) => "@" + who + (USE_TW ? " 已停止" : " 已停止")],
+        [/^@([^\s]+)\s+was killed$/i, (m, who) => "@" + who + (USE_TW ? " 已終止" : " 已终止")],
+        [/^@([^\s]+)\s+is working(?:\.\.\.|…)?$/i, (m, who) => "@" + who + (USE_TW ? " 工作中..." : " 工作中...")],
+        [/^@([^\s]+)\s+is waiting$/i, (m, who) => "@" + who + (USE_TW ? " 等待中" : " 等待中")],
+        [/^@([^\s]+)\s+is idle$/i, (m, who) => "@" + who + (USE_TW ? " 閒置中" : " 空闲中")],
+        [/^@([^\s]+)\s+is done$/i, (m, who) => "@" + who + (USE_TW ? " 已完成" : " 已完成")],
+        [/^@([^\s]+)\s+has completed its task$/i, (m, who) => "@" + who + (USE_TW ? " 已完成任務" : " 已完成任务")],
+        [/^Swarm\s*·\s*(\d+)\s+members?$/i, (m, n) => (USE_TW ? "蜂群 · " : "蜂群 · ") + n + (USE_TW ? " 位成員" : " 位成员")],
+        [/^Swarm\s*·\s*(\d+)\s+workers?$/i, (m, n) => (USE_TW ? "蜂群 · " : "蜂群 · ") + n + (USE_TW ? " 位成員" : " 位成员")],
+        [/^(\d+)\s+members?$/i, (m, n) => n + (USE_TW ? " 位成員" : " 位成员")],
+        [/^(\d+)\s+workers?$/i, (m, n) => n + (USE_TW ? " 位成員" : " 位成员")],
 
         // v2.32.1 新增界面：草稿胶囊、SSH 远程主机、多智能体视图与插件云端凭据
         [/^(\d+)\s+Drafts?$/i, (m, n) => n + (USE_TW ? " 則草稿" : " 条草稿")],
@@ -812,12 +900,15 @@
         [/^When toggled on,\s*(.+?)\s+will use your AI credits to fulfill model requests once you['’]re out of model quota\.\s*\1\s+will always use your model quota first before using AI credits\.?$/i, (m, app) => USE_TW ? ("開啟後，當模型配額用盡時，" + app + " 將使用您的 AI 點數來完成模型請求。" + app + " 永遠會優先使用您的模型配額，再使用 AI 點數。") : ("开启后，当模型配额用尽时，" + app + " 将使用您的 AI 额度来完成模型请求。" + app + " 始终会优先使用您的模型配额，然后再使用 AI 额度。")],
         [/^Receive product updates,\s*tips,\s*and promotions from Google\s+(.+?)\s+via email\.?$/i, (m, app) => USE_TW ? ("透過電子郵件接收 Google " + app + " 的產品更新、使用技巧與優惠活動。") : ("通过电子邮件接收 Google " + app + " 的产品更新、技巧和促销信息。")],
 
-        // 模型選擇器付費方案可用性與第三方模型移除警示 (動態日期適配)
-        [/^(.+?)\s+is (?:currently|now) available (?:to|on) paid Pro and Ultra (plans|subscribers)\.\s*(.+?)\s+will no longer be available on your current plan starting on\s+(.+?)\.?$/i, (m, m1, kind, m3, dateStr) => {
+        // 模型選擇器付費方案可用性與第三方模型移除警示 (動態方案、模型與下架日期適配)
+        [/^(.+?)\s+is (?:currently|now) available (?:to|on)\s+(.+?)\.\s*(.+?)\s+will no longer be available on your current plan starting on\s+(.+?)\.?$/i, (m, m1, aud, m3, dateStr) => {
             const model = m1.trim();
-            const part1 = /plan/i.test(kind)
-                ? (USE_TW ? (model + " 現已在 Pro 與 Ultra 付費方案中提供。") : (model + " 现已在 Pro 与 Ultra 付费方案中提供。"))
-                : (USE_TW ? (model + " 目前僅提供給 Pro 與 Ultra 付費訂閱者使用。") : (model + " 目前仅提供给 Pro 与 Ultra 付费订阅者使用。"));
+            const audZh = formatPlanAudience(aud);
+            const isSubscribers = /subscriber/i.test(aud);
+            const isCurrently = /currently/i.test(m);
+            const part1 = isSubscribers
+                ? (USE_TW ? (model + (isCurrently ? " 目前僅提供給 " : " 現已提供給 ") + audZh + "使用。") : (model + (isCurrently ? " 目前仅提供给 " : " 现已提供给 ") + audZh + "使用。"))
+                : (USE_TW ? (model + (isCurrently ? " 目前在 " : " 現已在 ") + audZh + "中提供。") : (model + (isCurrently ? " 目前在 " : " 现已在 ") + audZh + "中提供。"));
             const dZh = formatEnglishDate(dateStr);
             const isThirdParty = /third-party model access/i.test(m3.trim());
             const part2 = isThirdParty
@@ -825,11 +916,51 @@
                 : (USE_TW ? ("自 " + dZh + " 起，您目前的方案將不再提供 " + m3.trim() + "。") : ("自 " + dZh + " 起，您当前的方案将不再提供 " + m3.trim() + "。"));
             return part1 + " " + part2;
         }],
-        [/^(.+?)\s+is (?:currently|now) available (?:to|on) paid Pro and Ultra (plans|subscribers)\.?$/i, (m, m1, kind) => {
+        [/^(.+?)\s+is (?:currently|now) available (?:to|on)\s+(.+?)\.\s*(.+?)\s+will be removed from\s+(.+?)\s+on\s+(.+?)\.?$/i, (m, m1, aud, m3, app, dateStr) => {
             const model = m1.trim();
-            return /plan/i.test(kind)
-                ? (USE_TW ? (model + " 現已在 Pro 與 Ultra 付費方案中提供。") : (model + " 现已在 Pro 与 Ultra 付费方案中提供。"))
-                : (USE_TW ? (model + " 目前僅提供給 Pro 與 Ultra 付費訂閱者使用。") : (model + " 目前仅提供给 Pro 与 Ultra 付费订阅者使用。"));
+            const audZh = formatPlanAudience(aud);
+            const isSubscribers = /subscriber/i.test(aud);
+            const isCurrently = /currently/i.test(m);
+            const part1 = isSubscribers
+                ? (USE_TW ? (model + (isCurrently ? " 目前僅提供給 " : " 現已提供給 ") + audZh + "使用。") : (model + (isCurrently ? " 目前仅提供给 " : " 现已提供给 ") + audZh + "使用。"))
+                : (USE_TW ? (model + (isCurrently ? " 目前在 " : " 現已在 ") + audZh + "中提供。") : (model + (isCurrently ? " 目前在 " : " 现已在 ") + audZh + "中提供。"));
+            const dZh = formatEnglishDate(dateStr);
+            const part2 = USE_TW
+                ? (m3.trim() + " 將於 " + dZh + "自 " + app.trim() + " 下架。")
+                : (m3.trim() + " 将于 " + dZh + "自 " + app.trim() + " 下架。");
+            return part1 + " " + part2;
+        }],
+        [/^(.+?)\s+is (?:currently|now) available (?:to|on)\s+(.+?)\.?$/i, (m, m1, aud) => {
+            const model = m1.trim();
+            const audZh = formatPlanAudience(aud);
+            const isSubscribers = /subscriber/i.test(aud);
+            const isCurrently = /currently/i.test(m);
+            if (isSubscribers) {
+                return USE_TW
+                    ? (model + (isCurrently ? " 目前僅提供給 " : " 現已提供給 ") + audZh + "使用。")
+                    : (model + (isCurrently ? " 目前仅提供给 " : " 现已提供给 ") + audZh + "使用。");
+            }
+            return USE_TW
+                ? (model + (isCurrently ? " 目前在 " : " 現已在 ") + audZh + "中提供。")
+                : (model + (isCurrently ? " 目前在 " : " 现已在 ") + audZh + "中提供。");
+        }],
+        [/^(.+?)\s+will be removed from\s+(.+?)\s+on\s+(.+?)\.?$/i, (m, m1, app, dateStr) => {
+            const dZh = formatEnglishDate(dateStr);
+            return USE_TW
+                ? (m1.trim() + " 將於 " + dZh + "自 " + app.trim() + " 下架。")
+                : (m1.trim() + " 将于 " + dZh + "自 " + app.trim() + " 下架。");
+        }],
+        [/^(.+?)\s+will be removed on\s+(.+?)\.?$/i, (m, m1, dateStr) => {
+            const dZh = formatEnglishDate(dateStr);
+            return USE_TW
+                ? (m1.trim() + " 將於 " + dZh + "下架。")
+                : (m1.trim() + " 将于 " + dZh + "下架。");
+        }],
+        [/^(.+?)\s+will be (?:discontinued|deprecated) on\s+(.+?)\.?$/i, (m, m1, dateStr) => {
+            const dZh = formatEnglishDate(dateStr);
+            return USE_TW
+                ? (m1.trim() + " 將於 " + dZh + "停止提供。")
+                : (m1.trim() + " 将于 " + dZh + "停止提供。");
         }],
         [/^(.+?)\s+will no longer be available on your current plan starting on\s+(.+?)\.?$/i, (m, m1, dateStr) => {
             const dZh = formatEnglishDate(dateStr);

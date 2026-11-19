@@ -326,6 +326,14 @@ test('model availability and dynamic deprecation date warnings are localized acc
     const cases = [
         ['Unavailable', '無法使用'],
         [
+            'Gemini 4 Argon is currently available to Ultra and paid Pro plan subscribers.',
+            'Gemini 4 Argon 目前僅提供給 Ultra 與 Pro 付費方案訂閱者使用。'
+        ],
+        [
+            'Gemini 4 Carbon is currently available to Ultra plan subscribers.',
+            'Gemini 4 Carbon 目前僅提供給 Ultra 方案訂閱者使用。'
+        ],
+        [
             'Gemini 4 Hydrogen is currently available to paid Pro and Ultra subscribers.',
             'Gemini 4 Hydrogen 目前僅提供給 Pro 與 Ultra 付費訂閱者使用。'
         ],
@@ -334,12 +342,40 @@ test('model availability and dynamic deprecation date warnings are localized acc
             'Sonnet 5.5 現已在 Pro 與 Ultra 付費方案中提供。 自 2026 年 11 月 30 日 起，您目前的方案將不再提供第三方模型存取權限。'
         ],
         [
+            'GPT-OSS will be removed from Antigravity on November 30, 2026.',
+            'GPT-OSS 將於 2026 年 11 月 30 日自 Antigravity 下架。'
+        ],
+        [
+            'Claude 2.1 will be removed on December 31, 2026.',
+            'Claude 2.1 將於 2026 年 12 月 31 日下架。'
+        ],
+        [
+            'Claude Instant will be discontinued on January 15, 2027.',
+            'Claude Instant 將於 2027 年 1 月 15 日停止提供。'
+        ],
+        [
             'Third-party model access will no longer be available on your current plan starting on December 15, 2026.',
             '自 2026 年 12 月 15 日 起，您目前的方案將不再提供第三方模型存取權限。'
         ],
         [
             'Claude 3.5 Sonnet will no longer be available on your current plan starting on January 1, 2027.',
             '自 2027 年 1 月 1 日 起，您目前的方案將不再提供 Claude 3.5 Sonnet。'
+        ],
+        [
+            '@worker-1 was stopped',
+            '@worker-1 已停止'
+        ],
+        [
+            '@worker-2 was killed',
+            '@worker-2 已終止'
+        ],
+        [
+            'Swarm · 6 members',
+            '蜂群 · 6 位成員'
+        ],
+        [
+            'Swarm · 4 workers',
+            '蜂群 · 4 位成員'
         ]
     ];
     for (const [input, expected] of cases) {
