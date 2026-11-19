@@ -1,5 +1,25 @@
 # 更新紀錄
 
+## 3.7.2 — 2026-11-20
+
+- 純翻譯資料自動更新與程式碼自我升級徹底移除：
+  - 守護程序僅同步 `dicts/` 與 `dicts_tw/` 純文字字典及非執行型 manifest，永不自我更新可執行程式碼。
+  - 徹底移除 `selfUpdateWatcher`、`applySelfUpdateAtomic` 及相關寫入路徑，程式引擎與守護腳本更新均由使用者手動下載安裝。
+  - 停用自動更新方式為標準卸載守護程序，無須額外設定開關。
+- Google ShipIt 官方更新競爭防護（P0-01）：
+  - 引入跨平台原生原子交換機制（macOS `renamex_np(RENAME_SWAP)`、Windows `ReplaceFileW`、Linux `renameat2(RENAME_EXCHANGE)`）。
+  - 若在原子置換前最後一刻偵測到官方更新，自動執行反向原子交換保全官方最新檔案，絕不遺失官方新版。
+- 官方 ASAR 備份安全強制守門（P0-02）：
+  - 備份檔案強制寫入後 `fsync`，並以原子方式置入 `app.asar.bak`。
+  - 備份寫入失敗（如磁碟空間不足 ENOSPC）或讀回驗證雜湊不符時，立即終止流程，正式 `app.asar` 保持未修改狀態。
+- GitHub Release 發布安全隔離與預檢閘門：
+  - 針對舊版 v3.7.1 任意 ZIP 選取漏洞，建立 Release Assets 唯一性規範：有且僅有單一純翻譯包，嚴禁夾帶可執行程式 ZIP。
+  - 完整程式升級一律經由 GitHub 自動生成之 Source code (zip) 取得。
+  - 實作 `scripts/check_release_assets.js` 與 GitHub Actions 預檢工作流程，發布前嚴格驗證資產唯一性、SHA-256 與引擎相容性。
+- 跨平台權限安全（macOS & Windows）：
+  - macOS 完善 LaunchAgent / LaunchDaemon 互斥鎖定（`run.lock`）與安全卸載。
+  - Windows 工作排程嚴格採用 `LeastPrivilege` 最低權限，遇 `Program Files` 限制乾淨提供管理員手動指引，杜絕失控重試與提權風險。
+
 ## 3.7.1 — 2026-11-19
 
 - 徹底解決背景守護程序覆寫新版本問題（四道防回滾架構）：

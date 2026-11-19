@@ -1432,6 +1432,10 @@
                     if (v) {
                         const t = norm(v);
                         if (/^\/[a-zA-Z0-9_.:-]+$/.test(t)) continue;
+                        // Attribute values can be a command's accessible name even when
+                        // its visible text node is protected separately. Never translate
+                        // a command token or a Thinking Effort option in that context.
+                        if (isSlashCommandNameNode(node, t) || isModelEffortLabelProtected(node, t)) continue;
                         let newAttr = translatePermissionChoice(v);
                         if (!newAttr && inSwarmEl && Object.prototype.hasOwnProperty.call(SCOPED_SWARM_MAP, t)) {
                             newAttr = SCOPED_SWARM_MAP[t][USE_TW ? 1 : 0];

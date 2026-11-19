@@ -325,6 +325,16 @@ function recipeHash() {
             }
         }
     }
+    const active = autoUpdater && typeof autoUpdater.readActiveTranslation === 'function'
+        ? autoUpdater.readActiveTranslation(DIR) : null;
+    if (active) {
+        files.push(path.join('.watcher-state', 'active_translation.json'));
+        for (const folder of ['dicts', 'dicts_tw']) {
+            for (const name of fs.readdirSync(path.join(active.folder, folder)).filter(x => x.endsWith('.json')).sort()) {
+                files.push(path.relative(DIR, path.join(active.folder, folder, name)));
+            }
+        }
+    }
     const hash = crypto.createHash('sha256');
     for (const file of files) {
         const fullPath = path.join(DIR, file);
@@ -398,12 +408,21 @@ function notifyMacUser(title, message) {
     } catch {}
 }
 
-function safeReplaceFile(src, dst, mode, uid, gid) {
+function safeReplaceFile(src, dst, mode, uid, gid, { atomicRequired = false } = {}) {
     stripQuarantine(src);
     stripQuarantine(dst);
     try {
         fs.renameSync(src, dst);
     } catch (error) {
+        // The live ASAR must never fall back to an in-place copy/truncate.
+        // A crash or ENOSPC during those operations could corrupt the
+        // installed application without leaving a recoverable archive.
+        if (atomicRequired) {
+            const denied = new Error('無法以原子置換更新 ' + path.basename(dst) +
+                '，保留現有檔案；需人工檢查寫入權限或磁碟空間。', { cause: error });
+            denied.code = error.code;
+            throw denied;
+        }
         if (error.code === 'EPERM' || error.code === 'EXDEV' || error.code === 'EACCES') {
             let replaced = false;
             // 1. Try copyFileSync
@@ -458,6 +477,114 @@ function safeReplaceFile(src, dst, mode, uid, gid) {
     }
 }
 
+function fsyncFile(file) {
+    if (process.platform === 'win32') {
+        try {
+            const fd = fs.openSync(file, 'r+');
+            try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+        } catch {}
+        return;
+    }
+    const fd = fs.openSync(file, 'r');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
+function fsyncDirectory(dir) {
+    // Win32 ReplaceFileW supplies its own replacement semantics and directory
+    // handles cannot be opened with Node's normal read mode on Windows.
+    if (process.platform === 'win32') return;
+    const fd = fs.openSync(dir, 'r');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
+// Replace the live archive AND retain the exact displaced archive. Merely
+// hashing before fs.renameSync has a TOCTOU hole: ShipIt can replace the
+// destination between the hash check and rename. Never fall back to a blind
+// rename/copy of app.asar when native exchange is unavailable.
+function exchangeAsar(candidate, live, previousPath) {
+    ensureRegularTarget(candidate);
+    ensureRegularTarget(live);
+    if (fs.existsSync(previousPath)) throw new Error('原子置換的前版保留路徑已存在。');
+    if (fs.statSync(candidate).dev !== fs.statSync(live).dev) {
+        throw new Error('app.asar 原子置換要求同一個檔案系統。');
+    }
+    if (process.platform === 'win32') {
+        execFileSync('powershell.exe', [
+            '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+            '-File', path.join(DIR, 'scripts', 'atomic_asar_replace.ps1'),
+            '-Replacement', candidate, '-Live', live, '-Previous', previousPath
+        ], { stdio: 'pipe', timeout: 30000 });
+        if (!fs.existsSync(previousPath)) throw new Error('ReplaceFileW 未保留原本的 app.asar。');
+        return previousPath;
+    }
+    if (process.platform === 'darwin' || process.platform === 'linux') {
+        execFileSync(process.platform === 'darwin' ? '/usr/bin/ruby' : 'ruby', [
+            path.join(DIR, 'scripts', 'atomic_asar_exchange.rb'), candidate, live
+        ], { stdio: 'pipe', timeout: 30000 });
+        return candidate; // RENAME_SWAP / RENAME_EXCHANGE retains displaced bytes here.
+    }
+    throw new Error('本平台沒有已驗證的 app.asar 原子交換能力，拒絕覆寫。');
+}
+
+// A single atomic exchange retains the overwritten bytes for forensic
+// verification. If ShipIt swapped in newer bytes just before the exchange,
+// exchange them BACK rather than discarding them. Any unresolved version is
+// kept in a recovery file and the operation fails closed.
+function exchangeCheckedAsar(candidate, live, previousPath, expectedHash, replacementHash,
+    exchangeFn = exchangeAsar) {
+    if (digest(fs.readFileSync(live)) !== expectedHash) {
+        throw new Error('原子交換前官方 app.asar 已更新，取消本輪套用。');
+    }
+    let displaced;
+    try {
+        displaced = exchangeFn(candidate, live, previousPath);
+    } catch (error) {
+        // A native API may report failure after modifying one or more paths,
+        // especially on Windows. Do not delete the only possible recovery
+        // bytes if the target or backup suggests a partial replacement.
+        let changed = false;
+        try { changed = digest(fs.readFileSync(live)) === replacementHash; } catch {}
+        if (changed || fs.existsSync(previousPath)) {
+            error.concurrentRecovery = fs.existsSync(previousPath) ? previousPath : candidate;
+        }
+        throw error;
+    }
+    let priorHash;
+    try { priorHash = digest(fs.readFileSync(displaced)); }
+    catch (cause) {
+        const error = new Error('原子交換後無法驗證被替換的官方 ASAR，保留候選目錄。', { cause });
+        error.concurrentRecovery = displaced;
+        throw error;
+    }
+    if (priorHash === expectedHash) return { displaced, changed: true };
+
+    let recoverPath = displaced;
+    // We did exchange successfully, so preserve all displaced files even if
+    // a subsequent official update makes restoring immediately impossible.
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const liveHash = digest(fs.readFileSync(live));
+        if (liveHash !== replacementHash) break; // Another writer already replaced live.
+        const undoPrevious = path.join(path.dirname(previousPath),
+            'concurrent-' + process.pid + '-' + attempt + '.asar');
+        try {
+            recoverPath = exchangeFn(recoverPath, live, undoPrevious);
+        } catch (cause) {
+            const error = new Error('官方 ASAR 競爭時自動回復失敗，已保留官方原檔供人工復原。', { cause });
+            error.concurrentRecovery = recoverPath;
+            throw error;
+        }
+        priorHash = digest(fs.readFileSync(recoverPath));
+        if (priorHash === replacementHash) {
+            const error = new Error('原子置換期間官方 ASAR 已更新，已恢復較新官方檔案。');
+            error.concurrentUpdateRecovered = true;
+            throw error;
+        }
+    }
+    const error = new Error('原子置換遭遇多次官方更新；已保留被替換的原始 ASAR，須人工復原。');
+    error.concurrentRecovery = recoverPath;
+    throw error;
+}
+
 function buildArchive(stageDir) {
     execFileSync(process.execPath, [
         path.join(DIR, 'localization_engine.js'), '--tw', '--brand-title', 'english',
@@ -486,7 +613,7 @@ function signApp(appPath, sourceStat) {
 function checkAndLocalizeApp(appInfo, {
     stateDir = path.join(DIR, '.watcher-state'), build = buildArchive,
     sign = signApp, wait = waitForStableFile, recipe = recipeHash(),
-    currentVersion = getLocalPackageVersion()
+    currentVersion = getLocalPackageVersion(), exchange = exchangeAsar
 } = {}) {
     const { appPath, asarPath } = appInfo;
     ensureRegularTarget(asarPath);
@@ -504,7 +631,16 @@ function checkAndLocalizeApp(appInfo, {
         return false;
     }
     const targetMeta = localized ? extractLocalizationMeta(original) : null;
-    if (localized && targetMeta && targetMeta.version && compareVersions(targetMeta.version, currentVersion) > 0) {
+    const active = autoUpdater && typeof autoUpdater.readActiveTranslation === 'function'
+        ? autoUpdater.readActiveTranslation(DIR) : null;
+    const desiredTranslationVersion = active ? active.version : currentVersion;
+    const deployedTranslationVersion = targetMeta && (targetMeta.translationVersion || targetMeta.version);
+    const higherEngineVersion = targetMeta && targetMeta.version && compareVersions(targetMeta.version, currentVersion) > 0;
+    const externalSameVersion = targetMeta && targetMeta.version &&
+        compareVersions(targetMeta.version, currentVersion) === 0 &&
+        compareVersions(desiredTranslationVersion, deployedTranslationVersion || '') <= 0 &&
+        previous.output !== originalHash;
+    if (localized && (higherEngineVersion || externalSameVersion)) {
         try {
             const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
             fs.writeFileSync(stateTmp, JSON.stringify({
@@ -515,7 +651,7 @@ function checkAndLocalizeApp(appInfo, {
             }) + '\n');
             safeReplaceFile(stateTmp, statePath, 0o644, sourceStat.uid, sourceStat.gid);
         } catch {}
-        log(`偵測到目標 app.asar 已由較高版本 (v${targetMeta.version}) 套用，目前守護版本為 v${currentVersion}，主動略過以防反向回滾。`);
+        log(`目標 app.asar 來自外部同版或較新的引擎 (v${targetMeta.version})，主動保留以防回滾。`);
         return false;
     }
 
@@ -525,6 +661,7 @@ function checkAndLocalizeApp(appInfo, {
     let replacementDir;
     let replaced = false;
     let resultHash;
+    let retainReplacementDir = false;
     try {
         stageDir = fs.mkdtempSync(path.join(stateDir, 'stage-'));
         const stageAsar = path.join(stageDir, 'app.asar');
@@ -559,36 +696,50 @@ function checkAndLocalizeApp(appInfo, {
 
         const candidate = path.join(replacementDir, 'app.asar');
         fs.writeFileSync(candidate, result, { mode: sourceStat.mode & 0o777, flag: 'wx' });
+        fsyncFile(candidate);
         if (ROOT) {
             try { fs.chownSync(candidate, sourceStat.uid, sourceStat.gid); } catch {}
         }
         if (!localized) {
             let needBackup = true;
-            try {
-                if (fs.existsSync(asarPath + '.bak')) {
-                    const existingBak = fs.readFileSync(asarPath + '.bak');
-                    if (digest(existingBak) === originalHash) {
-                        needBackup = false;
-                    }
-                }
-            } catch {}
-            if (needBackup) {
-                try {
-                    const backup = path.join(replacementDir, 'official.bak');
-                    fs.writeFileSync(backup, original, { mode: sourceStat.mode & 0o777, flag: 'wx' });
-                    if (ROOT) {
-                        try { fs.chownSync(backup, sourceStat.uid, sourceStat.gid); } catch {}
-                    }
-                    safeReplaceFile(backup, asarPath + '.bak', sourceStat.mode, sourceStat.uid, sourceStat.gid);
-                } catch (bakErr) {
-                    log('應用程式目錄備份非致命略過：' + bakErr.message);
-                }
+            if (fs.existsSync(asarPath + '.bak')) {
+                needBackup = digest(fs.readFileSync(asarPath + '.bak')) !== originalHash;
             }
+            if (needBackup) {
+                const backup = path.join(replacementDir, 'official.bak');
+                fs.writeFileSync(backup, original, { mode: sourceStat.mode & 0o777, flag: 'wx' });
+                fsyncFile(backup);
+                if (ROOT) {
+                    try { fs.chownSync(backup, sourceStat.uid, sourceStat.gid); } catch {}
+                }
+                safeReplaceFile(backup, asarPath + '.bak', sourceStat.mode, sourceStat.uid, sourceStat.gid,
+                    { atomicRequired: true });
+            }
+            if (digest(fs.readFileSync(asarPath + '.bak')) !== originalHash) {
+                throw new Error('官方 app.asar 備份驗證失敗，拒絕修改正式檔案。');
+            }
+            fsyncFile(asarPath + '.bak');
+            fsyncDirectory(path.dirname(asarPath));
+        } else if (!fs.existsSync(asarPath + '.bak')) {
+            throw new Error('既有繁中 ASAR 缺少官方原始備份，拒絕繼續覆寫。');
         }
         if (digest(fs.readFileSync(asarPath)) !== originalHash) throw new Error('置換前官方包已更新，取消套用。');
-        safeReplaceFile(candidate, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid);
+        try {
+            exchangeCheckedAsar(candidate, asarPath, path.join(replacementDir, 'previous.asar'),
+                originalHash, resultHash, exchange);
+        } catch (swapError) {
+            if (swapError.concurrentRecovery) {
+                retainReplacementDir = true;
+                log('官方更新競爭：原始 ASAR 保留在 ' + swapError.concurrentRecovery + '，須人工核對。');
+            }
+            throw swapError;
+        }
         replaced = true;
+        fsyncDirectory(path.dirname(asarPath));
         sign(appPath, sourceStat);
+        if (digest(fs.readFileSync(asarPath)) !== resultHash) {
+            throw new Error('簽署期間官方 app.asar 已更新，保留較新檔案並取消本輪收據。');
+        }
         const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
         fs.writeFileSync(stateTmp, JSON.stringify({ recipe, output: digest(result), updatedAt: new Date().toISOString() }) + '\n');
         if (ROOT) {
@@ -609,14 +760,33 @@ function checkAndLocalizeApp(appInfo, {
                 }
                 const rollback = path.join(replacementDir || stageDir, 'rollback.asar');
                 fs.writeFileSync(rollback, original, { flag: 'wx', mode: sourceStat.mode & 0o777 });
+                fsyncFile(rollback);
                 if (ROOT) {
                     try { fs.chownSync(rollback, sourceStat.uid, sourceStat.gid); } catch {}
                 }
-                safeReplaceFile(rollback, asarPath, sourceStat.mode, sourceStat.uid, sourceStat.gid);
+                exchangeCheckedAsar(rollback, asarPath, path.join(replacementDir || stageDir, 'rollback-previous.asar'),
+                    resultHash, originalHash, exchange);
+                fsyncDirectory(path.dirname(asarPath));
                 sign(appPath, sourceStat);
                 log('套用未通過，已還原原始 app.asar。');
             } catch (rollbackError) {
-                log('還原／重新簽署失敗：' + rollbackError.message);
+                if (rollbackError.concurrentRecovery) {
+                    retainReplacementDir = true;
+                    log('回退期間官方更新競爭，保留替換前檔案：' + rollbackError.concurrentRecovery);
+                }
+                // If the rollback itself is denied, preserve the original
+                // application bytes in the private watcher state directory.
+                // Do not claim success or discard the only recovery source.
+                let recoveryPath = '';
+                try {
+                    const recoveryDir = fs.mkdtempSync(path.join(stateDir, 'recovery-'));
+                    recoveryPath = path.join(recoveryDir, 'previous-app.asar');
+                    fs.writeFileSync(recoveryPath, original, { flag: 'wx', mode: 0o600 });
+                } catch (saveError) {
+                    log('無法保留復原副本：' + saveError.message);
+                }
+                log('還原／重新簽署失敗，應用程式可能無法正常啟動：' + rollbackError.message +
+                    (recoveryPath ? '；原始檔案保留於 ' + recoveryPath : '；需要人工從有效備份恢復。'));
             }
         }
         throw error;
@@ -624,7 +794,7 @@ function checkAndLocalizeApp(appInfo, {
         if (stageDir) {
             try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch {}
         }
-        if (replacementDir) {
+        if (replacementDir && !retainReplacementDir) {
             try { fs.rmSync(replacementDir, { recursive: true, force: true }); } catch {}
         }
         release();
@@ -719,11 +889,18 @@ function installWindowsTask(options = {}) {
     const taskName = options.taskName || 'AntigravityAutoLocalize';
     const baseDir = options.baseDir || DIR;
     const workingDir = options.workingDir || path.dirname(scriptPath);
-    const runLevel = options.runLevel || (isWindowsAdmin(execSyncFn) ? 'HighestAvailable' : 'LeastPrivilege');
+    // An elevated task may execute from a user-writable project directory.
+    // Always register the background process at ordinary user privilege.
+    const runLevel = 'LeastPrivilege';
     const disableFlag = path.join(baseDir, '.disable_autowatcher');
 
     try {
         if (fs.existsSync(disableFlag)) fs.unlinkSync(disableFlag);
+    } catch {}
+    // Remove the obsolete three-mode policy after a one-time manual upgrade.
+    // Installing the watcher itself is now the sole consent decision.
+    try {
+        fs.rmSync(path.join(baseDir, '.watcher-state', 'update_policy.json'), { force: true });
     } catch {}
 
     const taskRun = buildWindowsTaskCommand(nodePath, scriptPath);
@@ -797,7 +974,7 @@ function uninstallWindowsTask(options = {}) {
     return { taskName, existed, deleted };
 }
 
-async function maybeSelfUpdateAndReapply({
+async function refreshTranslationsAndReapply({
     targetDir = DIR,
     stateDir = ensureAccessibleDir(path.join(targetDir, '.watcher-state')),
     updater = autoUpdater,
@@ -807,29 +984,43 @@ async function maybeSelfUpdateAndReapply({
             cwd: dir,
             stdio: 'inherit',
             timeout: 180000,
-            env: { ...process.env, AG_TW_NO_SELF_UPDATE: '1' }
+            env: { ...process.env, AG_TW_SKIP_TRANSLATION_CHECK: '1' }
         });
+    },
+    verifyReapplyFn = (version) => {
+        const appInfo = getAppInfo();
+        if (!appInfo) return false;
+        const archive = fs.readFileSync(appInfo.asarPath);
+        const meta = extractLocalizationMeta(archive);
+        return isLocalized(archive) && meta && meta.translationVersion === version;
     },
     updaterOptions = {}
 } = {}) {
     if (!updater || typeof updater.checkUpdate !== 'function') return { updated: false, reason: 'no_updater' };
-    if (process.env.AG_TW_NO_SELF_UPDATE === '1' || process.env.NODE_ENV === 'test') {
+    if (process.env.AG_TW_SKIP_TRANSLATION_CHECK === '1' || process.env.NODE_ENV === 'test') {
         return { updated: false, reason: 'disabled_by_env' };
     }
+    const active = updater && typeof updater.readActiveTranslation === 'function'
+        ? updater.readActiveTranslation(targetDir) : null;
+    const installedTranslationVersion = active ? active.version : currentVersion;
     const cacheFile = path.join(stateDir, 'update_check.json');
     const res = await updater.checkUpdate({
-        currentVersion,
+        currentVersion: installedTranslationVersion,
         cacheFilePath: cacheFile,
         intervalMs: 24 * 60 * 60 * 1000,
         silentNotification: true,
         ...updaterOptions
     });
+    if (res && res.error) {
+        log('檢查翻譯版本失敗，保留現有資料：' + res.error);
+        return { updated: false, reason: 'check_failed', checkResult: res };
+    }
     if (!res || !res.hasUpdate) {
         return { updated: false, reason: res && res.skipped ? 'within_interval' : 'up_to_date', checkResult: res };
     }
-    log(`發現繁中化新版本 ${res.tag} (目前: v${currentVersion})，準備下載並驗證自我更新...`);
-    if (typeof updater.selfUpdateWatcher !== 'function' || !res.release || !res.release.asset) {
-        return { updated: false, reason: 'no_self_update_asset', checkResult: res };
+    log(`新版本 ${res.tag} 已發布，檢查是否提供相容的純翻譯資料包...`);
+    if (typeof updater.installTranslationUpdate !== 'function' || !res.release) {
+        return { updated: false, reason: 'no_translation_updater', checkResult: res };
     }
     const releaseLock = acquireLock(path.join(stateDir, 'run.lock'));
     if (!releaseLock) {
@@ -837,20 +1028,87 @@ async function maybeSelfUpdateAndReapply({
     }
     let updateRes;
     try {
-        updateRes = await updater.selfUpdateWatcher({
+        updateRes = await updater.installTranslationUpdate({
             targetDir,
-            currentVersion,
+            currentEngineVersion: currentVersion,
             release: res.release,
-            cacheFilePath: cacheFile,
             ...updaterOptions
         });
     } finally {
         releaseLock();
     }
     if (updateRes && updateRes.updated) {
-        log(`守護程式已原子更新至 v${updateRes.newVersion}，正在以新版引擎重新檢查並套用繁中化...`);
-        execReapplyFn(targetDir);
-        log(`已自動更新至 v${updateRes.newVersion} 並完成繁中化套用。`);
+        log(`純翻譯資料包已更新至 v${updateRes.newVersion}，使用原有引擎重新套用繁體中文...`);
+        let reapplyExitedSuccessfully = false;
+        try {
+            execReapplyFn(targetDir);
+            reapplyExitedSuccessfully = true;
+            if (!verifyReapplyFn(updateRes.newVersion)) {
+                throw new Error('守護程序執行完畢，但 app.asar 未載入新版翻譯，不能宣稱套用成功。');
+            }
+        } catch (error) {
+            // Restoring only the pointer is not sufficient: a child can
+            // exit successfully while leaving an unexpected ASAR version.
+            const rollbackLock = acquireLock(path.join(stateDir, 'run.lock'));
+            let restoredPointer = false;
+            if (rollbackLock) {
+                try {
+                    const statePath = path.join(stateDir, 'active_translation.json');
+                    let deployed = null;
+                    try { deployed = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch {}
+                    if (deployed && deployed.version === updateRes.newVersion) {
+                        if (active) {
+                            const temp = path.join(stateDir, `active_translation.rollback-${process.pid}-${Date.now()}.tmp`);
+                            fs.writeFileSync(temp, JSON.stringify({ version: active.version }) + '\n', { flag: 'wx', mode: 0o600 });
+                            try { fs.renameSync(temp, statePath); }
+                            catch (err) { try { fs.rmSync(temp, { force: true }); } catch {} throw err; }
+                        } else {
+                            fs.unlinkSync(statePath);
+                        }
+                        restoredPointer = true;
+                        log('套用新版翻譯失敗，已恢復前一版翻譯指標。');
+                    }
+                } catch (rollbackError) {
+                    log('新版翻譯套用失敗，而且翻譯指標回復失敗：' + rollbackError.message);
+                } finally {
+                    rollbackLock();
+                }
+            } else {
+                log('新版翻譯套用失敗，但無法取得回復鎖定，下一輪須檢查版本狀態。');
+            }
+            if (restoredPointer) {
+                const previousVersion = active ? active.version : currentVersion;
+                let previousAsarVerified = false;
+                try { previousAsarVerified = Boolean(verifyReapplyFn(previousVersion)); }
+                catch (verifyError) {
+                    log('無法核對 ASAR 的舊翻譯版本：' + verifyError.message);
+                }
+                // Only retry an apparently successful child that failed the
+                // *postcondition*. If the child itself threw, its own atomic
+                // ASAR rollback should have run; avoid a second blind write.
+                if (!previousAsarVerified && reapplyExitedSuccessfully) {
+                    try {
+                        log('ASAR 與已回復的翻譯指標不一致，嘗試以原有引擎重套舊版翻譯...');
+                        execReapplyFn(targetDir);
+                        previousAsarVerified = Boolean(verifyReapplyFn(previousVersion));
+                    } catch (recoveryError) {
+                        log('重套舊版翻譯失敗：' + recoveryError.message);
+                    }
+                }
+                if (previousAsarVerified) {
+                    log('已核對 ASAR 與舊翻譯版本一致。');
+                } else {
+                    log('警告：僅恢復翻譯指標，尚未證實 app.asar 已恢復；需人工核對或等待下一輪修復。');
+                }
+            }
+            throw error;
+        }
+        log(`已完成 v${updateRes.newVersion} 翻譯資料套用；沒有更新程式功能。`);
+    } else if (updateRes && updateRes.reason === 'no_translation_only_asset') {
+        log(`新版本 ${res.tag} 沒有獨立翻譯包，請手動更新程式功能。`);
+        if (typeof updater.notifyMac === 'function') updater.notifyMac('Antigravity 繁體中文化更新', `新版本 ${res.tag} 已發布，程式功能須手動安裝。`);
+    } else if (updateRes && updateRes.reason === 'translation_up_to_date') {
+        log('目前翻譯資料已是相容的最新版本，略過。');
     }
     return updateRes;
 }
@@ -859,6 +1117,9 @@ async function main() {
     const args = process.argv.slice(2);
     if (args.includes('--install-windows-task')) {
         try {
+            if (args.some(arg => arg.startsWith('--update-policy'))) {
+                throw new Error('守護程序已統一自動更新翻譯，無須更新模式參數。');
+            }
             installWindowsTask();
         } catch (err) {
             console.error('[錯誤] 註冊 Windows 背景排程失敗：' + (err.message || err));
@@ -883,16 +1144,19 @@ async function main() {
         if (!appInfo) { log('尚未找到 Antigravity，等待下次排程。'); return; }
         checkAndLocalizeApp(appInfo);
 
-        // 輕量非同步遠端版本檢測與原子自我更新（預設每 24 小時檢查一次，不阻斷主套用流程）
-        await maybeSelfUpdateAndReapply().catch(err => {
-            log('背景自我更新檢查略過：' + (err && err.message ? err.message : err));
+        // 安裝守護即同意翻譯資料自動更新；程式碼升級仍由使用者手動處理。
+        await refreshTranslationsAndReapply().catch(err => {
+            log('翻譯資料更新失敗，保留目前版本：' + (err && err.message ? err.message : err));
+            // Do not report scheduler success after a failed translation
+            // install/reapply. The next scheduled run still retries safely.
+            process.exitCode = 1;
         });
     } catch (error) {
         log('自動繁中化失敗，稍後重試：' + (error.stack || error.message));
         if (IS_MAC && (error.code === 'EPERM' || (error.message && error.message.includes('EPERM')))) {
             notifyMacUser('Antigravity 繁中化', '因 macOS 系統權限或 App 管理限制，自動覆寫受阻；請在專案中執行「點兩下安裝繁體中文」或於系統設定授權。');
         } else if (process.platform === 'win32' && (error.code === 'EPERM' || error.code === 'EACCES' || (error.message && (error.message.includes('EPERM') || error.message.includes('EACCES'))))) {
-            log('因 Windows 資料夾權限限制（例如 Program Files），自動覆寫受阻；請改用「以系統管理員身分執行」重新安裝守護。');
+            log('因 Windows 資料夾權限限制（例如 Program Files），最低權限排程無法自動覆寫。請依安裝手冊以管理員身分手動重新套用中文化；重新安裝守護不會提高背景排程權限。');
         }
         process.exitCode = 1;
     }
@@ -901,6 +1165,8 @@ async function main() {
 if (require.main === module) main();
 module.exports = {
     checkAndLocalizeApp,
+    exchangeAsar,
+    exchangeCheckedAsar,
     waitForStableFile,
     acquireLock,
     isLocalized,
@@ -918,5 +1184,5 @@ module.exports = {
     compareVersions,
     extractLocalizationMeta,
     getLocalPackageVersion,
-    maybeSelfUpdateAndReapply
+    refreshTranslationsAndReapply
 };

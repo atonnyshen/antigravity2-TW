@@ -735,6 +735,16 @@ test('slash command names in Mentions, FastPick, and split nodes stay untranslat
     assert.equal(attrHost.getAttribute('title'), '/goal');
     assert.equal(attrHost.getAttribute('aria-label'), '/swarm');
     assert.equal(attrHost.getAttribute('aria-description'), '設定');
+
+    // Adversarial case: an accessible name is itself an unprefixed Slash label.
+    // Protect the attributes as well as the command text.
+    const nested = makeMiniEl('div', { role: 'option' }, [
+        makeMiniEl('span', { title: 'Plan', 'aria-label': 'Plan' }, [makeMiniText('/plan')])
+    ]);
+    translateNode(nested);
+    assert.equal(nested.childNodes[0].textContent, '/plan');
+    assert.equal(nested.childNodes[0].getAttribute('title'), 'Plan');
+    assert.equal(nested.childNodes[0].getAttribute('aria-label'), 'Plan');
 });
 
 test('L0 Taiwan prose fixes in preload_runtime, main_patches, and multi-partition cleanElectronCache', t => {

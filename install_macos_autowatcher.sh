@@ -11,6 +11,7 @@ for arg in "$@"; do
     case "$arg" in
         --user) MODE="user" ;;
         --daemon) MODE="daemon" ;;
+        *) echo "不支援的安裝參數：$arg。守護程序預設自動更新翻譯資料。" >&2; exit 1 ;;
     esac
 done
 
@@ -88,8 +89,6 @@ else
     # auto mode：若已存在系統級 LaunchDaemon，預設沿用並升級該服務，避免新舊雙服務同時覆寫 app.asar
     if [ "$EUID" -eq 0 ] || [ -f "$SYSTEM_PLIST" ]; then
         IS_DAEMON=1
-    elif sudo -n true 2>/dev/null; then
-        IS_DAEMON=1
     else
         TARGET_ASAR="/Applications/Antigravity.app/Contents/Resources/app.asar"
         if [ -w "/Applications/Antigravity.app" ] || [ -w "$TARGET_ASAR" ] || [ ! -e "/Applications/Antigravity.app" ]; then
@@ -140,6 +139,7 @@ if [ "$IS_DAEMON" -eq 1 ]; then
     done
     /usr/sbin/chown -R root:wheel "$RUNTIME"
     /bin/chmod -R go-w "$RUNTIME"
+    /usr/bin/install -d -o root -g wheel -m 700 "$RUNTIME/.watcher-state"
     
     PLIST_TMP="$(mktemp "$BASE/launchd.XXXXXX")"
     cat > "$PLIST_TMP" <<PLIST_EOF
@@ -222,6 +222,8 @@ else
             cp -R "$DIR/$folder" "$RUNTIME/$folder"
         fi
     done
+    mkdir -p "$RUNTIME/.watcher-state"
+    rm -f "$RUNTIME/.watcher-state/update_policy.json"
     
     PLIST_TMP="$(mktemp "$BASE/launchd.XXXXXX")"
     cat > "$PLIST_TMP" <<PLIST_EOF
