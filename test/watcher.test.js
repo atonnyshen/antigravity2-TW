@@ -27,6 +27,10 @@ function fixture(t) {
         read: () => fs.readFileSync(asarPath, 'utf8'), builds: () => builds };
 }
 
+function recoveryReceipt(f) {
+    return path.join(f.stateDir, digest(f.appInfo.appPath) + '.pending-recovery.json');
+}
+
 test('native ASAR exchange retains byte-identical displaced file on this platform', t => {
     const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-exchange-native-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -114,6 +118,7 @@ test('failed atomic rollback preserves original ASAR in recovery directory and r
     const recoveryDirs = fs.readdirSync(f.stateDir).filter(name => name.startsWith('recovery-'));
     assert.equal(recoveryDirs.length, 1);
     assert.equal(fs.readFileSync(path.join(f.stateDir, recoveryDirs[0], 'previous-app.asar'), 'utf8'), 'official-v1');
+    assert.equal(JSON.parse(fs.readFileSync(recoveryReceipt(f), 'utf8')).recoverHash, digest('official-v1'));
     assert.equal(fs.existsSync(path.join(f.stateDir, digest(f.appInfo.appPath) + '.json')), false);
 });
 
@@ -271,7 +276,141 @@ test('failed atomic recovery retains ShipIt newest official ASAR for manual rest
         : path.join(f.appInfo.appPath, retained, 'app.asar');
     assert.equal(fs.readFileSync(retainedFile, 'utf8'),
         'official-v2-from-ShipIt');
-    assert.equal(fs.readdirSync(f.stateDir).filter(n => n.endsWith('.json')).length, 0);
+    const record = JSON.parse(fs.readFileSync(recoveryReceipt(f), 'utf8'));
+    assert.equal(record.expectedLiveHash, digest('official-v1\n命令選擇區'));
+    assert.equal(record.recoverHash, digest('official-v2-from-ShipIt'));
+});
+
+test('next scheduled run restores preserved ShipIt archive and reapplies localization', t => {
+    const f = fixture(t);
+    let exchanges = 0;
+    assert.throws(() => f.run({ exchange(source, destination, previous) {
+        if (++exchanges === 1) fs.writeFileSync(destination, 'official-v2-from-ShipIt');
+        if (exchanges === 2) throw new Error('temporary recovery permission denial');
+        return exchangeAsar(source, destination, previous);
+    } }), /自動回復失敗/);
+    assert.ok(fs.existsSync(recoveryReceipt(f)));
+    assert.equal(f.read(), 'official-v1\n命令選擇區');
+    assert.equal(f.run(), true);
+    assert.equal(f.read(), 'official-v2-from-ShipIt\n命令選擇區');
+    assert.equal(fs.readFileSync(f.asarPath + '.bak', 'utf8'), 'official-v2-from-ShipIt');
+    assert.equal(fs.existsSync(recoveryReceipt(f)), false);
+});
+
+test('scheduled recovery retries after permission denial without rewriting the live ASAR', t => {
+    const f = fixture(t);
+    let exchanges = 0;
+    assert.throws(() => f.run({
+        sign() { throw Error('signing failed'); },
+        exchange(source, destination, previous) {
+            if (++exchanges === 2) throw Error('rollback failed');
+            return exchangeAsar(source, destination, previous);
+        }
+    }), /signing failed/);
+    const pending = recoveryReceipt(f);
+    assert.ok(fs.existsSync(pending));
+    const live = f.read();
+    const builds = f.builds();
+    assert.throws(() => f.run({ exchange() {
+        const error = new Error('still denied');
+        error.code = 'EPERM';
+        throw error;
+    } }), /still denied/);
+    assert.equal(f.read(), live);
+    assert.equal(f.builds(), builds);
+    assert.ok(fs.existsSync(pending));
+    assert.equal(f.run(), true);
+    assert.equal(fs.existsSync(pending), false);
+    assert.equal(f.read(), 'official-v1\n命令選擇區');
+});
+
+test('scheduled recovery refuses changed live ASAR and retains recovery evidence', t => {
+    const f = fixture(t);
+    let exchanges = 0;
+    assert.throws(() => f.run({ exchange(source, destination, previous) {
+        if (++exchanges === 1) fs.writeFileSync(destination, 'official-v2-from-ShipIt');
+        if (exchanges === 2) throw Error('recovery blocked');
+        return exchangeAsar(source, destination, previous);
+    } }), /自動回復失敗/);
+    const pending = recoveryReceipt(f);
+    const builds = f.builds();
+    fs.writeFileSync(f.asarPath, 'official-v3-from-ShipIt');
+    assert.throws(() => f.run(), /正式 ASAR 已被其他程序更新/);
+    assert.equal(f.read(), 'official-v3-from-ShipIt');
+    assert.equal(f.builds(), builds);
+    assert.ok(fs.existsSync(pending));
+});
+
+test('scheduled recovery refuses tampered recovery bytes', t => {
+    const f = fixture(t);
+    let exchanges = 0;
+    assert.throws(() => f.run({ exchange(source, destination, previous) {
+        if (++exchanges === 1) fs.writeFileSync(destination, 'official-v2-from-ShipIt');
+        if (exchanges === 2) throw Error('recovery blocked');
+        return exchangeAsar(source, destination, previous);
+    } }), /自動回復失敗/);
+    const record = JSON.parse(fs.readFileSync(recoveryReceipt(f), 'utf8'));
+    fs.writeFileSync(path.join(f.stateDir, record.recoveryDir, 'previous-app.asar'), 'corrupted');
+    const builds = f.builds();
+    assert.throws(() => f.run(), /復原檔與原始 SHA-256 不符/);
+    assert.equal(f.builds(), builds);
+    assert.ok(fs.existsSync(recoveryReceipt(f)));
+});
+
+test('scheduled recovery holds when another ShipIt update cannot be restored', t => {
+    const f = fixture(t);
+    let exchanges = 0;
+    assert.throws(() => f.run({ exchange(source, destination, previous) {
+        if (++exchanges === 1) fs.writeFileSync(destination, 'official-v2-from-ShipIt');
+        if (exchanges === 2) throw Error('initial recovery blocked');
+        return exchangeAsar(source, destination, previous);
+    } }), /自動回復失敗/);
+    let restoreCalls = 0;
+    assert.throws(() => f.run({ exchange(source, destination, previous) {
+        if (++restoreCalls === 1) fs.writeFileSync(destination, 'official-v3-from-ShipIt');
+        if (restoreCalls === 2) throw Error('newer recovery blocked');
+        return exchangeAsar(source, destination, previous);
+    } }), /自動回復失敗/);
+    assert.equal(restoreCalls, 2);
+    assert.equal(JSON.parse(fs.readFileSync(recoveryReceipt(f), 'utf8')).manualRequired, true);
+    const live = f.read();
+    const builds = f.builds();
+    assert.throws(() => f.run(), /無法確認最新版/);
+    assert.equal(f.read(), live);
+    assert.equal(f.builds(), builds);
+});
+
+test('scheduled recovery recognizes an already restored official ASAR', t => {
+    const f = fixture(t);
+    let exchanges = 0;
+    assert.throws(() => f.run({ exchange(source, destination, previous) {
+        if (++exchanges === 1) fs.writeFileSync(destination, 'official-v2-from-ShipIt');
+        if (exchanges === 2) throw Error('recovery blocked');
+        return exchangeAsar(source, destination, previous);
+    } }), /自動回復失敗/);
+    const record = JSON.parse(fs.readFileSync(recoveryReceipt(f), 'utf8'));
+    const saved = fs.readFileSync(path.join(f.stateDir, record.recoveryDir, 'previous-app.asar'));
+    fs.writeFileSync(f.asarPath, saved);
+    assert.equal(f.run(), true);
+    assert.equal(fs.existsSync(recoveryReceipt(f)), false);
+    assert.equal(f.read(), 'official-v2-from-ShipIt\n命令選擇區');
+});
+
+test('scheduled recovery skips a concurrent watcher and keeps the pending receipt', t => {
+    const f = fixture(t);
+    let exchanges = 0;
+    assert.throws(() => f.run({ exchange(source, destination, previous) {
+        if (++exchanges === 1) fs.writeFileSync(destination, 'official-v2-from-ShipIt');
+        if (exchanges === 2) throw Error('recovery blocked');
+        return exchangeAsar(source, destination, previous);
+    } }), /自動回復失敗/);
+    const release = acquireLock(path.join(f.stateDir, 'run.lock'));
+    try {
+        assert.equal(f.run(), false);
+        assert.ok(fs.existsSync(recoveryReceipt(f)));
+    } finally {
+        release();
+    }
 });
 
 test('ShipIt replace during signing rollback preserves current official ASAR', t => {

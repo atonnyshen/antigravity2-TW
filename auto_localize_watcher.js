@@ -580,6 +580,126 @@ function exchangeCheckedAsar(candidate, live, previousPath, expectedHash, replac
     throw error;
 }
 
+// Keep one verifiable recovery target per installed app. The scheduled watcher
+// reads this receipt before considering another localization attempt.
+function pendingAsarRecoveryPath(stateDir, appPath) {
+    return path.join(stateDir, digest(appPath) + '.pending-recovery.json');
+}
+
+function writeAsarRecoveryReceipt(stateDir, receipt, record) {
+    const temp = receipt + '.' + process.pid + '.' + crypto.randomBytes(5).toString('hex') + '.tmp';
+    try {
+        fs.writeFileSync(temp, JSON.stringify(record) + '\n', { flag: 'wx', mode: 0o600 });
+        fsyncFile(temp);
+        fs.renameSync(temp, receipt);
+        fsyncDirectory(stateDir);
+    } finally {
+        try { fs.rmSync(temp, { force: true }); } catch {}
+    }
+}
+
+function savePendingAsarRecovery(appInfo, stateDir, expectedLiveHash, recoveryBytes) {
+    const { appPath, asarPath } = appInfo;
+    if (digest(fs.readFileSync(asarPath)) !== expectedLiveHash) return null;
+    const receipt = pendingAsarRecoveryPath(stateDir, appPath);
+    if (fs.existsSync(receipt)) throw new Error('已有待恢復 ASAR 紀錄，停止覆寫復原依據。');
+    const recoveryDir = fs.mkdtempSync(path.join(stateDir, 'recovery-'));
+    const saved = path.join(recoveryDir, 'previous-app.asar');
+    const bytes = Buffer.isBuffer(recoveryBytes) ? recoveryBytes : fs.readFileSync(recoveryBytes);
+    if (!bytes.length) throw new Error('復原檔是空檔案。');
+    fs.writeFileSync(saved, bytes, { flag: 'wx', mode: 0o600 });
+    fsyncFile(saved);
+    if (digest(fs.readFileSync(saved)) !== digest(bytes)) {
+        throw new Error('ASAR 復原副本校驗失敗。');
+    }
+    fsyncDirectory(recoveryDir);
+    const record = {
+        schema: 1, appPath, asarPath, expectedLiveHash,
+        recoverHash: digest(bytes), recoveryDir: path.basename(recoveryDir)
+    };
+    writeAsarRecoveryReceipt(stateDir, receipt, record);
+    log('已保存下次排程的 ASAR 復原紀錄：' + receipt);
+    return saved;
+}
+
+function resumePendingAsarRecovery(appInfo, stateDir, exchange = exchangeAsar) {
+    const { appPath, asarPath } = appInfo;
+    const receipt = pendingAsarRecoveryPath(stateDir, appPath);
+    if (!fs.existsSync(receipt)) return false;
+    const release = acquireLock(path.join(stateDir, 'run.lock'));
+    if (!release) return 'locked';
+    let stageDir;
+    let retainStage = false;
+    try {
+        ensureRegularTarget(receipt);
+        const record = JSON.parse(fs.readFileSync(receipt, 'utf8'));
+        if (record.schema !== 1 || record.appPath !== appPath || record.asarPath !== asarPath ||
+            !/^[a-f0-9]{64}$/.test(record.expectedLiveHash || '') ||
+            !/^[a-f0-9]{64}$/.test(record.recoverHash || '') ||
+            !/^recovery-[A-Za-z0-9_-]+$/.test(record.recoveryDir || '')) {
+            throw new Error('ASAR 復原紀錄內容不正確，停止自動寫入。');
+        }
+        if (record.manualRequired) {
+            throw new Error('ASAR 復原期間發生多次官方更新，無法確認最新版，需要人工核對。');
+        }
+        const recoveryDir = path.join(stateDir, record.recoveryDir);
+        if (fs.lstatSync(recoveryDir).isSymbolicLink() ||
+            !fs.lstatSync(recoveryDir).isDirectory() ||
+            fs.realpathSync(recoveryDir) !== path.resolve(recoveryDir)) {
+            throw new Error('ASAR 復原目錄不是安全的一般目錄。');
+        }
+        const saved = path.join(recoveryDir, 'previous-app.asar');
+        ensureRegularTarget(saved);
+        const bytes = fs.readFileSync(saved);
+        if (digest(bytes) !== record.recoverHash) {
+            throw new Error('ASAR 復原檔與原始 SHA-256 不符，需要人工核對。');
+        }
+        const liveHash = digest(fs.readFileSync(asarPath));
+        if (liveHash !== record.recoverHash) {
+            if (liveHash !== record.expectedLiveHash) {
+                throw new Error('正式 ASAR 已被其他程序更新，停止套用舊復原檔，需要人工核對。');
+            }
+            const sourceStat = fs.statSync(asarPath);
+            // The replacement must be on the same filesystem as the live ASAR.
+            stageDir = fs.mkdtempSync(path.join(path.dirname(asarPath), '.autolocalize-'));
+            const candidate = path.join(stageDir, 'app.asar');
+            fs.writeFileSync(candidate, bytes, { flag: 'wx', mode: sourceStat.mode & 0o777 });
+            fsyncFile(candidate);
+            if (ROOT) {
+                try { fs.chownSync(candidate, sourceStat.uid, sourceStat.gid); } catch {}
+            }
+            try {
+                exchangeCheckedAsar(candidate, asarPath, path.join(stageDir, 'previous.asar'),
+                    record.expectedLiveHash, record.recoverHash, exchange);
+                fsyncDirectory(path.dirname(asarPath));
+            } catch (error) {
+                retainStage = Boolean(error.concurrentRecovery);
+                if (retainStage) {
+                    log('ASAR 復原期間發生另一筆更新，保留檔案：' + error.concurrentRecovery);
+                    // The older receipt may refer to an ASAR superseded by
+                    // this newer exchange. Do not automatically restore it.
+                    writeAsarRecoveryReceipt(stateDir, receipt, { ...record, manualRequired: true });
+                }
+                throw error;
+            }
+            if (digest(fs.readFileSync(asarPath)) !== record.recoverHash) {
+                throw new Error('ASAR 復原後驗證失敗，保留復原紀錄。');
+            }
+        }
+        fs.unlinkSync(receipt);
+        fsyncDirectory(stateDir);
+        try { fs.rmSync(recoveryDir, { recursive: true, force: true }); }
+        catch (cleanupError) { log('已完成復原，舊復原副本待清理：' + cleanupError.message); }
+        log('ASAR 已恢復至已驗證的版本，重新執行繁體中文套用。');
+        return true;
+    } finally {
+        if (stageDir && !retainStage) {
+            try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch {}
+        }
+        release();
+    }
+}
+
 function buildArchive(stageDir) {
     execFileSync(process.execPath, [
         path.join(DIR, 'localization_engine.js'), '--tw', '--brand-title', 'english',
@@ -613,6 +733,14 @@ function checkAndLocalizeApp(appInfo, {
     const { appPath, asarPath } = appInfo;
     ensureRegularTarget(asarPath);
     wait(asarPath);
+    const currentStat = fs.statSync(asarPath);
+    ensureAccessibleDir(stateDir, currentStat.uid, currentStat.gid);
+    const resumed = resumePendingAsarRecovery(appInfo, stateDir, exchange);
+    if (resumed === 'locked') {
+        log('另有守護程序正在恢復 ASAR，略過本輪。');
+        return false;
+    }
+    if (resumed) wait(asarPath);
     const original = fs.readFileSync(asarPath);
     const originalHash = digest(original);
     const sourceStat = fs.statSync(asarPath);
@@ -725,7 +853,14 @@ function checkAndLocalizeApp(appInfo, {
         } catch (swapError) {
             if (swapError.concurrentRecovery) {
                 retainReplacementDir = true;
-                log('官方更新競爭：原始 ASAR 保留在 ' + swapError.concurrentRecovery + '，須人工核對。');
+                log('官方更新競爭：原始 ASAR 保留在 ' + swapError.concurrentRecovery + '。');
+                try {
+                    if (!savePendingAsarRecovery(appInfo, stateDir, resultHash, swapError.concurrentRecovery)) {
+                        log('正式 ASAR 已另行更新，保留復原檔供核對。');
+                    }
+                } catch (saveError) {
+                    log('無法建立自動復原紀錄，需人工處理：' + saveError.message);
+                }
             }
             throw swapError;
         }
@@ -773,15 +908,28 @@ function checkAndLocalizeApp(appInfo, {
                 // application bytes in the private watcher state directory.
                 // Do not claim success or discard the only recovery source.
                 let recoveryPath = '';
+                let scheduledRecovery = false;
                 try {
-                    const recoveryDir = fs.mkdtempSync(path.join(stateDir, 'recovery-'));
-                    recoveryPath = path.join(recoveryDir, 'previous-app.asar');
-                    fs.writeFileSync(recoveryPath, original, { flag: 'wx', mode: 0o600 });
+                    const recoverSource = rollbackError.concurrentRecovery || original;
+                    recoveryPath = savePendingAsarRecovery(appInfo, stateDir, resultHash, recoverSource) || '';
+                    scheduledRecovery = Boolean(recoveryPath);
                 } catch (saveError) {
-                    log('無法保留復原副本：' + saveError.message);
+                    log('無法建立自動復原紀錄：' + saveError.message);
+                    // Retain an original copy when an unexpected failure
+                    // prevents the scheduled recovery receipt from being written.
+                    try {
+                        const recoveryDir = fs.mkdtempSync(path.join(stateDir, 'recovery-'));
+                        recoveryPath = path.join(recoveryDir, 'previous-app.asar');
+                        fs.writeFileSync(recoveryPath, original, { flag: 'wx', mode: 0o600 });
+                        fsyncFile(recoveryPath);
+                    } catch (fallbackError) {
+                        log('無法保留復原副本：' + fallbackError.message);
+                    }
                 }
                 log('還原／重新簽署失敗，應用程式可能無法正常啟動：' + rollbackError.message +
-                    (recoveryPath ? '；原始檔案保留於 ' + recoveryPath : '；需要人工從有效備份恢復。'));
+                    (recoveryPath ? '；原始檔案保留於 ' + recoveryPath +
+                        (scheduledRecovery ? '；下次排程將先核對並嘗試恢復。' : '；需要人工處理。') :
+                        '；需要人工從有效備份恢復。'));
             }
         }
         throw error;
@@ -1160,6 +1308,7 @@ async function main() {
 if (require.main === module) main();
 module.exports = {
     checkAndLocalizeApp,
+    resumePendingAsarRecovery,
     exchangeAsar,
     exchangeCheckedAsar,
     waitForStableFile,
