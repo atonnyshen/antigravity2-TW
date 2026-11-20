@@ -94,3 +94,4 @@ gh release edit vX.Y.Z --draft=false
 3. 未能通過三平台（Ubuntu / macOS / Windows）GitHub Actions 回歸測試。
 4. Git 標籤對應的 commit 與受測 commit 不一致。
 5. 說明文件仍引導使用者手動下載純翻譯包作為完整安裝器。
+6. Markdown 文件存在 GFM 語法解析破版（例如全形標點緊貼粗體標記導致 GitHub 網頁端裸露 `**` 星號）。

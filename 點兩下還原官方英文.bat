@@ -22,6 +22,10 @@ exit /b 1
 node -e "const v=process.versions.node.split('.').map(Number); if(v[0]<22||(v[0]===22&&v[1]<12)){console.error('[ERROR] Node.js >= 22.12.0 required. Current:',process.versions.node); process.exit(1);}"
 if errorlevel 1 goto :failed
 
+echo [1/2] Checking and uninstalling background watcher task if present...
+node auto_localize_watcher.js --uninstall-windows-task
+echo.
+echo [2/2] Restoring official original English app.asar...
 node localization_engine.js --tw --huifu
 if errorlevel 1 goto :failed
 
