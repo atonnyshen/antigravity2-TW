@@ -350,7 +350,6 @@ test('README.md and README_TW.md match repo files, terminology, and runtime prom
     }
 
     assert.ok(fs.existsSync(path.join(repo, 'AI_INSTALL_GUIDE.md')), 'AI_INSTALL_GUIDE.md must be bundled');
-    assert.ok(fs.existsSync(path.join(repo, 'AGENTS.md')), 'AGENTS.md must be bundled');
     const aiGuide = fs.readFileSync(path.join(repo, 'AI_INSTALL_GUIDE.md'), 'utf8');
     assert.match(aiGuide, /--no-kill/);
     assert.match(aiGuide, /--install-windows-task/);

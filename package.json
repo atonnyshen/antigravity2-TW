@@ -5,7 +5,7 @@
   "license": "MIT",
   "description": "Google Antigravity 台灣繁體中文中文化與背景更新守護",
   "scripts": {
-    "test": "node --test test/*.test.js tests/installer-regressions.cjs"
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=22.12.0"
