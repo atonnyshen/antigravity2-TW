@@ -10,7 +10,9 @@ node_modules/
 codex/
 .codegraph/
 
-# Proxy configuration & injection modules (local only)
+# Local IDE Rules & Personal Configuration
+.cursorrules
+.clinerules
 proxy_config/
 
 # Runtime / Build artifacts
