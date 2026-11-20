@@ -17,6 +17,13 @@
   - 針對舊版 v3.7.1 任意 ZIP 選取漏洞，建立 Release Assets 唯一性規範：有且僅有單一純翻譯包，嚴禁夾帶可執行程式 ZIP。
   - 完整程式升級一律經由 GitHub 自動生成之 Source code (zip) 取得。
   - 實作 `scripts/check_release_assets.js` 與 GitHub Actions 預檢工作流程，發布前嚴格驗證資產唯一性、SHA-256 與引擎相容性。
+- 一鍵還原自動卸載守護聯動：
+  - 雙平台（macOS `點兩下還原官方英文.command` 與 Windows `點兩下還原官方英文.bat`）在還原官方英文前，自動偵測並停止/卸載背景更新守護排程，隨後安全還原 `app.asar`，一鍵乾淨復原，避免 5 分鐘內自動重新繁中化。
+- 開源專案資產治理與體例規範：
+  - 補齊標準 MIT License 授權標示。
+  - 清理內部除錯提示詞與私有代理伺服器配置（`.cursorrules`、`.clinerules`），健全 `.gitignore`。
+  - 沉澱標準 AI 助手維護規範（`AGENTS.md`）與開源發布指南（`docs/RELEASING.md`）。
+  - 修復 GitHub 網頁端 GFM 粗體語法解析問題，規範全形標點置於粗體標記外部，避免破版。
 - 跨平台權限安全（macOS & Windows）：
   - macOS 完善 LaunchAgent / LaunchDaemon 互斥鎖定（`run.lock`）與安全卸載。
   - Windows 工作排程嚴格採用 `LeastPrivilege` 最低權限，遇 `Program Files` 限制乾淨提供管理員手動指引，杜絕失控重試與提權風險。
