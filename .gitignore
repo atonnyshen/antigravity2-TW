@@ -13,7 +13,11 @@ codex/
 # Local IDE Rules & Personal Configuration
 .cursorrules
 .clinerules
+.claude/
+.vscode/
 AGENTS.md
+CLAUDE.md
+CODEX.md
 proxy_config/
 
 # Runtime / Build artifacts

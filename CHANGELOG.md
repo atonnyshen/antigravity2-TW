@@ -20,9 +20,9 @@
 - 一鍵還原自動卸載守護聯動：
   - 雙平台（macOS `點兩下還原官方英文.command` 與 Windows `點兩下還原官方英文.bat`）在還原官方英文前，自動偵測並停止/卸載背景更新守護排程，隨後安全還原 `app.asar`，一鍵乾淨復原，避免 5 分鐘內自動重新繁中化。
 - 開源專案資產治理與體例規範：
-  - 補齊標準 MIT License 授權標示。
-  - 清理內部除錯提示詞與私有代理伺服器配置（`.cursorrules`、`.clinerules`），健全 `.gitignore`。
-  - 沉澱標準 AI 助手維護規範（`AGENTS.md`）與開源發布指南（`docs/RELEASING.md`）。
+  - 補齊標準 MIT `LICENSE` 檔案與 `package.json` 授權標示。
+  - 清理內部除錯提示詞、私有代理伺服器配置（`.cursorrules`、`.clinerules`）與本機 AI 維護規範（`AGENTS.md`），健全 `.gitignore`。
+  - 整併測試目錄為單一標準 `test/`，並確立開源發布指南（`docs/RELEASING.md`）。
   - 修復 GitHub 網頁端 GFM 粗體語法解析問題，規範全形標點置於粗體標記外部，避免破版。
 - 跨平台權限安全（macOS & Windows）：
   - macOS 完善 LaunchAgent / LaunchDaemon 互斥鎖定（`run.lock`）與安全卸載。

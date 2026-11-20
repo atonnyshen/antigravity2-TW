@@ -349,6 +349,8 @@ test('README.md and README_TW.md match repo files, terminology, and runtime prom
         assert.ok(allTwJoined.includes(term), `Promised TW term "${term}" must exist in dicts_tw/`);
     }
 
+    assert.ok(fs.existsSync(path.join(repo, 'LICENSE')), 'LICENSE must exist in repository root');
+    assert.match(readme, /MIT License/);
     assert.ok(fs.existsSync(path.join(repo, 'AI_INSTALL_GUIDE.md')), 'AI_INSTALL_GUIDE.md must be bundled');
     const aiGuide = fs.readFileSync(path.join(repo, 'AI_INSTALL_GUIDE.md'), 'utf8');
     assert.match(aiGuide, /--no-kill/);

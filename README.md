@@ -5,6 +5,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue.svg)](#-極速安裝指引)
 [![Locale](https://img.shields.io/badge/Locale-繁體中文%20(台灣%20zh--TW)-brightgreen.svg)](#-術語對照標準)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Upstream](https://img.shields.io/badge/Upstream-qqxpee%2Fantigravity2--cn-lightgrey.svg)](https://github.com/qqxpee/antigravity2-cn)
 
 👉 **[上游簡體中文專案 (Upstream Project)](https://github.com/qqxpee/antigravity2-cn)**
@@ -169,7 +170,7 @@ tail -n 60 /Library/Logs/Antigravity2TW/autolocalize.log
 tail -n 60 ~/Library/Logs/Antigravity2TW/autolocalize.log
 ```
 
-確認 `last exit code = 0`，並看到「繁中套件已套用並驗證」或「已是目前版本」日誌即代表正常。背景服務每次執行完就會結束，`state = not running` 不代表未註冊。還原官方英文前先停用守護，避免它自動重套。
+確認 `last exit code = 0`，並看到「繁中套件已套用並驗證」或「已是目前版本」日誌即代表正常。背景服務每次執行完就會結束，`state = not running` 不代表未註冊。使用一鍵還原腳本時會自動卸載守護；若直接以指令執行 `--huifu`，請先停用守護以免自動重套。
 
 ---
 
@@ -216,6 +217,7 @@ Get-Content .\autolocalize.log -Tail 40 -Encoding UTF8
 
 開發者驗證：執行 `npm ci --ignore-scripts` 與 `npm test`。GitHub Actions 在 macOS、Windows 與 Linux 跑回歸測試；測試不代表已驗證真實 Windows 排程或每個官方版本的介面。
 
+- 本專案採用 [MIT License](./LICENSE) 開源授權。
 - 特別感謝 [qqxpee/antigravity2-cn](https://github.com/qqxpee/antigravity2-cn) 原作者的開源貢獻與 ASAR 注入架構設計。
 - 本存放庫為個人使用與分享版本，主要維護繁體中文語境字典與自動更新腳本。
 - 若使用時發現漏譯或語意不順的詞條，歡迎隨時提交 Issue 或 PR 共同補充！
