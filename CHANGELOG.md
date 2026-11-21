@@ -31,6 +31,7 @@
   - 修復 `Weekly limit, resets in 5d 22h`、`Daily limit, resets in ...`、`5h limit, resets in ...` 等合併配額倒數節點，統一繁中「每週上限／每日上限／每月上限」用詞。
   - 補齊 `Your current account is not eligible for ..., because it is not currently available in your location.`、`This account is not eligible for Antigravity.`、`Your current region is not supported.` 等地區不支援與帳戶資格限制動態規則，以及登入錯誤頁 `Further action is required to use`、`Verify` 與 `常見問題（FAQ）` 連結。
   - 同步 Antigravity `v2.33.0` 與上游 `v2.34.0` 共 132 組介面詞條（涵蓋科學研究引導卡片、`Orchestrator Model`、`Executor Model`、側邊欄自訂與預覽隱私政策），並校訂被動語態與台灣開發者用語。
+  - 擴充 `scripts/dev_tool.js` `scan-ui` 掃描遠端 RPC 動態文字（`GetUserStatus` 與 `RetrieveUserQuotaSummary`），補齊模型選擇器說明（`The original Gemini 4 model for advanced workflows`）、多群組模型與獨立配額池提示（Argon／Ultra／Pro）、`5-hour` 與各週期配額上限／觸頂重設句型，以及導入角色名稱 `Design`（同步將小寫 `'design'` 加入 `LOWER_WORDS_EXCLUDE` 避免誤改英文正文）。
 
 ## 3.7.1 — 2026-11-19
 

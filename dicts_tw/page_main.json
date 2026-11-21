@@ -3845,8 +3845,11 @@
   "Show Automation Conversations": "顯示自動化對話",
   "Show Plugin Conversations": "顯示外掛程式對話",
   "Start Plugin": "啟動外掛程式",
+  "Design": "設計",
+  "For paid Pro plans, Argon quota is separate. Higher Argon quota (included as part of the larger Gemini quota bucket) is available on Ultra plans.": "在 Pro 付費方案中，Argon 配額會獨立計算。Ultra 方案則提供更高的 Argon 配額（納入較大的 Gemini 配額池中）。",
   "Telemetry is turned off for your account.": "您的帳戶已關閉遙測資料收集。",
   "Tell the agent what to do instead...": "告訴代理改為執行什麼操作...",
+  "The original Gemini 4 model for advanced workflows": "適合進階工作流程的初代 Gemini 4 模型",
   "This plugin is currently stopped. Events and stdout streams will appear here once started.": "此外掛程式目前已停止。啟動後，事件與標準輸出串流將顯示於此處。",
   "Unsent draft": "未傳送草稿"
 }

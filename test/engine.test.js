@@ -939,6 +939,23 @@ test('quota limits, combined reset strings, region eligibility notices, and v2.3
     assert.equal(tx('More options for Plugins'), 'Plugins 的更多選項');
     assert.equal(tx('Opens the New Conversation screen for this project'), '開啟此 專案 的新對話畫面');
     assert.equal(tx('Replaced by newer request'), '已由較新的請求取代');
+
+    // v2.34.0 server-returned RPC & model picker / quota strings
+    assert.equal(tx('The original Gemini 4 model for advanced workflows'), '適合進階工作流程的初代 Gemini 4 模型');
+    assert.equal(tx('The original Gemini 3.5 Pro model for advanced workflows.'), '適合進階工作流程的初代 Gemini 3.5 Pro 模型');
+    assert.equal(tx('Gemini 4 Argon Weekly Limit'), 'Gemini 4 Argon 每週上限');
+    assert.equal(tx('Models within this group: Gemini 4 Neon, Gemini 4 Hydrogen, Orchestrator (Neon), Gemini 3.8 Flash'), '此群組包含的模型：Gemini 4 Neon, Gemini 4 Hydrogen, Orchestrator (Neon), Gemini 3.8 Flash');
+    assert.equal(tx('For paid Pro plans, Argon quota is separate. Higher Argon quota (included as part of the larger Gemini quota bucket) is available on Ultra plans.'), '在 Pro 付費方案中，Argon 配額會獨立計算。Ultra 方案則提供更高的 Argon 配額（納入較大的 Gemini 配額池中）。');
+    assert.equal(tx('You have hit your 5-hour limit, so the weekly limit does not currently apply. Your 5-hour limit will refresh in 36 minutes.'), '您已達到 5 小時限制，每週額度限制目前不適用。您的 5 小時限制將於 36 分鐘重設。');
+    assert.equal(tx('You have hit your 5-hour limit, it will refresh in 36 minutes. If on a supported paid plan, you can use AI credits in the interim.'), '您已達到 5 小時限制，將於 36 分鐘重設。若您使用受支援的付費方案，可在此期間使用 AI 點數。');
+    assert.equal(tx('You have hit your weekly limit, the 5-hour limit does not currently apply. Your weekly limit will fully refresh in 4 days.'), '您已達到每週額度限制，5 小時限制目前不適用。您的每週額度限制將於 4 天完全重設。');
+    assert.equal(tx('You have used some of your 5-hour limit, it will fully refresh in 4 hours, 54 minutes.'), '4 小時 54 分鐘後更新');
+    assert.equal(tx('You have used some of your weekly limit, it will fully refresh in 6 days, 23 hours.'), '6 天 23 小時後更新');
+    assert.equal(tx('You have used some of your daily limit, it will fully refresh in 3 hours.'), '您已使用部分每日額度限制，將於 3 小時完全重設。');
+    assert.equal(tx('You can upgrade to a Google AI Ultra plan to receive higher rate limits.'), '您可以升級到 Google AI Ultra 計畫以取得更高的速率限制。');
+    assert.equal(tx('You can upgrade to a Google AI Pro plan to receive higher rate limits.'), '您可以升級至 Google AI Pro 方案以獲得更高的速率限制。');
+    assert.equal(tx('Design'), '設計');
+    assert.equal(tx('design'), 'design');
 });
 
 
