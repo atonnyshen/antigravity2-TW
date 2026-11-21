@@ -648,16 +648,73 @@ function patchWizardHtmlJs(whContent, useTw) {
     return out;
 }
 
+function patchComputerHudJs(hudContent, useTw) {
+    console.log(useTw ? `[修改] 正在向 computer/hud.js 注入桌面監視面板漢化...` : `[修改] 正在向 computer/hud.js 注入桌面监视面板汉化...`);
+    const out = hudContent
+        .replace('<title>AGY Desktop HUD</title>', useTw ? '<title>AGY 桌面監視面板</title>' : '<title>AGY 桌面监视面板</title>')
+        .replace('<div id="status">AGY is controlling your Mac</div>', '<div id="status">AGY 正在控制您的 Mac</div>')
+        .replace('<button id="stop">Stop</button>', '<button id="stop">停止</button>')
+        .replace(
+            'title="Let agents use this Mac again. The stopped task does not restart.">Allow again</button>',
+            useTw
+                ? 'title="允許代理再次使用此 Mac。已停止的任務不會重新啟動。">再次允許</button>'
+                : 'title="允许智能体再次使用此 Mac。已停止的任务不会重新启动。">再次允许</button>'
+        )
+        .replace("end.textContent = 'Stopped';", "end.textContent = '已停止';")
+        .replace("end.textContent = 'Stop';", "end.textContent = '停止';");
+    console.log(useTw ? `[修改] 桌面監視面板漢化注入成功！` : `[修改] 桌面监视面板汉化注入成功！`);
+    return out;
+}
+
+function patchComputerHudStateJs(hsContent, useTw) {
+    const out = hsContent
+        .replace("'You took over — agent stopped'", useTw ? "'您已接管 — 代理已停止'" : "'您已接管 — 智能体已停止'")
+        .replace("'Agent stopped'", useTw ? "'代理已停止'" : "'智能体已停止'")
+        .replace("'Agent idle'", useTw ? "'代理閒置中'" : "'智能体空闲中'")
+        .replace('`AGY working in ${name} (background)`', useTw ? '`AGY 正在背景操作 ${name}`' : '`AGY 正在后台操作 ${name}`')
+        .replace("'AGY working in the background'", useTw ? "'AGY 正在背景執行'" : "'AGY 正在后台运行'")
+        .replace("'AGY is controlling your Mac'", "'AGY 正在控制您的 Mac'");
+    return out;
+}
+
+function patchComputerHudAgentsJs(haContent, useTw) {
+    const out = haContent
+        .replace(
+            "`${(0, overlay_1.overlayDisplayName)(label)} · ${app || 'starting'} · ${stopped ? 'stopped' : paused ? 'paused' : m}`",
+            useTw
+                ? "`${(0, overlay_1.overlayDisplayName)(label)} · ${app || '啟動中'} · ${stopped ? '已停止' : paused ? '已暫停' : (m === 'foreground' ? '前景' : '背景')}`"
+                : "`${(0, overlay_1.overlayDisplayName)(label)} · ${app || '启动中'} · ${stopped ? '已停止' : paused ? '已暂停' : (m === 'foreground' ? '前台' : '后台')}`"
+        )
+        .replace('`${working} AGY agents working`', useTw ? '`${working} 個 AGY 代理執行中`' : '`${working} 个 AGY 智能体工作中`')
+        .replace("'Agent stopped'", useTw ? "'代理已停止'" : "'智能体已停止'")
+        .replace('`${stopped} agents stopped`', useTw ? '`${stopped} 個代理已停止`' : '`${stopped} 个智能体已停止`')
+        .replace('`${text} (+${stopped} stopped)`', '`${text}（+${stopped} 已停止）`');
+    return out;
+}
+
+function patchSshErrorTextJs(seContent, useTw) {
+    return seContent
+        .replace("'The connection was closed before it finished.'", useTw ? "'連線在完成前即被關閉。'" : "'连接在完成前被关闭。'")
+        .replace(
+            "`Windows SSH hosts aren't supported yet. ${sshArgs_1.LINUX_HOST_NEEDED}`",
+            useTw ? '`尚未支援 Windows SSH 主機。${sshArgs_1.LINUX_HOST_NEEDED}`' : '`暂不支持 Windows SSH 主机。${sshArgs_1.LINUX_HOST_NEEDED}`'
+        );
+}
+
 const MAIN_PROCESS_PATCH_TARGETS = [
     'dist/main.js',
     'dist/ipcHandlers.js',
     'dist/remote/remoteManager.js',
     'dist/remote/sshPrompts.js',
+    'dist/remote/sshErrorText.js',
     'dist/deviceChooser.js',
     'dist/webauthn.js',
     'dist/webviewPopupSecurity.js',
     'dist/provisionSplash.js',
-    'dist/ideInstall/wizardHtml.js'
+    'dist/ideInstall/wizardHtml.js',
+    'dist/computer/hud.js',
+    'dist/computer/hudState.js',
+    'dist/computer/hudAgents.js'
 ];
 
 module.exports = {
@@ -671,10 +728,14 @@ module.exports = {
     patchIpcHandlersJs,
     patchRemoteManagerJs,
     patchSshPromptsJs,
+    patchSshErrorTextJs,
     patchDeviceChooserJs,
     patchWebauthnJs,
     patchWebviewPopupSecurityJs,
     patchProvisionSplashJs,
     patchWizardHtmlJs,
+    patchComputerHudJs,
+    patchComputerHudStateJs,
+    patchComputerHudAgentsJs,
     MAIN_PROCESS_PATCH_TARGETS
 };

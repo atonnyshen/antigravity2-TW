@@ -1052,6 +1052,63 @@ test('v2.34.0 Swarm Hive map, GIF export, and live timer/subagent counters trans
     assert.equal(doc.getElementById('subblk').textContent, '1 個子代理受阻');
 });
 
+test('v2.34.0 executor offload phrasing, remaining JSX templates, and Thinking effort protection hold', () => {
+    const { JSDOM } = require('jsdom');
+    const js = generateJs();
+    const dom = new JSDOM(`<!doctype html><html><body>
+        <span id="offload">Offloads routine steps to a faster executor. Same quality, fewer tokens used.</span>
+        <span id="offload-dyn">Offloads routine steps to Hydrogen. Same Neon-level quality, fewer tokens used.</span>
+        <span id="offload-short">Offloads routine steps to a faster executor.</span>
+        <span id="same-q">Same quality, fewer tokens used.</span>
+        <span id="show5">Show 5</span>
+        <span id="show10">Show 10</span>
+        <span id="worktree">Worktree Name</span>
+        <span id="ans">Answered:</span>
+        <span id="swarm-desc">Unlock the power of agent swarms.</span>
+        <span id="att">+3 attachments</span>
+        <span id="det">Detached at a1b2c3d</span>
+        <span id="branch">Branch, current: main</span>
+        <span id="gh">GitHub: rate limited</span>
+        <span id="ssh">SSH: devbox</span>
+        <span id="voice">Voice speed, 1.2x</span>
+        <span id="tout">script timed out after 5000ms</span>
+        <button id="sel-mod" aria-label="Select model, current: Gemini 4 Neon">x</button>
+        <button id="sel-prj" aria-label="Select project, current: my-proj">x</button>
+        <button id="stop-sel" title="Stop 3 selected">x</button>
+        <button id="cfg-miss" aria-label="Configure MCP, values missing">x</button>
+        <div data-testid="model-selector-effort-option"><span id="eff-lc">Thinking effort</span></div>
+    </body></html>`, { runScripts: 'outside-only' });
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: dom.window.Node, document: dom.window.document, console };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    const doc = dom.window.document;
+    translateNode(doc.body);
+
+    assert.equal(doc.getElementById('offload').textContent, '將例行步驟分流至更快的執行模型。維持相同品質，消耗更少 Token。');
+    assert.equal(doc.getElementById('offload-dyn').textContent, '將例行步驟分流至 Hydrogen。維持 Neon 同級品質，消耗更少 Token。');
+    assert.equal(doc.getElementById('offload-short').textContent, '將例行步驟分流至更快的執行模型。');
+    assert.equal(doc.getElementById('same-q').textContent, '維持相同品質，消耗更少 Token。');
+    assert.equal(doc.getElementById('show5').textContent, '顯示 5 項');
+    assert.equal(doc.getElementById('show10').textContent, '顯示 10 項');
+    assert.equal(doc.getElementById('worktree').textContent, 'Worktree 名稱');
+    assert.equal(doc.getElementById('ans').textContent, '已回覆：');
+    assert.equal(doc.getElementById('swarm-desc').textContent, '釋放多代理蜂群協作的強大威力。');
+    assert.equal(doc.getElementById('att').textContent, '另有 3 個附件');
+    assert.equal(doc.getElementById('det').textContent, '已分離於 a1b2c3d');
+    assert.equal(doc.getElementById('branch').textContent, '目前分支：main');
+    assert.equal(doc.getElementById('gh').textContent, 'GitHub：rate limited');
+    assert.equal(doc.getElementById('ssh').textContent, 'SSH：devbox');
+    assert.equal(doc.getElementById('voice').textContent, '語速，1.2x');
+    assert.equal(doc.getElementById('tout').textContent, '指令碼於 5000 毫秒後逾時');
+    assert.equal(doc.getElementById('sel-mod').getAttribute('aria-label'), '選擇模型，目前：Gemini 4 Neon');
+    assert.equal(doc.getElementById('sel-prj').getAttribute('aria-label'), '選擇專案，目前：my-proj');
+    assert.equal(doc.getElementById('stop-sel').getAttribute('title'), '停止已選取的 3 個項目');
+    assert.equal(doc.getElementById('cfg-miss').getAttribute('aria-label'), '設定 MCP（缺少值）');
+    assert.equal(doc.getElementById('eff-lc').textContent, 'Thinking effort');
+});
+
 
 
 

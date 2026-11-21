@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const { validateRuntimeRulesObject } = require('../src/rules_schema');
 
 const ALLOWED_DOWNLOAD_HOSTS = new Set([
     'github.com',
@@ -52,29 +53,79 @@ function selectTranslationAsset(assets = [], releaseTag = '') {
     };
 }
 
-function readActiveTranslation(baseDir) {
+function readActiveTranslation(baseDir, currentEngineVersion = '') {
     try {
-        const raw = JSON.parse(fs.readFileSync(path.join(baseDir, '.watcher-state', 'active_translation.json'), 'utf8'));
+        const statePath = path.join(baseDir, '.watcher-state', 'active_translation.json');
+        const stateStat = fs.lstatSync(statePath);
+        if (stateStat.isSymbolicLink() || !stateStat.isFile()) return null;
+        const raw = JSON.parse(fs.readFileSync(statePath, 'utf8'));
         if (!raw || !/^\d+\.\d+\.\d+$/.test(raw.version)) return null;
-        const folder = path.join(baseDir, '.translation-packs', raw.version);
-        if (!fs.lstatSync(path.join(baseDir, '.translation-packs')).isDirectory() ||
+
+        let engineVersion = typeof currentEngineVersion === 'string' ? currentEngineVersion.trim() : '';
+        if (!engineVersion) {
+            try {
+                const pkgPath = path.join(baseDir, 'package.json');
+                const pkgStat = fs.lstatSync(pkgPath);
+                if (!pkgStat.isSymbolicLink() && pkgStat.isFile()) {
+                    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+                    if (pkg && typeof pkg.version === 'string') engineVersion = pkg.version.trim();
+                }
+            } catch {}
+        }
+        if (engineVersion && compareVersions(raw.version, engineVersion) < 0) return null;
+
+        const packsRoot = path.join(baseDir, '.translation-packs');
+        const folder = path.join(packsRoot, raw.version);
+        if (!fs.lstatSync(packsRoot).isDirectory() ||
             !fs.lstatSync(folder).isDirectory()) return null;
+
+        if (engineVersion) {
+            const manifestPath = path.join(folder, 'translation-pack.json');
+            if (fs.existsSync(manifestPath)) {
+                const manifestStat = fs.lstatSync(manifestPath);
+                if (manifestStat.isSymbolicLink() || !manifestStat.isFile()) return null;
+                const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+                if (!manifest ||
+                    !/^\d+\.\d+\.\d+$/.test(manifest.minEngineVersion || '') ||
+                    !/^\d+\.\d+\.\d+$/.test(manifest.maxEngineVersion || '') ||
+                    compareVersions(engineVersion, manifest.minEngineVersion) < 0 ||
+                    compareVersions(engineVersion, manifest.maxEngineVersion) > 0) {
+                    return null;
+                }
+            }
+        }
         return { version: raw.version, folder };
     } catch { return null; }
 }
 
 function validateTranslationPack(folder, releaseVersion, engineVersion) {
-    const allowedTop = new Set(['translation-pack.json', 'dicts', 'dicts_tw']);
     const top = fs.readdirSync(folder, { withFileTypes: true });
-    if (top.length !== allowedTop.size || top.some(e => !allowedTop.has(e.name) || e.isSymbolicLink())) {
+    if (top.some(e => e.isSymbolicLink())) {
         throw new Error('Translation ZIP contains unexpected files or links');
     }
+    const manifestEntry = top.find(e => e.name === 'translation-pack.json');
+    if (!manifestEntry || !manifestEntry.isFile()) {
+        throw new Error('Invalid translation pack manifest');
+    }
     const manifestPath = path.join(folder, 'translation-pack.json');
+    const manifestStat = fs.lstatSync(manifestPath);
+    if (manifestStat.isSymbolicLink() || !manifestStat.isFile() || manifestStat.size > 64 * 1024) {
+        throw new Error('Invalid translation pack manifest');
+    }
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-    if (!manifest || manifest.schemaVersion !== 1 || manifest.version !== releaseVersion ||
+    if (!manifest || (manifest.schemaVersion !== 1 && manifest.schemaVersion !== 2) ||
+        manifest.version !== releaseVersion ||
         !/^\d+\.\d+\.\d+$/.test(manifest.minEngineVersion || '') ||
         !/^\d+\.\d+\.\d+$/.test(manifest.maxEngineVersion || '')) {
         throw new Error('Invalid translation pack manifest');
+    }
+    const requiredTop = ['translation-pack.json', 'dicts', 'dicts_tw'];
+    const allowedTop = manifest.schemaVersion === 2
+        ? new Set([...requiredTop, 'rules'])
+        : new Set(requiredTop);
+    if (top.some(e => !allowedTop.has(e.name)) ||
+        requiredTop.some(name => !top.some(e => e.name === name))) {
+        throw new Error('Translation ZIP contains unexpected files or links');
     }
     if (compareVersions(engineVersion, manifest.minEngineVersion) < 0 ||
         compareVersions(engineVersion, manifest.maxEngineVersion) > 0) {
@@ -83,14 +134,19 @@ function validateTranslationPack(folder, releaseVersion, engineVersion) {
     let totalSize = 0;
     for (const folderName of ['dicts', 'dicts_tw']) {
         const subdir = path.join(folder, folderName);
-        if (!fs.statSync(subdir).isDirectory()) throw new Error('Invalid translation directory');
+        const dirStat = fs.lstatSync(subdir);
+        if (dirStat.isSymbolicLink() || !dirStat.isDirectory()) throw new Error('Invalid translation directory');
         const entries = fs.readdirSync(subdir, { withFileTypes: true });
         if (!entries.length || entries.length > 80) throw new Error('Unexpected dictionary file count');
         for (const entry of entries) {
-            if (!entry.isFile() || !/^[A-Za-z0-9_-]+\.json$/.test(entry.name)) {
+            if (entry.isSymbolicLink() || !entry.isFile() || !/^[A-Za-z0-9_-]+\.json$/.test(entry.name)) {
                 throw new Error('Translation pack contains an unsafe dictionary file');
             }
-            const content = fs.readFileSync(path.join(subdir, entry.name));
+            const filePath = path.join(subdir, entry.name);
+            if (fs.lstatSync(filePath).isSymbolicLink()) {
+                throw new Error('Translation pack contains an unsafe dictionary file');
+            }
+            const content = fs.readFileSync(filePath);
             if (content.length > 8 * 1024 * 1024) throw new Error('Dictionary file too large');
             totalSize += content.length;
             const obj = JSON.parse(content.toString('utf8'));
@@ -100,9 +156,29 @@ function validateTranslationPack(folder, releaseVersion, engineVersion) {
             }
         }
     }
+    const rulesDir = path.join(folder, 'rules');
+    const hasRulesDir = top.some(e => e.name === 'rules');
+    if (hasRulesDir) {
+        const rulesStat = fs.lstatSync(rulesDir);
+        if (rulesStat.isSymbolicLink() || !rulesStat.isDirectory()) throw new Error('Invalid rules directory');
+        const ruleEntries = fs.readdirSync(rulesDir, { withFileTypes: true });
+        if (ruleEntries.length !== 1 || ruleEntries[0].name !== 'runtime_rules.json' ||
+            ruleEntries[0].isSymbolicLink() || !ruleEntries[0].isFile()) {
+            throw new Error('Translation pack rules directory must contain only runtime_rules.json');
+        }
+        const rulePath = path.join(rulesDir, ruleEntries[0].name);
+        if (fs.lstatSync(rulePath).isSymbolicLink()) {
+            throw new Error('Translation pack contains an unsafe rules file');
+        }
+        const content = fs.readFileSync(rulePath);
+        if (content.length > 4 * 1024 * 1024) throw new Error('Rules file too large');
+        totalSize += content.length;
+        const parsed = JSON.parse(content.toString('utf8'));
+        validateRuntimeRulesObject(parsed);
+    }
     if (totalSize > 32 * 1024 * 1024) throw new Error('Translation pack exceeds maximum size');
     const { compareDicts } = require('./compare_dicts');
-    if (!compareDicts(path.join(folder, 'dicts'), path.join(folder, 'dicts_tw'))) {
+    if (!compareDicts(path.join(folder, 'dicts'), path.join(folder, 'dicts_tw'), hasRulesDir ? rulesDir : null)) {
         throw new Error('Translation pack failed terminology and dictionary alignment checks');
     }
     return manifest;
@@ -140,6 +216,9 @@ async function installTranslationUpdate({
         const finalDir = path.join(packsRoot, version);
         stageDir = fs.mkdtempSync(path.join(packsRoot, '.stage-'));
         for (const dir of ['dicts', 'dicts_tw']) copyDirRecursive(path.join(extracted, dir), path.join(stageDir, dir));
+        if (fs.existsSync(path.join(extracted, 'rules'))) {
+            copyDirRecursive(path.join(extracted, 'rules'), path.join(stageDir, 'rules'));
+        }
         fs.copyFileSync(path.join(extracted, 'translation-pack.json'), path.join(stageDir, 'translation-pack.json'));
         if (fs.existsSync(finalDir)) {
             validateTranslationPack(finalDir, version, currentEngineVersion);

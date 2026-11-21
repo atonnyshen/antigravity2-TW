@@ -3874,5 +3874,12 @@
   "Waiting on @coordinator": "正在等待 @coordinator",
   "Where each worker is, by thread": "各成员所在的工作线分布",
   "Zoom in": "放大",
+  "Answered": "已回答",
+  "Answered:": "已回答：",
+  "Offloads routine steps to a faster executor. Same quality, fewer tokens used.": "将例行步骤分流至更快的执行模型。保持同等质量，消耗更少 Token。",
+  "Show 5": "显示 5 项",
+  "Show 10": "显示 10 项",
+  "Unlock the power of agent swarms.": "释放多智能体蜂群协作的强大能力。",
+  "Worktree Name": "Worktree 名称",
   "Unsent draft": "未发送草稿"
 }

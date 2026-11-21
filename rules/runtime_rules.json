@@ -1,0 +1,426 @@
+{
+  "schemaVersion": 1,
+  "protected": {
+    "lowerWordsExclude": [
+      "on", "in", "to", "at", "by", "for", "with", "as", "system", "review", "active",
+      "browser", "global", "including", "and", "or", "file", "files", "help", "app",
+      "plan", "search", "coordinator", "goal", "goals", "swarm", "boost", "learn",
+      "schedule", "compact", "automation", "plugin", "plugins", "btw", "clear", "init",
+      "teamwork", "grill-me", "egm-boost", "split", "commit", "reset", "stop", "status",
+      "filter", "new", "open", "start", "manage", "custom", "default", "rules",
+      "low", "medium", "high", "extra", "max", "thinking effort",
+      "apply", "create", "hide", "show", "remove", "replace", "verify", "block",
+      "folder", "repository", "error", "other", "environment", "before", "after",
+      "added", "approved", "protocol", "variables", "website", "design"
+    ],
+    "modelEffortLabels": [
+      "Low",
+      "Medium",
+      "High",
+      "Extra",
+      "Max",
+      "Thinking Effort",
+      "Thinking effort"
+    ],
+    "slashCommands": [
+      "goal", "swarm", "boost", "egm-boost", "learn", "schedule", "plan", "browser",
+      "compact", "grill-me", "teamwork", "automation", "plugin", "btw", "clear",
+      "help", "init", "review", "split", "commit", "reset", "stop", "status", "filter",
+      "swarm-autonomous-pipeline"
+    ]
+  },
+  "scopedMaps": {
+    "swarm": {
+      "Board": { "sc": "看板", "tw": "看板" },
+      "Graph": { "sc": "关系图", "tw": "關係圖" },
+      "Raw": { "sc": "原始数据", "tw": "原始資料" },
+      "Reconnecting": { "sc": "正在重连", "tw": "正在重新連線" },
+      "Replay": { "sc": "回放", "tw": "重播" },
+      "Follow": { "sc": "跟随", "tw": "跟隨" },
+      "Latest": { "sc": "最新", "tw": "最新" },
+      "Channels": { "sc": "频道", "tw": "頻道" },
+      "Filters": { "sc": "筛选", "tw": "篩選" },
+      "Coordinator": { "sc": "协调器", "tw": "協調器" },
+      "Waiting": { "sc": "等待中", "tw": "等待中" },
+      "Retired": { "sc": "已退役", "tw": "已退役" },
+      "Paused": { "sc": "已暂停", "tw": "已暫停" },
+      "Working...": { "sc": "工作中...", "tw": "工作中..." },
+      "Working": { "sc": "工作中", "tw": "工作中" },
+      "Empty.": { "sc": "暂无内容。", "tw": "尚無內容。" },
+      "(empty)": { "sc": "（空）", "tw": "（空）" },
+      "stale": { "sc": "已过期", "tw": "已過期" },
+      "system:": { "sc": "系统：", "tw": "系統：" },
+      "Goal": { "sc": "目标", "tw": "目標" },
+      "Team": { "sc": "团队", "tw": "團隊" },
+      "Threads": { "sc": "工作线", "tw": "討論串" },
+      "Now": { "sc": "当前", "tw": "目前" },
+      "Progress": { "sc": "进度", "tw": "進度" },
+      "Tasks": { "sc": "任务", "tw": "任務" },
+      "Other": { "sc": "其他", "tw": "其他" },
+      "Moving": { "sc": "推进中", "tw": "推進中" },
+      "Reply": { "sc": "回复", "tw": "回覆" },
+      "Frames": { "sc": "画面", "tw": "畫面" },
+      "All": { "sc": "全部", "tw": "全部" },
+      "all channels": { "sc": "全部频道", "tw": "全部頻道" },
+      "Remote": { "sc": "远程", "tw": "遠端" },
+      "updating": { "sc": "更新中", "tw": "更新中" },
+      "watching": { "sc": "监听中", "tw": "監聽中" },
+      "stopped": { "sc": "已停止", "tw": "已停止" },
+      "Needs you": { "sc": "待你处理", "tw": "待你處理" },
+      "Not started": { "sc": "未开始", "tw": "尚未開始" },
+      "Blocked": { "sc": "受阻", "tw": "受阻" },
+      "Running": { "sc": "运行中", "tw": "執行中" },
+      "Done": { "sc": "已完成", "tw": "已完成" },
+      "Open": { "sc": "打开", "tw": "開啟" },
+      "Active": { "sc": "活跃", "tw": "執行中" },
+      "Killed": { "sc": "已终止", "tw": "已終止" },
+      "queued": { "sc": "排队中", "tw": "排隊中" },
+      "running": { "sc": "运行中", "tw": "執行中" },
+      "blocked": { "sc": "受阻", "tw": "受阻" },
+      "done": { "sc": "已完成", "tw": "已完成" },
+      "active": { "sc": "活跃", "tw": "執行中" },
+      "paused": { "sc": "已暂停", "tw": "已暫停" },
+      "Overview": { "sc": "概览", "tw": "概覽" },
+      "Members": { "sc": "成员", "tw": "成員" },
+      "Live": { "sc": "实时", "tw": "即時" },
+      "Timeline": { "sc": "时间线", "tw": "時間軸" },
+      "Roster": { "sc": "成员名单", "tw": "成員名單" },
+      "Swarm": { "sc": "蜂群", "tw": "蜂群" },
+      "Swarm (Preview)": { "sc": "蜂群（预览版）", "tw": "蜂群（預覽版）" },
+      "Stalled": { "sc": "已停滞", "tw": "已停滯" },
+      "stalled": { "sc": "已停滞", "tw": "已停滯" },
+      "Failed": { "sc": "失败", "tw": "失敗" },
+      "failed": { "sc": "失败", "tw": "失敗" },
+      "Error": { "sc": "错误", "tw": "錯誤" },
+      "error": { "sc": "错误", "tw": "錯誤" },
+      "Quota": { "sc": "配额", "tw": "配額" },
+      "quota": { "sc": "配额", "tw": "配額" },
+      "Offline": { "sc": "离线", "tw": "離線" },
+      "offline": { "sc": "离线", "tw": "離線" },
+      "Idle": { "sc": "空闲", "tw": "閒置" },
+      "idle": { "sc": "空闲", "tw": "閒置" },
+      "Hive": { "sc": "蜂巢", "tw": "蜂巢" },
+      "Tasks done": { "sc": "任务已完成", "tw": "任務已完成" },
+      "Message just sent": { "sc": "刚发送消息", "tw": "剛傳送訊息" },
+      "Waiting on": { "sc": "等待中", "tw": "正在等待" },
+      "Stuck": { "sc": "已卡住", "tw": "受阻" },
+      "Resting": { "sc": "休息中", "tw": "休息中" },
+      "Latest action": { "sc": "最新动作", "tw": "最新動作" },
+      "Zoom": { "sc": "缩放", "tw": "縮放" }
+    }
+  },
+  "dynamicRules": [
+    {
+      "id": "offload-routine-steps-faster-executor-full",
+      "pattern": "^Offloads routine steps to\\s+(?:a\\s+)?faster executor\\.\\s*Same\\s+quality,\\s*fewer tokens used(\\.?)$",
+      "flags": "i",
+      "transforms": { "1": "zhPeriod" },
+      "sc": "将常规步骤分流至更快的执行模型。保持同等质量，消耗更少 Token{1}",
+      "tw": "將例行步驟分流至更快的執行模型。維持相同品質，消耗更少 Token{1}"
+    },
+    {
+      "id": "offload-routine-steps-model-quality-full",
+      "pattern": "^Offloads routine steps to\\s+(?:a\\s+)?(.+?)\\.\\s*Same\\s+(.+?)(?:-level)?\\s+quality,\\s*fewer tokens used(\\.?)$",
+      "flags": "i",
+      "transforms": { "1": "trim", "2": "trim", "3": "zhPeriod" },
+      "sc": "将常规步骤分流至 {1}。保持 {2} 同级质量，消耗更少 Token{3}",
+      "tw": "將例行步驟分流至 {1}。維持 {2} 同級品質，消耗更少 Token{3}"
+    },
+    {
+      "id": "offload-routine-steps-faster-executor-short",
+      "pattern": "^Offloads routine steps to\\s+(?:a\\s+)?faster executor(\\.?)$",
+      "flags": "i",
+      "transforms": { "1": "zhPeriod" },
+      "sc": "将常规步骤分流至更快的执行模型{1}",
+      "tw": "將例行步驟分流至更快的執行模型{1}"
+    },
+    {
+      "id": "offload-routine-steps-short",
+      "pattern": "^Offloads routine steps to\\s+(?:a\\s+)?(.+?)(\\.?)$",
+      "flags": "i",
+      "transforms": { "1": "trim", "2": "zhPeriod" },
+      "sc": "将常规步骤分流至 {1}{2}",
+      "tw": "將例行步驟分流至 {1}{2}"
+    },
+    {
+      "id": "same-quality-fewer-tokens",
+      "pattern": "^Same quality,\\s*fewer tokens used(\\.?)$",
+      "flags": "i",
+      "transforms": { "1": "zhPeriod" },
+      "sc": "保持同等质量，消耗更少 Token{1}",
+      "tw": "維持相同品質，消耗更少 Token{1}"
+    },
+    {
+      "id": "model-may-offload-quality-full",
+      "pattern": "^(.+?)\\s+that may offload routine steps to\\s+(.+?)\\.\\s*Same\\s+(.+?)-level quality,\\s*fewer tokens used(\\.?)$",
+      "flags": "i",
+      "transforms": { "1": "trim", "2": "trim", "3": "trim", "4": "zhPeriod" },
+      "sc": "{1} 可将例行步骤分流至 {2}。维持 {3} 同级质量，消耗更少 Token{4}",
+      "tw": "{1} 可將例行步驟分流至 {2}。維持 {3} 同級品質，消耗更少 Token{4}"
+    },
+    {
+      "id": "model-may-offload-short",
+      "pattern": "^(.+?)\\s+that may offload routine steps to\\s+(.+?)(\\.?)$",
+      "flags": "i",
+      "transforms": { "1": "trim", "2": "trim", "3": "zhPeriod" },
+      "sc": "{1} 可将例行步骤分流至 {2}{3}",
+      "tw": "{1} 可將例行步驟分流至 {2}{3}"
+    },
+    {
+      "id": "same-model-level-quality",
+      "pattern": "^Same\\s+(.+?)-level quality,\\s*fewer tokens used(\\.?)$",
+      "flags": "i",
+      "transforms": { "1": "trim", "2": "zhPeriod" },
+      "sc": "维持 {1} 同级质量，消耗更少 Token{2}",
+      "tw": "維持 {1} 同級品質，消耗更少 Token{2}"
+    },
+    {
+      "id": "detached-at-sha",
+      "pattern": "^Detached at\\s+([0-9a-f]{6,40})$",
+      "flags": "i",
+      "sc": "已分离于 {1}",
+      "tw": "已分離於 {1}"
+    },
+    {
+      "id": "voice-speed",
+      "pattern": "^Voice\\s+speed,\\s+(.+)$",
+      "flags": "i",
+      "sc": "语速，{1}",
+      "tw": "語速，{1}"
+    },
+    {
+      "id": "couldn-t-disconnect",
+      "pattern": "^Couldn['’]t disconnect\\s+(.+?):\\s*(.+)$",
+      "flags": "i",
+      "sc": "无法断开 {1} 的连接：{2}",
+      "tw": "無法中斷 {1} 的連線：{2}"
+    },
+    {
+      "id": "failed-to-load-page",
+      "pattern": "^Failed to load page\\s+(.+?):\\s*(.+)$",
+      "flags": "i",
+      "sc": "加载页面 {1} 失败：{2}",
+      "tw": "載入頁面 {1} 失敗：{2}"
+    },
+    {
+      "id": "more-options-for",
+      "pattern": "^More options for\\s+(.+)$",
+      "flags": "i",
+      "sc": "{1} 的更多选项",
+      "tw": "{1} 的更多選項"
+    },
+    {
+      "id": "opens-new-conv-screen",
+      "pattern": "^Opens the New Conversation screen for this\\s+(.+)$",
+      "flags": "i",
+      "transforms": { "1": "lookupOrKeep" },
+      "sc": "打开此 {1} 的新会话界面",
+      "tw": "開啟此 {1} 的新對話畫面"
+    },
+    {
+      "id": "plus-n-attachments",
+      "pattern": "^\\+(\\d+)\\s+attachments?$",
+      "flags": "i",
+      "sc": "另有 {1} 个附件",
+      "tw": "另有 {1} 個附件"
+    },
+    {
+      "id": "branch-current",
+      "pattern": "^Branch,\\s*current:\\s*(.+)$",
+      "flags": "i",
+      "sc": "当前分支：{1}",
+      "tw": "目前分支：{1}"
+    },
+    {
+      "id": "github-prefix",
+      "pattern": "^GitHub:\\s*(.+)$",
+      "flags": "i",
+      "sc": "GitHub：{1}",
+      "tw": "GitHub：{1}"
+    },
+    {
+      "id": "ssh-prefix",
+      "pattern": "^SSH:\\s*(.+)$",
+      "flags": "i",
+      "sc": "SSH：{1}",
+      "tw": "SSH：{1}"
+    },
+    {
+      "id": "script-timed-out",
+      "pattern": "^script timed out after\\s+(\\d+)\\s*ms$",
+      "flags": "i",
+      "sc": "脚本于 {1} 毫秒后超时",
+      "tw": "指令碼於 {1} 毫秒後逾時"
+    },
+    {
+      "id": "select-model-current",
+      "pattern": "^Select model,\\s*current:\\s*(.+)$",
+      "flags": "i",
+      "sc": "选择模型，当前：{1}",
+      "tw": "選擇模型，目前：{1}"
+    },
+    {
+      "id": "select-project-current",
+      "pattern": "^Select project,\\s*current:\\s*(.+)$",
+      "flags": "i",
+      "sc": "选择项目，当前：{1}",
+      "tw": "選擇專案，目前：{1}"
+    },
+    {
+      "id": "stop-n-selected",
+      "pattern": "^Stop\\s+(\\d+)\\s+selected$",
+      "flags": "i",
+      "sc": "停止已选中的 {1} 个项目",
+      "tw": "停止已選取的 {1} 個項目"
+    }
+  ],
+  "attrDynamicRules": [
+    {
+      "id": "attr-add",
+      "pattern": "^Add\\s+(.+)$",
+      "flags": "i",
+      "sc": "添加 {1}",
+      "tw": "新增 {1}"
+    },
+    {
+      "id": "attr-cancel",
+      "pattern": "^Cancel\\s+(.+)$",
+      "flags": "i",
+      "sc": "取消 {1}",
+      "tw": "取消 {1}"
+    },
+    {
+      "id": "attr-close",
+      "pattern": "^Close\\s+(.+)$",
+      "flags": "i",
+      "sc": "关闭 {1}",
+      "tw": "關閉 {1}"
+    },
+    {
+      "id": "attr-configure-values-missing",
+      "pattern": "^Configure\\s+(.+?),\\s*values missing$",
+      "flags": "i",
+      "sc": "配置 {1}（缺少值）",
+      "tw": "設定 {1}（缺少值）"
+    },
+    {
+      "id": "attr-configure",
+      "pattern": "^Configure\\s+(.+)$",
+      "flags": "i",
+      "sc": "配置 {1}",
+      "tw": "設定 {1}"
+    },
+    {
+      "id": "attr-connect",
+      "pattern": "^Connect\\s+(.+)$",
+      "flags": "i",
+      "sc": "连接 {1}",
+      "tw": "連線 {1}"
+    },
+    {
+      "id": "attr-disconnect",
+      "pattern": "^Disconnect\\s+(.+)$",
+      "flags": "i",
+      "sc": "断开连接 {1}",
+      "tw": "中斷連線 {1}"
+    },
+    {
+      "id": "attr-delete",
+      "pattern": "^Delete\\s+(.+)$",
+      "flags": "i",
+      "sc": "删除 {1}",
+      "tw": "刪除 {1}"
+    },
+    {
+      "id": "attr-enable",
+      "pattern": "^Enable\\s+(.+)$",
+      "flags": "i",
+      "sc": "启用 {1}",
+      "tw": "啟用 {1}"
+    },
+    {
+      "id": "attr-install",
+      "pattern": "^Install\\s+(.+)$",
+      "flags": "i",
+      "sc": "安装 {1}",
+      "tw": "安裝 {1}"
+    },
+    {
+      "id": "attr-keep",
+      "pattern": "^Keep:\\s*(.+)$",
+      "flags": "i",
+      "sc": "保留：{1}",
+      "tw": "保留：{1}"
+    },
+    {
+      "id": "attr-label-for",
+      "pattern": "^Label for\\s+(.+)$",
+      "flags": "i",
+      "sc": "{1} 的标签",
+      "tw": "{1} 的標籤"
+    },
+    {
+      "id": "attr-new",
+      "pattern": "^New\\s+(.+)$",
+      "flags": "i",
+      "sc": "新建 {1}",
+      "tw": "新增 {1}"
+    },
+    {
+      "id": "attr-open",
+      "pattern": "^Open\\s+(.+)$",
+      "flags": "i",
+      "sc": "打开 {1}",
+      "tw": "開啟 {1}"
+    },
+    {
+      "id": "attr-reconnect",
+      "pattern": "^Reconnect\\s+(.+)$",
+      "flags": "i",
+      "sc": "重新连接 {1}",
+      "tw": "重新連線 {1}"
+    },
+    {
+      "id": "attr-remove",
+      "pattern": "^Remove\\s+(.+)$",
+      "flags": "i",
+      "sc": "移除 {1}",
+      "tw": "移除 {1}"
+    },
+    {
+      "id": "attr-restart",
+      "pattern": "^Restart\\s+(.+)$",
+      "flags": "i",
+      "sc": "重启 {1}",
+      "tw": "重新啟動 {1}"
+    },
+    {
+      "id": "attr-stop-confirm",
+      "pattern": "^Stop\\s+(.+?)\\?$",
+      "flags": "i",
+      "sc": "确定要停止 {1} 吗？",
+      "tw": "確定要停止 {1} 嗎？"
+    },
+    {
+      "id": "attr-stop",
+      "pattern": "^Stop\\s+(.+)$",
+      "flags": "i",
+      "sc": "停止 {1}",
+      "tw": "停止 {1}"
+    },
+    {
+      "id": "attr-toggle",
+      "pattern": "^Toggle\\s+(.+)$",
+      "flags": "i",
+      "sc": "切换 {1}",
+      "tw": "切換 {1}"
+    },
+    {
+      "id": "attr-view",
+      "pattern": "^View\\s+(.+)$",
+      "flags": "i",
+      "sc": "查看 {1}",
+      "tw": "檢視 {1}"
+    }
+  ]
+}

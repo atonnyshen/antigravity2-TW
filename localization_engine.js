@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const child_process = require('child_process');
 
 const { readAsarLayout, patchAsarArchive, validateAsarCandidate } = require('./src/asar_patcher');
+const { validateRuntimeRulesObject } = require('./src/rules_schema');
 const {
     patchPreloadJs,
     patchUtilsJs,
@@ -20,7 +21,11 @@ const {
     patchWebauthnJs,
     patchWebviewPopupSecurityJs,
     patchProvisionSplashJs,
-    patchWizardHtmlJs
+    patchWizardHtmlJs,
+    patchSshErrorTextJs,
+    patchComputerHudJs,
+    patchComputerHudStateJs,
+    patchComputerHudAgentsJs
 } = require('./src/main_patches');
 
 // macOS 环境下自动补全 PATH，确保 codesign 等工具能被顺利找到
@@ -200,17 +205,79 @@ function normalizeText(text) {
                .replace(/…/g, '...');
 }
 
+function compareVersions(v1, v2) {
+    const clean = v => String(v || '').replace(/^[^\d]*/, '').split('.').map(n => parseInt(n, 10) || 0);
+    const p1 = clean(v1);
+    const p2 = clean(v2);
+    for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+        const num1 = p1[i] || 0;
+        const num2 = p2[i] || 0;
+        if (num1 > num2) return 1;
+        if (num1 < num2) return -1;
+    }
+    return 0;
+}
+
+function safeEmbedJson(jsonStr) {
+    return jsonStr
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/\//g, '\\/')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
+
 function getActiveTranslation() {
     try {
-        const state = JSON.parse(fs.readFileSync(path.join(__dirname, '.watcher-state', 'active_translation.json'), 'utf8'));
+        const statePath = path.join(__dirname, '.watcher-state', 'active_translation.json');
+        const stateStat = fs.lstatSync(statePath);
+        if (stateStat.isSymbolicLink() || !stateStat.isFile()) return null;
+        const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
         if (!state || !/^\d+\.\d+\.\d+$/.test(state.version)) return null;
+        const engineVersion = getPackageVersion();
+        if (compareVersions(state.version, engineVersion) < 0) return null;
+
         const root = path.join(__dirname, '.translation-packs');
         const folder = path.join(root, state.version);
         if (!fs.lstatSync(root).isDirectory() || !fs.lstatSync(folder).isDirectory()) return null;
-        if (!fs.statSync(path.join(folder, 'dicts')).isDirectory() ||
-            !fs.statSync(path.join(folder, 'dicts_tw')).isDirectory()) return null;
-        return { version: state.version, folder };
+        if (!fs.lstatSync(path.join(folder, 'dicts')).isDirectory() ||
+            !fs.lstatSync(path.join(folder, 'dicts_tw')).isDirectory()) return null;
+
+        const manifestPath = path.join(folder, 'translation-pack.json');
+        if (fs.existsSync(manifestPath)) {
+            const manifestStat = fs.lstatSync(manifestPath);
+            if (manifestStat.isSymbolicLink() || !manifestStat.isFile()) return null;
+            const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+            if (!manifest ||
+                !/^\d+\.\d+\.\d+$/.test(manifest.minEngineVersion || '') ||
+                !/^\d+\.\d+\.\d+$/.test(manifest.maxEngineVersion || '') ||
+                compareVersions(engineVersion, manifest.minEngineVersion) < 0 ||
+                compareVersions(engineVersion, manifest.maxEngineVersion) > 0) {
+                return null;
+            }
+        }
+
+        const rulesDir = path.join(folder, 'rules');
+        const rulesFile = path.join(rulesDir, 'runtime_rules.json');
+        let hasRules = false;
+        try {
+            hasRules = fs.lstatSync(rulesDir).isDirectory() && fs.lstatSync(rulesFile).isFile();
+        } catch {}
+        return { version: state.version, folder, hasRules };
     } catch { return null; }
+}
+
+function loadRuntimeRules() {
+    const active = getActiveTranslation();
+    const baseDir = active && active.hasRules ? active.folder : __dirname;
+    const rulesFile = path.join(baseDir, 'rules', 'runtime_rules.json');
+    if (!fs.existsSync(rulesFile)) return {};
+    const st = fs.lstatSync(rulesFile);
+    if (st.isSymbolicLink() || !st.isFile()) {
+        throw new Error('Unsafe runtime_rules.json file type');
+    }
+    const parsed = JSON.parse(fs.readFileSync(rulesFile, 'utf8'));
+    return validateRuntimeRulesObject(parsed);
 }
 
 function loadDictionary() {
@@ -256,12 +323,19 @@ function getPackageVersion() {
 function generateJs() {
     const fullDict = loadDictionary();
     const dictJson = JSON.stringify(fullDict);
+    const runtimeRulesJson = JSON.stringify(loadRuntimeRules());
     const runtimePath = path.join(__dirname, 'src', 'preload_runtime.js');
     const runtimeTemplate = fs.readFileSync(runtimePath, 'utf-8');
 
-    const body = runtimeTemplate
-        .replace('__USE_TW_PLACEHOLDER__', () => (USE_TW ? 'true' : 'false'))
-        .replace('DICT_PLACEHOLDER', () => dictJson);
+    const replacements = {
+        __USE_TW_PLACEHOLDER__: USE_TW ? 'true' : 'false',
+        DICT_PLACEHOLDER: safeEmbedJson(dictJson),
+        RULES_PLACEHOLDER: safeEmbedJson(runtimeRulesJson)
+    };
+    const body = runtimeTemplate.replace(
+        /__USE_TW_PLACEHOLDER__|DICT_PLACEHOLDER|RULES_PLACEHOLDER/g,
+        token => replacements[token]
+    );
 
     const active = getActiveTranslation();
     const metaComment = `/* --- ANTIGRAVITY L10N META:${JSON.stringify({ version: getPackageVersion(), translationVersion: active ? active.version : getPackageVersion(), buildTime: Date.now() })} --- */`;
@@ -651,7 +725,7 @@ function isRealAppInstallDir(targetPath) {
 
 function computeDirRecipeHash(dir) {
     const files = ['package.json', 'package-lock.json', 'localization_engine.js', 'auto_localize_watcher.js'];
-    for (const folder of ['dicts', 'dicts_tw', 'src']) {
+    for (const folder of ['dicts', 'dicts_tw', 'rules', 'src']) {
         const folderPath = path.join(dir, folder);
         if (fs.existsSync(folderPath)) {
             for (const name of fs.readdirSync(folderPath).sort()) {
@@ -763,7 +837,7 @@ function prepareMacWatcherSync({
                 fs.copyFileSync(srcFile, path.join(rtDir, file));
             }
         }
-        for (const folder of ['dicts', 'dicts_tw', 'src', 'scripts']) {
+        for (const folder of ['dicts', 'dicts_tw', 'rules', 'src', 'scripts']) {
             const srcFolder = path.join(sourceDir, folder);
             const dstFolder = path.join(rtDir, folder);
             if (fs.existsSync(srcFolder)) {
@@ -771,6 +845,17 @@ function prepareMacWatcherSync({
                 copyDirTree(srcFolder, dstFolder);
             }
         }
+        try {
+            const srcPkg = JSON.parse(fs.readFileSync(path.join(sourceDir, 'package.json'), 'utf8'));
+            const sourceVersion = srcPkg && typeof srcPkg.version === 'string' ? srcPkg.version.trim() : '';
+            const activePath = path.join(rtDir, '.watcher-state', 'active_translation.json');
+            if (sourceVersion && fs.existsSync(activePath)) {
+                const state = JSON.parse(fs.readFileSync(activePath, 'utf8'));
+                if (state && /^\d+\.\d+\.\d+$/.test(state.version || '') && compareVersions(state.version, sourceVersion) <= 0) {
+                    fs.unlinkSync(activePath);
+                }
+            }
+        } catch {}
         session.synced.push(rtDir);
     }
     if (session.unwritableSystem) {
@@ -893,7 +978,11 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
             ['dist/webauthn.js', content => patchWebauthnJs(content, USE_TW)],
             ['dist/webviewPopupSecurity.js', content => patchWebviewPopupSecurityJs(content, USE_TW)],
             ['dist/provisionSplash.js', content => patchProvisionSplashJs(content, USE_TW)],
-            ['dist/ideInstall/wizardHtml.js', content => patchWizardHtmlJs(content, USE_TW)]
+            ['dist/ideInstall/wizardHtml.js', content => patchWizardHtmlJs(content, USE_TW)],
+            ['dist/remote/sshErrorText.js', content => patchSshErrorTextJs(content, USE_TW)],
+            ['dist/computer/hud.js', content => patchComputerHudJs(content, USE_TW)],
+            ['dist/computer/hudState.js', content => patchComputerHudStateJs(content, USE_TW)],
+            ['dist/computer/hudAgents.js', content => patchComputerHudAgentsJs(content, USE_TW)]
         ]);
 
         console.log(`[打包] 正在使用原生引擎生成并校验汉化候选包...`);
@@ -1201,6 +1290,7 @@ function main() {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         generateJs,
+        loadRuntimeRules,
         install20,
         detectInstallationDir,
         checkIfAppIsRunning,

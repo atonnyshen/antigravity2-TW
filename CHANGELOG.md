@@ -1,5 +1,25 @@
 # 更新紀錄
 
+## 3.7.3 — 2026-11-22
+
+- **規則全資料化自動更新架構（`schemaVersion: 2`）**：
+  - 新增純資料規則檔 `rules/runtime_rules.json`，將動態句型樣板（22 條 `dynamicRules`）、屬性提示樣板（21 條 `attrDynamicRules`）、蜂群／蜂巢作用域對照表（76 筆 `scopedMaps.swarm`）及不翻譯保護清單（`lowerWordsExclude`、`modelEffortLabels`、`slashCommands`）抽離至宣告式 JSON。
+  - 日後發布新詞條或動態句型改寫，已安裝 `v3.7.3` 背景守護的使用者無須重新下載主程式，即可隨純翻譯包自動更新並生效，維持零可執行程式碼遠端載入政策。
+  - `scripts/auto_updater.js` 與 `scripts/build_translation_pack.js` 向下相容 `schemaVersion: 1`，並在 `schemaVersion: 2` 支援封裝、驗證與套用 `rules/runtime_rules.json`。
+  - `auto_localize_watcher.js`、`localization_engine.js` 與 `install_macos_autowatcher.sh` 同步將 `rules/` 納入 `recipeHash`、守護快照同步與安裝流程；`scripts/compare_dicts.js` 新增 `compareRules()`，以同一套簡體字殘留與台灣禁用詞檢查稽核 `rules/` 內容。
+- **安全與升級生命週期強固**：
+  - `src/rules_schema.js` 與 `src/preload_runtime.js` 同步施行 ReDoS 結構防衛，強制規則首尾完整錨定（`^...$`）、禁用反向參考與環視、阻擋可重複交替與巢狀量詞群組、限制無界 `.*`/`+.` 萬用字元數量上限，並在執行期限定 1000 字元比對上限，不使用 `eval` 或 `new Function`。
+  - `localization_engine.js` 引入 `safeEmbedJson()` 與單次掃描佔位取代，避免字典或規則內含佔位符、`<`/`>`/`/` 或結束標記造成語法破壞或 Sidecar 擷取截斷。
+  - `validateTranslationPack()` 改於讀取 manifest 前優先檢查軟連結與檔案型態，嚴格限定 `schemaVersion: 2` 的 `rules/` 目錄僅可存在單一常規檔 `runtime_rules.json`。
+  - 強化過期快取防護：`getActiveTranslation()` 與 `readActiveTranslation()` 核對快取翻譯包不得低於目前引擎版本及相容區間；`prepareMacWatcherSync()` 於 macOS 手動升級同步守護時自動清除 `<= sourceVersion` 的過期 `active_translation.json`。
+- **Antigravity `v2.34.0` 全量漏譯補齊與診斷強化**：
+  - 補齊 `Offloads routine steps to a faster executor. Same quality, fewer tokens used.` 等動態模型分流句型、剩餘 JSX 樣板與字典詞條（含 `Unlock the power of agent swarms.`、`Worktree Name`、`Show 5`／`Show 10`、`Answered:`、`Branch, current:`、`+\d+ attachments`、`Detached at` 等），並保護小寫 `Thinking effort` 維持英文原文。
+  - 新增 4 支主程序 ASAR 原生補丁：`dist/computer/hud.js`、`dist/computer/hudState.js`、`dist/computer/hudAgents.js`（AGY 桌面監視面板）與 `dist/remote/sshErrorText.js`。
+  - 修正 `scripts/dev_tool.js` 在 `v2.34.0` `language_server` 改用 `--read_host_bridge_token_from_stdin` 導致 `--csrf_token` 為空時靜默略過 RPC 探測的問題，改為明確印出提示。
+- **回歸測試與發布文件同步**：
+  - 全套自動化測試擴增至 97 項，新增涵蓋佔位符逃逸、8 種 ReDoS 攻擊樣式、軟連結、保護詞移除、`recipeHash()` 失效與過期翻譯包清除之驗證。
+  - 同步更新 `README.md`、`README_TW.md` 與 `docs/RELEASING.md` 說明純資料 `rules/` 更新範圍。
+
 ## 3.7.2 — 2026-11-21
 
 - 背景守護接續復原：回退失敗時保存具 SHA-256 的復原檔與紀錄。每次既有五分鐘排程先核對正式 ASAR，再嘗試恢復並重套繁中。權限問題解除後可自動接續；遇到不明版本、檔案損毀或多次官方更新衝突時，保留復原材料並記錄人工核對需求。

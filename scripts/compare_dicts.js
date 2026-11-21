@@ -1,15 +1,19 @@
 const fs = require('fs');
 const path = require('path');
+const { validateRuntimeRulesObject } = require('../src/rules_schema');
 
 const args = process.argv.slice(2);
 let dictsDir = path.join(__dirname, '../dicts');
 let dictsTwDir = path.join(__dirname, '../dicts_tw');
+let rulesDir = null;
 
 for (let i = 0; i < args.length; i++) {
     if (args[i] === '--dicts-dir' && args[i + 1]) {
         dictsDir = path.resolve(args[++i]);
     } else if (args[i] === '--dicts-tw-dir' && args[i + 1]) {
         dictsTwDir = path.resolve(args[++i]);
+    } else if (args[i] === '--rules-dir' && args[i + 1]) {
+        rulesDir = path.resolve(args[++i]);
     }
 }
 
@@ -73,7 +77,66 @@ function normalizeText(text) {
                .replace(/…/g, '...');
 }
 
-function compareDicts(targetDictsDir = dictsDir, targetDictsTwDir = dictsTwDir) {
+function validateTraditionalText(tcVal, label) {
+    if (typeof tcVal !== 'string' || tcVal.trim() === '') {
+        console.error(`Error in ${label}: empty or non-string value.`);
+        return false;
+    }
+    let ok = true;
+    const scMatch = tcVal.match(STRICT_SC_CHARS_REGEX);
+    if (scMatch) {
+        console.error(`Error in ${label}: contains Simplified Chinese character "${scMatch[0]}" in value: ${tcVal}`);
+        ok = false;
+    }
+    for (const term of FORBIDDEN_TC_TERMS) {
+        if (tcVal.includes(term)) {
+            console.error(`Error in ${label}: contains forbidden term "${term}" in value: ${tcVal}`);
+            ok = false;
+        }
+    }
+    for (const [re, desc] of FORBIDDEN_TC_REGEXES) {
+        if (re.test(tcVal)) {
+            console.error(`Error in ${label}: contains forbidden term ${desc} in value: ${tcVal}`);
+            ok = false;
+        }
+    }
+    return ok;
+}
+
+function compareRules(targetRulesDir) {
+    if (!targetRulesDir || !fs.existsSync(targetRulesDir)) return true;
+    let hasError = false;
+    const jsonFiles = fs.readdirSync(targetRulesDir).filter(f => f.endsWith('.json')).sort();
+    for (const file of jsonFiles) {
+        const filePath = path.join(targetRulesDir, file);
+        try {
+            const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            validateRuntimeRulesObject(parsed);
+            if (parsed.scopedMaps) {
+                for (const [scopeName, entries] of Object.entries(parsed.scopedMaps)) {
+                    for (const [key, pair] of Object.entries(entries)) {
+                        if (!validateTraditionalText(pair.tw, `rules/${file}: scopedMaps.${scopeName}["${key}"].tw`)) {
+                            hasError = true;
+                        }
+                    }
+                }
+            }
+            for (const section of ['dynamicRules', 'attrDynamicRules']) {
+                for (const rule of (parsed[section] || [])) {
+                    if (!validateTraditionalText(rule.tw, `rules/${file}: ${section}[${rule.id}].tw`)) {
+                        hasError = true;
+                    }
+                }
+            }
+        } catch (err) {
+            console.error(`Error in rules/${file}:`, err.message);
+            hasError = true;
+        }
+    }
+    return !hasError;
+}
+
+function compareDicts(targetDictsDir = dictsDir, targetDictsTwDir = dictsTwDir, targetRulesDir = rulesDir) {
     let hasError = false;
     
     if (!fs.existsSync(targetDictsDir) || !fs.existsSync(targetDictsTwDir)) {
@@ -169,27 +232,20 @@ function compareDicts(targetDictsDir = dictsDir, targetDictsTwDir = dictsTwDir) 
                     console.error(`Error in dicts_tw/${file}: Key "${key}" has empty or non-string value.`);
                     hasError = true;
                 } else {
-                    const scMatch = tcVal.match(STRICT_SC_CHARS_REGEX);
-                    if (scMatch) {
-                        console.error(`Error in dicts_tw/${file}: Key "${key}" contains Simplified Chinese character "${scMatch[0]}" in value: ${tcVal}`);
+                    if (!validateTraditionalText(tcVal, `dicts_tw/${file} key "${key}"`)) {
                         hasError = true;
-                    }
-                    for (const term of FORBIDDEN_TC_TERMS) {
-                        if (tcVal.includes(term)) {
-                            console.error(`Error in dicts_tw/${file}: Key "${key}" contains forbidden term "${term}" in value: ${tcVal}`);
-                            hasError = true;
-                        }
-                    }
-                    for (const [re, desc] of FORBIDDEN_TC_REGEXES) {
-                        if (re.test(tcVal)) {
-                            console.error(`Error in dicts_tw/${file}: Key "${key}" contains forbidden term ${desc} in value: ${tcVal}`);
-                            hasError = true;
-                        }
                     }
                 }
             }
         } catch (e) {
             console.error(`Error parsing JSON file ${file}:`, e.message);
+            hasError = true;
+        }
+    }
+
+    const inferredRulesDir = targetRulesDir || path.join(path.dirname(targetDictsDir), 'rules');
+    if (fs.existsSync(inferredRulesDir)) {
+        if (!compareRules(inferredRulesDir)) {
             hasError = true;
         }
     }
@@ -206,6 +262,8 @@ if (require.main === module) {
 
 module.exports = {
     compareDicts,
+    compareRules,
+    validateTraditionalText,
     normalizeText,
     STRICT_SC_CHARS_REGEX,
     FORBIDDEN_TC_TERMS,

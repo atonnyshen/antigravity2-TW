@@ -5,9 +5,19 @@
     }
     // V13.0 模块化表驱动物理隔离引擎 (原生独立 JS 运行时)
     const USE_TW = __USE_TW_PLACEHOLDER__;
+    const RUNTIME_RULES = RULES_PLACEHOLDER || {};
+    const RULE_PROTECTED = (RUNTIME_RULES.protected && typeof RUNTIME_RULES.protected === 'object') ? RUNTIME_RULES.protected : {};
+    function resolveStringSet(defaults, configured) {
+        const list = Array.isArray(configured) ? configured : defaults;
+        const set = new Set();
+        for (const item of list) {
+            if (typeof item === 'string' && item.trim()) set.add(item);
+        }
+        return set;
+    }
     const map = new Map(Object.entries(DICT_PLACEHOLDER));
     const lowerMap = new Map();
-    const LOWER_WORDS_EXCLUDE = new Set([
+    const LOWER_WORDS_EXCLUDE = resolveStringSet([
         'on', 'in', 'to', 'at', 'by', 'for', 'with', 'as', 'system', 'review', 'active',
         'browser', 'global', 'including', 'and', 'or', 'file', 'files', 'help', 'app',
         'plan', 'search', 'coordinator', 'goal', 'goals', 'swarm', 'boost', 'learn',
@@ -18,7 +28,7 @@
         'apply', 'create', 'hide', 'show', 'remove', 'replace', 'verify', 'block',
         'folder', 'repository', 'error', 'other', 'environment', 'before', 'after',
         'added', 'approved', 'protocol', 'variables', 'website', 'design'
-    ]);
+    ], RULE_PROTECTED.lowerWordsExclude);
     for (const [k, v] of map.entries()) {
         const lowerK = k.toLowerCase();
         if (LOWER_WORDS_EXCLUDE.has(lowerK) && k !== lowerK) {
@@ -282,7 +292,10 @@
         return /^(Select model|选择模型|選擇模型)/i.test(norm(label || ''));
     }
 
-    const PROTECTED_MODEL_EFFORT_LABELS = new Set(['Low', 'Medium', 'High', 'Extra', 'Max', 'Thinking Effort']);
+    const PROTECTED_MODEL_EFFORT_LABELS = resolveStringSet(
+        ['Low', 'Medium', 'High', 'Extra', 'Max', 'Thinking Effort', 'Thinking effort'],
+        RULE_PROTECTED.modelEffortLabels
+    );
 
     function isModelEffortLabelProtected(node, valNorm) {
         try {
@@ -297,12 +310,12 @@
         return false;
     }
 
-    const KNOWN_SLASH_COMMANDS = new Set([
+    const KNOWN_SLASH_COMMANDS = resolveStringSet([
         'goal', 'swarm', 'boost', 'egm-boost', 'learn', 'schedule', 'plan', 'browser',
         'compact', 'grill-me', 'teamwork', 'automation', 'plugin', 'btw', 'clear',
         'help', 'init', 'review', 'split', 'commit', 'reset', 'stop', 'status', 'filter',
         'swarm-autonomous-pipeline'
-    ]);
+    ], RULE_PROTECTED.slashCommands);
     const SLASH_ITEM_SELECTOR = '[role="option"], [cmdk-item], [data-testid*="slash"], [data-testid*="typeahead"], [data-testid*="autocomplete"], [data-testid*="mention"], [data-testid*="fastpick"], [class*="typeahead"], [class*="autocomplete"], [class*="mention"], [class*="fastpick" i]';
     const SLASH_LIST_SELECTOR = '[role="listbox"], [cmdk-list], [data-lexical-typeahead-menu], [data-mention-menu], [data-testid*="slash"], [data-testid*="typeahead"], [data-testid*="autocomplete"], [data-testid*="mention"], [data-testid*="fastpick"], [class*="typeahead"], [class*="autocomplete"], [class*="mention"], [class*="fastpick" i]';
 
@@ -502,84 +515,18 @@
             .replace(/(\d+)\s*s\b/gi, '$1 秒');
     }
 
-    const SCOPED_SWARM_MAP = {
-        'Board': ['看板', '看板'],
-        'Graph': ['关系图', '關係圖'],
-        'Raw': ['原始数据', '原始資料'],
-        'Reconnecting': ['正在重连', '正在重新連線'],
-        'Replay': ['回放', '重播'],
-        'Follow': ['跟随', '跟隨'],
-        'Latest': ['最新', '最新'],
-        'Channels': ['频道', '頻道'],
-        'Filters': ['筛选', '篩選'],
-        'Coordinator': ['协调器', '協調器'],
-        'Waiting': ['等待中', '等待中'],
-        'Retired': ['已退役', '已退役'],
-        'Paused': ['已暂停', '已暫停'],
-        'Working...': ['工作中...', '工作中...'],
-        'Working': ['工作中', '工作中'],
-        'Empty.': ['暂无内容。', '尚無內容。'],
-        '(empty)': ['（空）', '（空）'],
-        'stale': ['已过期', '已過期'],
-        'system:': ['系统：', '系統：'],
-        'Goal': ['目标', '目標'],
-        'Team': ['团队', '團隊'],
-        'Threads': ['工作线', '討論串'],
-        'Now': ['当前', '目前'],
-        'Progress': ['进度', '進度'],
-        'Tasks': ['任务', '任務'],
-        'Other': ['其他', '其他'],
-        'Moving': ['推进中', '推進中'],
-        'Reply': ['回复', '回覆'],
-        'Frames': ['画面', '畫面'],
-        'All': ['全部', '全部'],
-        'all channels': ['全部频道', '全部頻道'],
-        'Remote': ['远程', '遠端'],
-        'updating': ['更新中', '更新中'],
-        'watching': ['监听中', '監聽中'],
-        'stopped': ['已停止', '已停止'],
-        'Needs you': ['待你处理', '待你處理'],
-        'Not started': ['未开始', '尚未開始'],
-        'Blocked': ['受阻', '受阻'],
-        'Running': ['运行中', '執行中'],
-        'Done': ['已完成', '已完成'],
-        'Open': ['打开', '開啟'],
-        'Active': ['活跃', '執行中'],
-        'Killed': ['已终止', '已終止'],
-        'queued': ['排队中', '排隊中'],
-        'running': ['运行中', '執行中'],
-        'blocked': ['受阻', '受阻'],
-        'done': ['已完成', '已完成'],
-        'active': ['活跃', '執行中'],
-        'paused': ['已暂停', '已暫停'],
-        'Overview': ['概览', '概覽'],
-        'Members': ['成员', '成員'],
-        'Live': ['实时', '即時'],
-        'Timeline': ['时间线', '時間軸'],
-        'Roster': ['成员名单', '成員名單'],
-        'Swarm': ['蜂群', '蜂群'],
-        'Swarm (Preview)': ['蜂群（预览版）', '蜂群（預覽版）'],
-        'Stalled': ['已停滞', '已停滯'],
-        'stalled': ['已停滞', '已停滯'],
-        'Failed': ['失败', '失敗'],
-        'failed': ['失败', '失敗'],
-        'Error': ['错误', '錯誤'],
-        'error': ['错误', '錯誤'],
-        'Quota': ['配额', '配額'],
-        'quota': ['配额', '配額'],
-        'Offline': ['离线', '離線'],
-        'offline': ['离线', '離線'],
-        'Idle': ['空闲', '閒置'],
-        'idle': ['空闲', '閒置'],
-        'Hive': ['蜂巢', '蜂巢'],
-        'Tasks done': ['任务已完成', '任務已完成'],
-        'Message just sent': ['刚发送消息', '剛傳送訊息'],
-        'Waiting on': ['等待中', '正在等待'],
-        'Stuck': ['已卡住', '受阻'],
-        'Resting': ['休息中', '休息中'],
-        'Latest action': ['最新动作', '最新動作'],
-        'Zoom': ['缩放', '縮放']
-    };
+    const SCOPED_SWARM_MAP = (() => {
+        const out = {};
+        const srcMap = RUNTIME_RULES.scopedMaps && RUNTIME_RULES.scopedMaps.swarm;
+        if (srcMap && typeof srcMap === 'object') {
+            for (const [k, pair] of Object.entries(srcMap)) {
+                if (pair && typeof pair.sc === 'string' && typeof pair.tw === 'string') {
+                    out[k] = [pair.sc, pair.tw];
+                }
+            }
+        }
+        return out;
+    })();
 
     function isSwarmUiContext(el) {
         try {
@@ -827,7 +774,6 @@
         [/^Hi there[.!]*$/i, () => "您好。"],
         [/^Hi\s+([^\s.!]+)[.!]*$/i, (m, name) => name.toLowerCase() === 'there' ? "您好。" : (USE_TW ? ("嗨，" + name.trim() + "。") : ("嗨，" + name.trim() + "。"))],
         [/^(.+?),\s+voice\s+(\d+)\s+of\s+(\d+)$/i, (m, name, curr, total) => USE_TW ? (name + "，聲音 " + curr + " / " + total) : (name + "，音色 " + curr + " / " + total)],
-        [/^Voice\s+speed,\s+([0-9.]+x)$/i, (m, spd) => USE_TW ? ("語速，" + spd) : ("语速，" + spd)],
 
         // 按钮与快捷提示
         [/^Send message\s+(Enter|⏎|\u23ce)$/i, (m, key) => (USE_TW ? "傳送訊息 " : "发送消息 ") + key],
@@ -1180,7 +1126,6 @@
         [/^Move to Group:\s*(.+)$/i, (m, g) => (USE_TW ? "移至群組：" : "移至分组：") + g],
         [/^App view for\s+(.+)$/i, (m, v) => (USE_TW ? "應用程式檢視：" : "应用视图：") + v],
         [/^(.+?)\s+\(Experimental\)$/i, (m, label) => label + (USE_TW ? "（實驗性）" : "（实验性）")],
-        [/^Detached at\s+([0-9a-f]{6,12})$/i, (m, sha) => (USE_TW ? "已分離於 " : "已分离于 ") + sha],
         [/^When toggled on,\s*(.+?)\s+collects usage data to help Google enhance performance and features\.?$/i, (m, app) => USE_TW ? ("開啟後，" + app + " 將收集使用量資料以協助 Google 改進效能與功能。") : ("开启后，" + app + " 将收集使用数据以帮助 Google 改进性能和功能。")],
         [/^When toggled on,\s*(.+?)\s+will use your AI credits to fulfill model requests once you['’]re out of model quota\.\s*\1\s+will always use your model quota first before using AI credits\.?$/i, (m, app) => USE_TW ? ("開啟後，當模型配額用盡時，" + app + " 將使用您的 AI 點數來完成模型請求。" + app + " 永遠會優先使用您的模型配額，再使用 AI 點數。") : ("开启后，当模型配额用尽时，" + app + " 将使用您的 AI 额度来完成模型请求。" + app + " 始终会优先使用您的模型配额，然后再使用 AI 额度。")],
         [/^Receive product updates,\s*tips,\s*and promotions from Google\s+(.+?)\s+via email\.?$/i, (m, app) => USE_TW ? ("透過電子郵件接收 Google " + app + " 的產品更新、使用技巧與優惠活動。") : ("通过电子邮件接收 Google " + app + " 的产品更新、技巧和促销信息。")],
@@ -1269,29 +1214,6 @@
             const period = hasPeriod ? "。" : "";
             const dZh = formatEnglishDate(dateStr);
             return USE_TW ? ("自 " + dZh + "起將不再提供第三方模型存取權限" + period) : ("自 " + dZh + "起将不再提供第三方模型访问权限" + period);
-        }],
-
-        // 模型選擇器動態分派提示與思考強度
-        [/^(.+?)\s+that may offload routine steps to\s+(.+?)\.\s*Same\s+(.+?)-level quality,\s*fewer tokens used\.?$/i, (m, model, target, qualityModel) => {
-            const hasPeriod = /\.$/.test(m.trim());
-            const period = hasPeriod ? "。" : "";
-            return USE_TW
-                ? `${model.trim()} 可將例行步驟分流至 ${target.trim()}。維持 ${qualityModel.trim()} 同級品質，消耗更少 Token${period}`
-                : `${model.trim()} 可将例行步骤分流至 ${target.trim()}。维持 ${qualityModel.trim()} 同级品质，消耗更少 Token${period}`;
-        }],
-        [/^(.+?)\s+that may offload routine steps to\s+(.+?)\.?$/i, (m, model, target) => {
-            const hasPeriod = /\.$/.test(m.trim());
-            const period = hasPeriod ? "。" : "";
-            return USE_TW
-                ? `${model.trim()} 可將例行步驟分流至 ${target.trim()}${period}`
-                : `${model.trim()} 可将例行步骤分流至 ${target.trim()}${period}`;
-        }],
-        [/^Same\s+(.+?)-level quality,\s*fewer tokens used\.?$/i, (m, qualityModel) => {
-            const hasPeriod = /\.$/.test(m.trim());
-            const period = hasPeriod ? "。" : "";
-            return USE_TW
-                ? `維持 ${qualityModel.trim()} 同級品質，消耗更少 Token${period}`
-                : `维持 ${qualityModel.trim()} 同级品质，消耗更少 Token${period}`;
         }],
 
         // 帳號資格、地區不支援與登入錯誤動態提示
@@ -1391,7 +1313,6 @@
         [/^Show\s+(.+?)\s+in folder$/i, (m, t) => USE_TW ? ("在資料夾中顯示 " + t) : ("在文件夹中显示 " + t)],
         [/^Sign in to\s+(.+?)\s+remotely$/i, (m, t) => (USE_TW ? "遠端登入 " : "远程登录 ") + t],
         [/^Sign in to\s+(.+)$/i, (m, t) => (USE_TW ? "登入 " : "登录 ") + t],
-        [/^Stop\s+(\d+)\s+selected$/i, (m, n) => USE_TW ? ("停止已選取的 " + n + " 個項目") : ("停止已选中的 " + n + " 个项目")],
         [/^Switch environment\s*\((.+)\)$/i, (m, env) => (USE_TW ? "切換環境 (" : "切换环境 (") + env + ")"],
         [/^Toggle Word Wrap(.*)$/i, (m, rest) => (USE_TW ? "切換自動換行" : "切换自动换行") + rest],
         [/^Using default\s+(.+?)\s+name$/i, (m, t) => USE_TW ? ("使用預設的 " + t + " 名稱") : ("使用默认的 " + t + " 名称")],
@@ -1417,44 +1338,170 @@
         [/^Failed to save project:\s*(.+)$/i, (m, err) => (USE_TW ? "儲存專案失敗：" : "保存项目失败：") + err],
         [/^(?:Auth|Authorization) code for\s+(.+)$/i, (m, app) => app + (USE_TW ? " 的授權碼" : " 的授权码")],
         [/^Worker sandbox initialization failed:\s*(.+)$/i, (m, err) => (USE_TW ? "Worker 沙箱初始化失敗：" : "Worker 沙箱初始化失败：") + err],
-
-        // v2.34.0 動態模板規則（同步上游）
-        [/^Couldn['’]t disconnect\s+(.+?):\s*(.+)$/i, (m, target, reason) => (USE_TW ? "無法中斷 " + target + " 的連線：" : "无法断开 " + target + " 的连接：") + reason],
-        [/^Failed to load page\s+(.+?):\s*(.+)$/i, (m, page, reason) => (USE_TW ? "載入頁面 " + page + " 失敗：" : "加载页面 " + page + " 失败：") + reason],
-        [/^More options for\s+(.+)$/i, (m, target) => target + (USE_TW ? " 的更多選項" : " 的更多选项")],
-        [/^Opens the New Conversation screen for this\s+(.+)$/i, (m, target) => {
-            const noun = map.get(target.trim()) || lowerMap.get(target.trim().toLowerCase()) || target.trim();
-            return USE_TW ? ("開啟此 " + noun + " 的新對話畫面") : ("打开此 " + noun + " 的新会话界面");
-        }],
     ];
 
-    const ATTR_DYNAMIC_RULES = [
-        [/^Add\s+(.+)$/i, (m, t) => (USE_TW ? "新增 " : "添加 ") + t],
-        [/^Cancel\s+(.+)$/i, (m, t) => "取消 " + t],
-        [/^Close\s+(.+)$/i, (m, t) => (USE_TW ? "關閉 " : "关闭 ") + t],
-        [/^Connect\s+(.+)$/i, (m, t) => (USE_TW ? "連線 " : "连接 ") + t],
-        [/^Disconnect\s+(.+)$/i, (m, t) => (USE_TW ? "中斷連線 " : "断开连接 ") + t],
-        [/^Delete\s+(.+)$/i, (m, t) => (USE_TW ? "刪除 " : "删除 ") + t],
-        [/^Enable\s+(.+)$/i, (m, t) => (USE_TW ? "啟用 " : "启用 ") + t],
-        [/^Install\s+(.+)$/i, (m, t) => (USE_TW ? "安裝 " : "安装 ") + t],
-        [/^Keep:\s*(.+)$/i, (m, t) => "保留：" + t],
-        [/^Label for\s+(.+)$/i, (m, t) => t + (USE_TW ? " 的標籤" : " 的标签")],
-        [/^New\s+(.+)$/i, (m, t) => (USE_TW ? "新增 " : "新建 ") + t],
-        [/^Open\s+(.+)$/i, (m, t) => (USE_TW ? "開啟 " : "打开 ") + t],
-        [/^Reconnect\s+(.+)$/i, (m, t) => (USE_TW ? "重新連線 " : "重新连接 ") + t],
-        [/^Remove\s+(.+)$/i, (m, t) => "移除 " + t],
-        [/^Restart\s+(.+)$/i, (m, t) => (USE_TW ? "重新啟動 " : "重启 ") + t],
-        [/^Stop\s+(.+?)\?$/i, (m, t) => USE_TW ? ("確定要停止 " + t + " 嗎？") : ("确定要停止 " + t + " 吗？")],
-        [/^Stop\s+(.+)$/i, (m, t) => "停止 " + t],
-        [/^Toggle\s+(.+)$/i, (m, t) => (USE_TW ? "切換 " : "切换 ") + t],
-        [/^View\s+(.+)$/i, (m, t) => (USE_TW ? "檢視 " : "查看 ") + t],
-    ];
+    function isSafeDeclarativeRegex(pattern, flags) {
+        if (typeof pattern !== 'string' || pattern.length === 0 || pattern.length > 512) return false;
+        if (!pattern.startsWith('^') || !pattern.endsWith('$')) return false;
+        let trailEsc = 0;
+        for (let j = pattern.length - 2; j >= 0 && pattern[j] === '\\'; j--) trailEsc++;
+        if (trailEsc % 2 === 1) return false;
 
-    function translateAttrDynamic(t) {
-        for (const [regex, replacer] of ATTR_DYNAMIC_RULES) {
-            if (regex.test(t)) return t.replace(regex, replacer);
+        if (typeof flags !== 'string' || flags.length > 3) return false;
+        const seenFlags = new Set();
+        for (const ch of flags) {
+            if ((ch !== 'i' && ch !== 'm' && ch !== 'u') || seenFlags.has(ch)) return false;
+            seenFlags.add(ch);
+        }
+        const readQ = (pat, pos) => {
+            const c = pat[pos];
+            if (c === '*' || c === '+' || c === '?') {
+                return { end: pat[pos + 1] === '?' ? pos + 2 : pos + 1, unbounded: c !== '?', repeatable: c !== '?' };
+            }
+            if (c === '{') {
+                const close = pat.indexOf('}', pos);
+                if (close > pos) {
+                    const mm = pat.slice(pos + 1, close).match(/^(\d+)(?:,(\d*))?$/);
+                    if (mm) {
+                        const max = mm[2] === undefined ? Number(mm[1]) : (mm[2] === '' ? Infinity : Number(mm[2]));
+                        return { end: pat[close + 1] === '?' ? close + 2 : close + 1, unbounded: mm[2] === '', repeatable: max > 1 };
+                    }
+                }
+            }
+            return null;
+        };
+        const stack = [];
+        let unboundedDots = 0;
+        for (let i = 0; i < pattern.length;) {
+            const ch = pattern[i];
+            if (ch === '\\') {
+                if (i + 1 >= pattern.length) return false;
+                const esc = pattern[i + 1];
+                if ((esc >= '1' && esc <= '9') || esc === 'k') return false;
+                i += 2;
+                const q = readQ(pattern, i);
+                if (q) { if (q.unbounded && stack.length) stack[stack.length - 1].u = true; i = q.end; if (readQ(pattern, i)) return false; }
+                continue;
+            }
+            if (ch === '[') {
+                i++;
+                let closed = false;
+                while (i < pattern.length) {
+                    if (pattern[i] === '\\') { i += 2; continue; }
+                    if (pattern[i] === ']') { closed = true; i++; break; }
+                    i++;
+                }
+                if (!closed) return false;
+                const q = readQ(pattern, i);
+                if (q) { if (q.unbounded && stack.length) stack[stack.length - 1].u = true; i = q.end; if (readQ(pattern, i)) return false; }
+                continue;
+            }
+            if (ch === '(') {
+                if (pattern[i + 1] === '?' && (
+                    pattern[i + 2] === '=' ||
+                    pattern[i + 2] === '!' ||
+                    (pattern[i + 2] === '<' && (pattern[i + 3] === '=' || pattern[i + 3] === '!'))
+                )) {
+                    return false;
+                }
+                stack.push({ u: false, a: false });
+                i++;
+                continue;
+            }
+            if (ch === '|') {
+                if (!stack.length) return false;
+                stack[stack.length - 1].a = true;
+                i++;
+                continue;
+            }
+            if (ch === ')') {
+                if (!stack.length) return false;
+                const f = stack.pop(); i++;
+                const q = readQ(pattern, i);
+                if (q) {
+                    if (q.repeatable && (f.u || f.a)) return false;
+                    if (stack.length) {
+                        if (q.unbounded || f.u) stack[stack.length - 1].u = true;
+                        if (f.a) stack[stack.length - 1].a = true;
+                    }
+                    i = q.end;
+                    if (readQ(pattern, i)) return false;
+                } else if (stack.length) {
+                    if (f.u) stack[stack.length - 1].u = true;
+                    if (f.a) stack[stack.length - 1].a = true;
+                }
+                continue;
+            }
+            if (ch === '.') {
+                i++;
+                const q = readQ(pattern, i);
+                if (q) {
+                    if (q.unbounded) {
+                        unboundedDots++;
+                        if (unboundedDots > 4) return false;
+                        if (stack.length) stack[stack.length - 1].u = true;
+                    }
+                    i = q.end;
+                    if (readQ(pattern, i)) return false;
+                }
+                continue;
+            }
+            if (ch === '*' || ch === '+' || ch === '?' || ch === '{') {
+                const q = readQ(pattern, i);
+                if (q) { if (q.unbounded && stack.length) stack[stack.length - 1].u = true; i = q.end; if (readQ(pattern, i)) return false; continue; }
+            }
+            i++;
+        }
+        return stack.length === 0;
+    }
+
+    function applyRuleTransform(val, mode) {
+        if (!mode || mode === 'raw') return val;
+        if (mode === 'trim') return val.trim();
+        if (mode === 'zhPeriod') return val.trim() === '.' ? '。' : '';
+        if (mode === 'lookupOrKeep') {
+            const k = val.trim();
+            return map.get(k) || lowerMap.get(k.toLowerCase()) || k;
+        }
+        if (mode === 'compactDuration') return formatCompactDuration(val.trim());
+        if (mode === 'englishDate') return formatEnglishDate(val.trim());
+        if (mode === 'usageDuration') return formatUsageDuration(val.trim());
+        if (mode === 'planAudience') return formatPlanAudience(val.trim());
+        return val;
+    }
+
+    function compileDeclarativeRules(ruleDefs) {
+        if (!Array.isArray(ruleDefs)) return [];
+        const compiled = [];
+        for (const def of ruleDefs) {
+            if (!def || typeof def !== 'object') continue;
+            const flags = typeof def.flags === 'string' ? def.flags : '';
+            if (!isSafeDeclarativeRegex(def.pattern, flags)) continue;
+            const tpl = USE_TW ? def.tw : def.sc;
+            if (typeof tpl !== 'string' || !tpl) continue;
+            try {
+                const regex = new RegExp(def.pattern, flags);
+                const transforms = (def.transforms && typeof def.transforms === 'object') ? def.transforms : null;
+                compiled.push([regex, match => tpl.replace(/\{([1-9])\}/g, (_w, idx) => applyRuleTransform(match[Number(idx)] || '', transforms && transforms[idx]))]);
+            } catch {}
+        }
+        return compiled;
+    }
+
+    const JSON_DYNAMIC_RULES = compileDeclarativeRules(RUNTIME_RULES.dynamicRules);
+    const JSON_ATTR_DYNAMIC_RULES = compileDeclarativeRules(RUNTIME_RULES.attrDynamicRules);
+
+    function matchRuleList(list, text) {
+        if (!text || text.length > 1000) return null;
+        for (const [regex, replacer] of list) {
+            const match = text.match(regex);
+            if (match) return replacer(match, ...match.slice(1));
         }
         return null;
+    }
+
+    function translateAttrDynamic(t) {
+        return matchRuleList(JSON_ATTR_DYNAMIC_RULES, t);
     }
 
     function translateExactOrDynamic(t) {
@@ -1465,6 +1512,8 @@
         if (map.has(t)) return map.get(t);
         const lower = t.toLowerCase();
         if (lowerMap.has(lower)) return lowerMap.get(lower);
+        const jsonHit = matchRuleList(JSON_DYNAMIC_RULES, t);
+        if (jsonHit !== null) return jsonHit;
         for (const [regex, replacer] of DYNAMIC_RULES) {
             if (regex.test(t)) return t.replace(regex, replacer);
         }

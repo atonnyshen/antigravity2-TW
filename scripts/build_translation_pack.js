@@ -75,13 +75,21 @@ function buildTranslationPack({ version, minEngineVersion, maxEngineVersion, out
     if (!output || path.extname(output).toLowerCase() !== '.zip') {
         throw new Error('請指定 ZIP 輸出路徑。');
     }
+    const rulesDir = path.join(repo, 'rules');
+    const ruleFiles = fs.existsSync(rulesDir)
+        ? fs.readdirSync(rulesDir).filter(x => x.endsWith('.json')).sort()
+        : [];
+    const schemaVersion = ruleFiles.length > 0 ? 2 : 1;
     const entries = [['translation-pack.json', Buffer.from(JSON.stringify({
-        schemaVersion: 1, version, minEngineVersion, maxEngineVersion
+        schemaVersion, version, minEngineVersion, maxEngineVersion
     }, null, 2) + '\n')]];
     for (const folder of ['dicts', 'dicts_tw']) {
         for (const name of fs.readdirSync(path.join(repo, folder)).filter(x => x.endsWith('.json')).sort()) {
             entries.push([`${folder}/${name}`, fs.readFileSync(path.join(repo, folder, name))]);
         }
+    }
+    for (const name of ruleFiles) {
+        entries.push([`rules/${name}`, fs.readFileSync(path.join(rulesDir, name))]);
     }
     fs.mkdirSync(path.dirname(output), { recursive: true });
     const archive = makeStoredZip(entries);

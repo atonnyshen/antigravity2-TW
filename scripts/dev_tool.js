@@ -552,8 +552,10 @@ async function cmdScanUi(args = []) {
     const js = await fetchUrl(`https://127.0.0.1:${httpsPort}/main.js`);
     const extracted = extractUiStringsFromBundle(js);
 
-    // 同步通过 Connect-Web RPC 提取 Mendel 动态实验下发的 UI 文案 (如新手引导 Persona 卡片与免责声明)
-    if (info.csrfToken) {
+    // 同步通过 Connect-Web RPC 提取 Mendel 动态实验与服务端动态 UI 文案
+    if (!info.csrfToken) {
+        console.warn('[!] 未找到 --csrf_token（v2.34.0 起改採 stdin 傳遞令牌），本次僅掃描靜態 bundle，無法拉取 GetUserStatus / RetrieveUserQuotaSummary / Mendel / SlashCommands 遠端動態詞條。');
+    } else {
         try {
             const mendelData = await postJsonRpc(
                 `https://127.0.0.1:${httpsPort}/exa.language_server_pb.LanguageServerService/GetMendelFlags`,

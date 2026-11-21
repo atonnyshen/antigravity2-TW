@@ -402,4 +402,28 @@ test('v2.33.0 remoteManager, wizardHtml, SVG-only loadingOverlay, and runtime br
         translateNode(node);
         assert.equal(node.nodeValue, expected, input);
     }
+
+    const hudSample = `<title>AGY Desktop HUD</title><div id="status">AGY is controlling your Mac</div><button id="stop">Stop</button><button id="resume" title="Let agents use this Mac again. The stopped task does not restart.">Allow again</button><script>end.textContent = 'Stopped'; end.textContent = 'Stop';</script>`;
+    const hudPatched = patches.patchComputerHudJs(hudSample, true);
+    assert.ok(hudPatched.includes('<title>AGY 桌面監視面板</title>'));
+    assert.ok(hudPatched.includes('AGY 正在控制您的 Mac'));
+    assert.ok(hudPatched.includes('再次允許</button>'));
+    assert.ok(hudPatched.includes("end.textContent = '已停止';"));
+
+    const hudStateSample = `const a = 'You took over — agent stopped'; const b = 'Agent stopped'; const c = 'Agent idle'; const d = \`AGY working in \${name} (background)\`; const e = 'AGY working in the background';`;
+    const hudStatePatched = patches.patchComputerHudStateJs(hudStateSample, true);
+    assert.ok(hudStatePatched.includes("'您已接管 — 代理已停止'"));
+    assert.ok(hudStatePatched.includes("'代理閒置中'"));
+    assert.ok(hudStatePatched.includes('`AGY 正在背景操作 ${name}`'));
+
+    const hudAgentsSample = `const text = \`\${(0, overlay_1.overlayDisplayName)(label)} · \${app || 'starting'} · \${stopped ? 'stopped' : paused ? 'paused' : m}\`; const h1 = \`\${working} AGY agents working\`; const h2 = 'Agent stopped'; const h3 = \`\${stopped} agents stopped\`; const h4 = \`\${text} (+\${stopped} stopped)\`;`;
+    const hudAgentsPatched = patches.patchComputerHudAgentsJs(hudAgentsSample, true);
+    assert.ok(hudAgentsPatched.includes("app || '啟動中'"));
+    assert.ok(hudAgentsPatched.includes('`${working} 個 AGY 代理執行中`'));
+    assert.ok(hudAgentsPatched.includes('`${text}（+${stopped} 已停止）`'));
+
+    const sshErrSample = `const x = 'The connection was closed before it finished.'; const y = \`Windows SSH hosts aren't supported yet. \${sshArgs_1.LINUX_HOST_NEEDED}\`;`;
+    const sshErrPatched = patches.patchSshErrorTextJs(sshErrSample, true);
+    assert.ok(sshErrPatched.includes("'連線在完成前即被關閉。'"));
+    assert.ok(sshErrPatched.includes('`尚未支援 Windows SSH 主機。${sshArgs_1.LINUX_HOST_NEEDED}`'));
 });

@@ -317,7 +317,7 @@ function getAppInfo(options = {}) {
 
 function recipeHash() {
     const files = ['package.json', 'package-lock.json', 'localization_engine.js', 'auto_localize_watcher.js'];
-    for (const folder of ['dicts', 'dicts_tw', 'src']) {
+    for (const folder of ['dicts', 'dicts_tw', 'rules', 'src']) {
         const folderPath = path.join(DIR, folder);
         if (fs.existsSync(folderPath)) {
             for (const name of fs.readdirSync(folderPath).sort()) {
@@ -329,9 +329,11 @@ function recipeHash() {
         ? autoUpdater.readActiveTranslation(DIR) : null;
     if (active) {
         files.push(path.join('.watcher-state', 'active_translation.json'));
-        for (const folder of ['dicts', 'dicts_tw']) {
-            for (const name of fs.readdirSync(path.join(active.folder, folder)).filter(x => x.endsWith('.json')).sort()) {
-                files.push(path.relative(DIR, path.join(active.folder, folder, name)));
+        for (const folder of ['dicts', 'dicts_tw', 'rules']) {
+            const sub = path.join(active.folder, folder);
+            if (!fs.existsSync(sub)) continue;
+            for (const name of fs.readdirSync(sub).filter(x => x.endsWith('.json')).sort()) {
+                files.push(path.relative(DIR, path.join(sub, name)));
             }
         }
     }

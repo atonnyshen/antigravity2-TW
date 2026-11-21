@@ -7,7 +7,7 @@
 ## 一、發布架構核心原則
 
 1. **純翻譯更新與完整套件隔離**：
-   - 每次 Release 的 **Assets 有且僅能上傳單一純翻譯包**：`antigravity2-TW-translations-vX.Y.Z.zip`（僅包含 `dicts/`、`dicts_tw/` 及純資料 manifest）。
+   - 每次 Release 的 **Assets 有且僅能上傳單一純翻譯包**：`antigravity2-TW-translations-vX.Y.Z.zip`（僅包含 `dicts/`、`dicts_tw/`、`rules/` 及純資料 manifest）。
    - **嚴禁將完整程式或可執行檔上傳至 Release Assets**。完整程式手動安裝一律使用 GitHub 自動產生的 **Source code (zip)**（即 GitHub 原生 `zipball_url`）或由 Git 標籤取得。
    - 此架構可確保舊版守護程序不會因任意 ZIP 規則誤下載並執行可執行代碼，徹底落實「純翻譯自動更新，程式引擎手動安裝」的產品政策。
 2. **原子性替換與異常復原**：
