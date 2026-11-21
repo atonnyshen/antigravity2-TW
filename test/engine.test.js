@@ -958,6 +958,100 @@ test('quota limits, combined reset strings, region eligibility notices, and v2.3
     assert.equal(tx('design'), 'design');
 });
 
+test('v2.34.0 Swarm Hive map, GIF export, and live timer/subagent counters translate accurately', () => {
+    const { JSDOM } = require('jsdom');
+    const js = generateJs();
+    const dom = new JSDOM(`<!doctype html><html><body>
+        <div id="swarm-title">Untitled swarm</div>
+        <button id="tab-hive">Hive</button>
+        <div class="o2 hv">
+            <div class="hv-bar">
+                <div class="hv-sum"><span><b>12</b> threads</span><span class="busy"><i></i>3 working</span><span class="warn"><i></i>1 waiting</span><span class="bad"><i></i>2 stuck</span><span class="ok"><i></i>4 done</span></div>
+                <div class="btn-group hv-zoom" aria-label="Zoom">
+                    <button id="z-out" title="Zoom out" aria-label="Zoom out"></button>
+                    <button id="z-in" title="Zoom in" aria-label="Zoom in"></button>
+                    <button id="z-fit" title="Fit the whole swarm" aria-label="Fit the whole swarm"></button>
+                </div>
+            </div>
+            <svg class="hv-svg" aria-label="Where each worker is, by thread"></svg>
+            <div class="hv-bees">
+                <button id="bee-work" class="hv-bee working" title="@worker-1 · Codebase Researcher · Working for @coordinator" aria-label="@worker-1 · Codebase Researcher · Working for @coordinator"><span class="hv-nm" id="nm-work">worker-1</span></button>
+                <button id="bee-wait" class="hv-bee wait" title="@worker-2 · Waiting on @coordinator"><span class="hv-nm" id="nm-wait">design</span></button>
+            </div>
+            <div class="hv-key" aria-hidden="true">
+                <span id="k-done"><i></i>Tasks done</span>
+                <span id="k-sent"><i></i>Message just sent</span>
+                <span id="k-waiton"><i></i>Waiting on</span>
+                <span id="k-work"><i></i>Working</span>
+                <span id="k-wait"><i></i>Waiting</span>
+                <span id="k-ok"><i></i>Done</span>
+            </div>
+            <section class="hv-card">
+                <span id="card-prog">3 of 5 done</span>
+                <span id="card-bees">2 bees</span>
+                <button id="row-open" title="Open @worker-1">x</button>
+                <p id="card-empty">No one is on this thread yet.</p>
+            </section>
+            <span id="stall">Swarm stalled — no agents working</span>
+            <span id="coord-ask">The coordinator asked. Answer it in its chat.</span>
+            <span id="live-tip" title="Latest action: Reading config">x</span>
+            <span id="exp-btn">Export GIF</span>
+            <span id="exp-pct">Exporting 42%</span>
+            <span id="exp-done">Exported swarm-graph.gif (12 frames · 1.2 MB)</span>
+            <span id="exp-save">Right-click image to save, or open in a new tab.</span>
+        </div>
+        <span id="timers">Waiting for 2 timers</span>
+        <span id="timer1">Waiting for timer</span>
+        <span id="subrun">3 subagents/tasks running</span>
+        <span id="subblk">1 subagent blocked</span>
+    </body></html>`, { runScripts: 'outside-only' });
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: dom.window.Node, document: dom.window.document, console };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    const doc = dom.window.document;
+    translateNode(doc.body);
+
+    assert.equal(doc.getElementById('tab-hive').textContent, '蜂巢');
+    assert.equal(doc.querySelector('.hv-zoom').getAttribute('aria-label'), '縮放');
+    assert.equal(doc.getElementById('z-out').getAttribute('title'), '縮小');
+    assert.equal(doc.getElementById('z-in').getAttribute('title'), '放大');
+    assert.equal(doc.getElementById('z-fit').getAttribute('title'), '縮放至完整蜂群');
+    assert.equal(doc.querySelector('.hv-svg').getAttribute('aria-label'), '各成員所在的討論串分佈');
+    assert.equal(doc.querySelector('.hv-sum').textContent, '12 個討論串3 個工作中1 個等待中2 項受阻4 個已完成');
+
+    assert.equal(doc.getElementById('k-done').textContent, '任務已完成');
+    assert.equal(doc.getElementById('k-sent').textContent, '剛傳送訊息');
+    assert.equal(doc.getElementById('k-waiton').textContent, '正在等待');
+    assert.equal(doc.getElementById('k-work').textContent, '工作中');
+    assert.equal(doc.getElementById('k-wait').textContent, '等待中');
+    assert.equal(doc.getElementById('k-ok').textContent, '已完成');
+
+    assert.equal(doc.getElementById('bee-work').getAttribute('title'), '@worker-1 · Codebase Researcher · 為 @coordinator 執行中');
+    assert.equal(doc.getElementById('bee-wait').getAttribute('title'), '@worker-2 · 正在等待 @coordinator');
+    assert.equal(doc.getElementById('nm-work').textContent, 'worker-1');
+    assert.equal(doc.getElementById('nm-wait').textContent, 'design');
+
+    assert.equal(doc.getElementById('card-prog').textContent, '已完成 3 / 5 項');
+    assert.equal(doc.getElementById('card-bees').textContent, '2 位成員');
+    assert.equal(doc.getElementById('row-open').getAttribute('title'), '開啟 @worker-1');
+    assert.equal(doc.getElementById('card-empty').textContent, '此討論串目前尚無成員。');
+
+    assert.equal(doc.getElementById('stall').textContent, '蜂群已停滯 — 目前沒有成員執行中');
+    assert.equal(doc.getElementById('coord-ask').textContent, '協調器提出詢問。請在協調器對話中回覆。');
+    assert.equal(doc.getElementById('live-tip').getAttribute('title'), '最新動作：Reading config');
+    assert.equal(doc.getElementById('exp-btn').textContent, '匯出 GIF');
+    assert.equal(doc.getElementById('exp-pct').textContent, '正在匯出 42%');
+    assert.equal(doc.getElementById('exp-done').textContent, '已匯出 swarm-graph.gif（12 格 · 1.2 MB）');
+    assert.equal(doc.getElementById('exp-save').textContent, '在圖片上按右鍵即可儲存，或於新分頁中開啟。');
+
+    assert.equal(doc.getElementById('timers').textContent, '正在等待 2 個計時器');
+    assert.equal(doc.getElementById('timer1').textContent, '正在等待計時器');
+    assert.equal(doc.getElementById('subrun').textContent, '3 個子代理／任務執行中');
+    assert.equal(doc.getElementById('subblk').textContent, '1 個子代理受阻');
+});
+
 
 
 

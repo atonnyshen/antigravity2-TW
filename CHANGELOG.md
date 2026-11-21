@@ -32,6 +32,7 @@
   - 補齊 `Your current account is not eligible for ..., because it is not currently available in your location.`、`This account is not eligible for Antigravity.`、`Your current region is not supported.` 等地區不支援與帳戶資格限制動態規則，以及登入錯誤頁 `Further action is required to use`、`Verify` 與 `常見問題（FAQ）` 連結。
   - 同步 Antigravity `v2.33.0` 與上游 `v2.34.0` 共 132 組介面詞條（涵蓋科學研究引導卡片、`Orchestrator Model`、`Executor Model`、側邊欄自訂與預覽隱私政策），並校訂被動語態與台灣開發者用語。
   - 擴充 `scripts/dev_tool.js` `scan-ui` 掃描遠端 RPC 動態文字（`GetUserStatus` 與 `RetrieveUserQuotaSummary`），補齊模型選擇器說明（`The original Gemini 4 model for advanced workflows`）、多群組模型與獨立配額池提示（Argon／Ultra／Pro）、`5-hour` 與各週期配額上限／觸頂重設句型，以及導入角色名稱 `Design`（同步將小寫 `'design'` 加入 `LOWER_WORDS_EXCLUDE` 避免誤改英文正文）。
+  - 補齊 `v2.34.0` 蜂群／蜂巢（`swarm_board` / `hive.js` / `app.js` / `index.html`）圖例與動態狀態翻譯，涵蓋 `Tasks done`、`Message just sent`、`Waiting on`、`Hive`、`Zoom in`、`Fit the whole swarm`、`Working for @...`、`Waiting on @...`、`N of M done`、`N working/waiting/stuck/done`、GIF 匯出進度與主介面計時器／子代理執行狀態（同步將 `.hv-nm` 納入保護以免誤改蜂巢內成員識別名）。
 
 ## 3.7.1 — 2026-11-19
 
