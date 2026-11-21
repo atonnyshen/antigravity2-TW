@@ -1,6 +1,6 @@
 # 更新紀錄
 
-## 3.7.2 — 2026-11-20
+## 3.7.2 — 2026-11-21
 
 - 背景守護接續復原：回退失敗時保存具 SHA-256 的復原檔與紀錄。每次既有五分鐘排程先核對正式 ASAR，再嘗試恢復並重套繁中。權限問題解除後可自動接續；遇到不明版本、檔案損毀或多次官方更新衝突時，保留復原材料並記錄人工核對需求。
 - 純翻譯資料自動更新與程式碼自我升級徹底移除：
@@ -27,6 +27,10 @@
 - 跨平台權限安全（macOS & Windows）：
   - macOS 完善 LaunchAgent / LaunchDaemon 互斥鎖定（`run.lock`）與安全卸載。
   - Windows 工作排程嚴格採用 `LeastPrivilege` 最低權限，遇 `Program Files` 限制乾淨提供管理員手動指引，杜絕失控重試與提權風險。
+- 配額重設組合文案、地區限制提示與 v2.33.0 / v2.34.0 全量詞條補齊：
+  - 修復 `Weekly limit, resets in 5d 22h`、`Daily limit, resets in ...`、`5h limit, resets in ...` 等合併配額倒數節點，統一繁中「每週上限／每日上限／每月上限」用詞。
+  - 補齊 `Your current account is not eligible for ..., because it is not currently available in your location.`、`This account is not eligible for Antigravity.`、`Your current region is not supported.` 等地區不支援與帳戶資格限制動態規則，以及登入錯誤頁 `Further action is required to use`、`Verify` 與 `常見問題（FAQ）` 連結。
+  - 同步 Antigravity `v2.33.0` 與上游 `v2.34.0` 共 132 組介面詞條（涵蓋科學研究引導卡片、`Orchestrator Model`、`Executor Model`、側邊欄自訂與預覽隱私政策），並校訂被動語態與台灣開發者用語。
 
 ## 3.7.1 — 2026-11-19
 

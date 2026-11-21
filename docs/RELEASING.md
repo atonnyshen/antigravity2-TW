@@ -31,7 +31,7 @@ node scripts/compare_dicts.js
 node --check localization_engine.js
 node --check auto_localize_watcher.js
 
-# 3. 執行全套回歸測試（89 項測試）
+# 3. 執行全套回歸測試（90 項測試）
 npm test
 ```
 

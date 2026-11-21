@@ -1,6 +1,6 @@
 # Antigravity 繁體中文在地化文字規範與體例指南 (Localization Style Guide)
 
-> **版本**：v3.7.1  
+> **版本**：v3.7.2（適配 Antigravity v2.34.0）  
 > **維護依據**：Antigravity 繁體中文翻譯規範、L0 中文輸出底線層、老編輯統一出版體例、台灣軟體在地化業界行規（Apple / Google / Microsoft / VS Code zh-TW）  
 > **適用範圍**：所有靜態字典檔（`dicts_tw/*.json`、`dicts/*.json`）、核心執行期腳本（`src/preload_runtime.js`、`localization_engine.js`）及自動化守護程序
 
@@ -254,25 +254,20 @@ Slash 指令名稱保持英文字串，但其輔助說明文字一律採用精�
    ```bash
    npm test
    ```
-   *必須保證*：所有測試通過（49/49 passed，0 failed）。
+   *必須保證*：所有測試通過（90 項測試全數通過；Windows 專屬 `fsync` 測試於非 Windows 平台按設計略過，0 failed）。
 
-3. **打包發布產物**：
+3. **打包純翻譯資料包（Release Assets 唯一允許產物）**：
    ```bash
-   zip -r -q dist/antigravity2-TW-v3.7.1.zip . -x "*.git*" "node_modules/*" "dist/*.zip" "build_app/*" "scratch/*"
+   node scripts/build_translation_pack.js \
+     --version 3.7.2 \
+     --min-engine 3.7.2 \
+     --max-engine 3.7.2 \
+     --output dist/antigravity2-TW-translations-v3.7.2.zip
    ```
+   *注意*：完整發布規範與 Draft Preflight 稽核詳見 [`docs/RELEASING.md`](./RELEASING.md)，嚴禁將可執行程式碼 ZIP 上傳至 Release Assets。
 
-4. **Git 與 GitHub Release 同步**：
+4. **本機應用程式即時重套**：
    ```bash
-   git add -A
-   git commit -m "..."
-   git tag -fa v3.7.1 -m "Release v3.7.1"
-   git push origin main
-   git push origin v3.7.1 --force
-   gh release upload v3.7.1 dist/antigravity2-TW-v3.7.1.zip --clobber
-   ```
-
-5. **本機應用程式即時重套**：
-   ```bash
-   node localization_engine.js --tw --no-kill --brand-title english
+   node localization_engine.js --tw --no-kill --sync-watcher --brand-title english
    ```
    驗證本機 `/Applications/Antigravity.app` 注入成功且正常運作。
