@@ -862,6 +862,86 @@ test('metadata stamp, macOS runtime sync with lock, and Windows task path re-reg
     assert.equal(registeredPath, path.join(winBase, 'auto_localize_watcher.js'));
 });
 
+test('quota limits, combined reset strings, region eligibility notices, and v2.33.0 templates translate accurately', () => {
+    const { JSDOM } = require('jsdom');
+    const js = generateJs();
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only' });
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: dom.window.Node, document: dom.window.document, console };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    const doc = dom.window.document;
+    const tx = (str) => {
+        const span = doc.createElement('span');
+        span.textContent = str;
+        translateNode(span);
+        return span.textContent;
+    };
+
+    // Quota limits & combined reset strings
+    assert.equal(tx('Weekly limit, resets in 5d 22h'), '每週上限，5 天 22 小時後重設');
+    assert.equal(tx('Daily limit, resets in 3h 15m'), '每日上限，3 小時 15 分鐘後重設');
+    assert.equal(tx('5h limit, resets in 2h 30m'), '5 小時上限，2 小時 30 分鐘後重設');
+    assert.equal(tx('Weekly limit, resets in <1m'), '每週上限，<1 分鐘後重設');
+    assert.equal(tx('Weekly limit'), '每週上限');
+    assert.equal(tx('Daily limit'), '每日上限');
+    assert.equal(tx('Monthly limit'), '每月上限');
+    assert.equal(tx('7d limit'), '7 天上限');
+    assert.equal(tx('66% left'), '66% 剩餘');
+
+    // Region / country / eligibility errors
+    assert.equal(
+        tx('Your current account is not eligible for Antigravity, because it is not currently available in your location.'),
+        '您目前的帳戶不符合使用 Antigravity 的資格，因為您所在的地區目前不支援此服務。'
+    );
+    assert.equal(tx('This account is not eligible for Antigravity.'), '目前帳戶不符合使用 Antigravity 的資格。');
+    assert.equal(tx('Your current region is not supported.'), '目前不支援您所在的地區。');
+    assert.equal(tx('This service is not available in your region.'), '您所在的地區目前不支援此服務。');
+    assert.equal(tx('Further action is required to use'), '需要採取進一步行動才能使用');
+    assert.equal(tx('Verify'), '驗證');
+    // Lowercase 'apply' / 'verify' must remain protected
+    assert.equal(tx('apply'), 'apply');
+    assert.equal(tx('Apply'), '套用');
+
+    // FAQ in loginError link vs generic FAQ
+    const p = doc.createElement('p');
+    p.appendChild(doc.createTextNode('Please verify your account, then sign in again to continue. Learn more by visiting our'));
+    p.appendChild(doc.createTextNode(' '));
+    const faqLink = doc.createElement('a');
+    faqLink.textContent = 'FAQ';
+    p.appendChild(faqLink);
+    p.appendChild(doc.createTextNode('.'));
+    translateNode(p);
+    assert.equal(faqLink.textContent, '常見問題');
+
+    // v2.33.0 templates & aria-label dynamic rules
+    assert.equal(tx('Plan, 3 of 5 steps done'), '計畫，已完成 3 / 5 個步驟');
+    assert.equal(tx('Question 2 of 4'), '第 2 題（共 4 題）');
+    assert.equal(tx('0 results'), '0 個結果');
+    assert.equal(tx("You're signing in on workstation-1. Your sign-in stays on that machine."), '您正在 workstation-1 上登入。您的登入狀態會保留在該電腦上。');
+
+    const btn = doc.createElement('button');
+    btn.setAttribute('aria-label', 'Open GitHub Desktop');
+    translateNode(btn);
+    assert.equal(btn.getAttribute('aria-label'), '開啟 GitHub Desktop');
+
+    const projSpan = doc.createElement('span');
+    projSpan.appendChild(doc.createTextNode('Available for '));
+    projSpan.appendChild(doc.createTextNode('my-gcp-proj'));
+    projSpan.appendChild(doc.createTextNode(' project'));
+    translateNode(projSpan);
+    assert.equal(projSpan.textContent, '適用於 my-gcp-proj 專案');
+
+    // v2.34.0 rules
+    assert.equal(tx("Couldn't disconnect GitHub: token expired"), '無法中斷 GitHub 的連線：token expired');
+    assert.equal(tx('Failed to load page 2: timeout'), '載入頁面 2 失敗：timeout');
+    assert.equal(tx('More options for Plugins'), 'Plugins 的更多選項');
+    assert.equal(tx('Opens the New Conversation screen for this project'), '開啟此 專案 的新對話畫面');
+    assert.equal(tx('Replaced by newer request'), '已由較新的請求取代');
+});
+
+
 
 
 

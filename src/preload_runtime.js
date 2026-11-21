@@ -14,7 +14,10 @@
         'schedule', 'compact', 'automation', 'plugin', 'plugins', 'btw', 'clear', 'init',
         'teamwork', 'grill-me', 'egm-boost', 'split', 'commit', 'reset', 'stop', 'status',
         'filter', 'new', 'open', 'start', 'manage', 'custom', 'default', 'rules',
-        'low', 'medium', 'high', 'extra', 'max', 'thinking effort'
+        'low', 'medium', 'high', 'extra', 'max', 'thinking effort',
+        'apply', 'create', 'hide', 'show', 'remove', 'replace', 'verify', 'block',
+        'folder', 'repository', 'error', 'other', 'environment', 'before', 'after',
+        'added', 'approved', 'protocol', 'variables', 'website'
     ]);
     for (const [k, v] of map.entries()) {
         const lowerK = k.toLowerCase();
@@ -225,16 +228,43 @@
         return parts.length && !text.slice(end).trim() ? parts.join(' ') : null;
     }
 
+    function translateLimitLabel(raw) {
+        const s = raw.trim();
+        if (/^daily\s+limit$/i.test(s)) return USE_TW ? '每日上限' : '每日限额';
+        if (/^weekly\s+limit$/i.test(s)) return USE_TW ? '每週上限' : '每周限额';
+        if (/^monthly\s+limit$/i.test(s)) return USE_TW ? '每月上限' : '每月限额';
+        const m = s.match(/^([0-9]+)(?:[- ]*(s|sec|seconds?|m|min|minutes?|h|hr|hours?|d|days?|w|wk|weeks?))\s+limit$/i);
+        if (m) {
+            const unit = m[2].toLowerCase();
+            const unitName = /^(?:w|wk|weeks?)$/.test(unit) ? (USE_TW ? '週' : '周')
+                : /^(?:d|days?)$/.test(unit) ? '天'
+                : /^(?:h|hr|hours?)$/.test(unit) ? (USE_TW ? '小時' : '小时')
+                : /^(?:m|min|minutes?)$/.test(unit) ? (USE_TW ? '分鐘' : '分钟') : '秒';
+            return m[1] + ' ' + unitName + (USE_TW ? '上限' : '限额');
+        }
+        return null;
+    }
+
+    function translateResetPart(raw) {
+        const reset = raw.trim().match(/^(?:Resets|Refreshes)\s+in\s+(.+)$/i);
+        if (!reset) return null;
+        const duration = formatUsageDuration(reset[1]);
+        return duration ? (duration + (USE_TW ? '後重設' : '后重置')) : null;
+    }
+
     function translateUsageText(value) {
-        const limit = value.match(/^([0-9]+)(?:h|[- ]hours?)\s+limit$/i);
-        if (limit) return limit[1] + (USE_TW ? ' 小時上限' : ' 小时限额');
+        const combo = value.match(/^(.+?),\s*((?:resets|refreshes)\s+in\s+.+)$/i);
+        if (combo) {
+            const limitPart = translateLimitLabel(combo[1]) || map.get(combo[1].trim()) || lowerMap.get(combo[1].trim().toLowerCase());
+            const resetPart = translateResetPart(combo[2]);
+            if (limitPart && resetPart) return limitPart + '，' + resetPart;
+        }
+        const limitLabel = translateLimitLabel(value);
+        if (limitLabel) return limitLabel;
         const remaining = value.match(/^([0-9]+(?:\.[0-9]+)?\s*%|%)\s+left$/i);
         if (remaining) return remaining[1] + (USE_TW ? ' 剩餘' : ' 剩余');
-        const reset = value.match(/^(?:Resets|Refreshes)\s+in\s+(.+)$/i);
-        if (reset) {
-            const duration = formatUsageDuration(reset[1]);
-            if (duration) return duration + (USE_TW ? ' 後重設' : ' 后重置');
-        }
+        const reset = translateResetPart(value);
+        if (reset) return reset;
         return null;
     }
 
@@ -1109,7 +1139,169 @@
                 ? `維持 ${qualityModel.trim()} 同級品質，消耗更少 Token${period}`
                 : `维持 ${qualityModel.trim()} 同级品质，消耗更少 Token${period}`;
         }],
+
+        // 帳號資格、地區不支援與登入錯誤動態提示
+        [/^Your current account is not eligible for\s+(.+?),\s*because it is not currently available in your\s+(?:location|region|country|area)\.?$/i, (m, app) => {
+            const period = /\.$/.test(m.trim()) ? "。" : "";
+            return USE_TW
+                ? `您目前的帳戶不符合使用 ${app.trim()} 的資格，因為您所在的地區目前不支援此服務${period}`
+                : `您当前的账户无权使用 ${app.trim()}，因为您所在的地区目前暂不支持此服务${period}`;
+        }],
+        [/^(?:Your current|This)\s+account is not eligible (?:for|to use)\s+(.+?)\.?$/i, (m, app) => {
+            const period = /\.$/.test(m.trim()) ? "。" : "";
+            return USE_TW
+                ? `目前帳戶不符合使用 ${app.trim()} 的資格${period}`
+                : `当前账户无权使用 ${app.trim()}${period}`;
+        }],
+        [/^Sorry,\s*this account is ineligible to use\s+(.+?)\.?$/i, (m, app) => {
+            const period = /\.$/.test(m.trim()) ? "。" : "";
+            return USE_TW
+                ? `抱歉，目前帳戶無權使用 ${app.trim()}${period}`
+                : `抱歉，当前账户无权使用 ${app.trim()}${period}`;
+        }],
+        [/^Further action is required to use\s+(.+?)\.?$/i, (m, app) => {
+            const period = /\.$/.test(m.trim()) ? "。" : "";
+            return USE_TW
+                ? `需要採取進一步行動才能使用 ${app.trim()}${period}`
+                : `需要采取进一步操作才能使用 ${app.trim()}${period}`;
+        }],
+        [/^(?:This service|The service|Antigravity|Jetski)\s+is not (?:currently\s+)?available in your\s+(?:location|region|country|area)\.?$/i, (m) => {
+            const period = /\.$/.test(m.trim()) ? "。" : "";
+            return USE_TW
+                ? `您所在的地區目前不支援此服務${period}`
+                : `您所在的地区目前暂不支持此服务${period}`;
+        }],
+        [/^Your (?:current\s+)?(?:location|region|country|area) is not supported\.?$/i, (m) => {
+            const period = /\.$/.test(m.trim()) ? "。" : "";
+            return USE_TW
+                ? `目前不支援您所在的地區${period}`
+                : `当前不支持您所在的地区${period}`;
+        }],
+        [/^(.+?)\s+is not (?:currently\s+)?available in your\s+(?:location|region|country|area)\.?$/i, (m, target) => {
+            const period = /\.$/.test(m.trim()) ? "。" : "";
+            return USE_TW
+                ? `您所在的地區目前不支援 ${target.trim()}${period}`
+                : `您所在的地区目前暂不支持 ${target.trim()}${period}`;
+        }],
+        [/^You['’]re signing in on\s+(.+?)\.\s*Your sign-in stays on that machine\.?$/i, (m, host) => {
+            const period = /\.$/.test(m.trim()) ? "。" : "";
+            return USE_TW
+                ? `您正在 ${host.trim()} 上登入。您的登入狀態會保留在該電腦上${period}`
+                : `您正在 ${host.trim()} 上登录。您的登录状态将保留在该设备上${period}`;
+        }],
+
+        // v2.33.0 介面動態模板與錯誤訊息
+        [/^Available AI Credits:\s*(.+)$/i, (m, val) => (USE_TW ? "可用 AI 點數：" : "可用 AI 额度：") + val],
+        [/^(\d+)\s+results?$/i, (m, n) => n + (USE_TW ? " 個結果" : " 个结果")],
+        [/^See all\s*\((\d+)\)$/i, (m, n) => USE_TW ? ("顯示全部 (" + n + ")") : ("查看全部 (" + n + ")")],
+        [/^Account this MCP server uses:\s*(.+)$/i, (m, acc) => (USE_TW ? "此 MCP 伺服器使用的帳戶：" : "此 MCP 服务器使用的账户：") + acc],
+        [/^Add shortcut for\s+(.+)$/i, (m, cmd) => USE_TW ? ("新增「" + cmd + "」的快速鍵") : ("为“" + cmd + "”添加快捷键")],
+        [/^Remove shortcut\s+(.+?)\s+for\s+(.+)$/i, (m, key, cmd) => USE_TW ? ("移除「" + cmd + "」的快速鍵 " + key) : ("移除“" + cmd + "”的快捷键 " + key)],
+        [/^Shortcut\s+(.+?)\s+for\s+(.+)$/i, (m, key, cmd) => USE_TW ? ("「" + cmd + "」的快速鍵 " + key) : ("“" + cmd + "”的快捷键 " + key)],
+        [/^Recording shortcut for\s+(.+?)\.\s*Press keys to bind,\s*Enter to save,\s*Escape to cancel\.?$/i, (m, cmd) => USE_TW ? ("正在錄製「" + cmd + "」的快速鍵。按下按鍵以綁定，按 Enter 儲存，按 Escape 取消。") : ("正在录制“" + cmd + "”的快捷键。按下按键以绑定，按 Enter 保存，按 Escape 取消。")],
+        [/^Connect GitHub:\s*(.+)$/i, (m, t) => (USE_TW ? "連線 GitHub：" : "连接 GitHub：") + t],
+        [/^Delete cookies for\s+(.+)$/i, (m, site) => USE_TW ? ("刪除 " + site + " 的 Cookie") : ("删除 " + site + " 的 Cookie")],
+        [/^Delete side question:\s*(.+)$/i, (m, q) => (USE_TW ? "刪除側邊提問：" : "删除侧边提问：") + q],
+        [/^Details for\s+(.+)$/i, (m, t) => t + (USE_TW ? " 的詳細資訊" : " 的详细信息")],
+        [/^Duplicate\s+(.+?)\s+name$/i, (m, t) => t + (USE_TW ? " 名稱重複" : " 名称重复")],
+        [/^Edit comment:\s*(.+)$/i, (m, c) => (USE_TW ? "編輯評論：" : "编辑评论：") + c],
+        [/^Edit\s+(.+?)\s+name$/i, (m, t) => (USE_TW ? "編輯 " : "编辑 ") + t + (USE_TW ? " 名稱" : " 名称")],
+        [/^Install folder\s+["“](.+?)["”]\s+is already in use$/i, (m, p) => USE_TW ? ("安裝資料夾「" + p + "」已被使用") : ("安装文件夹“" + p + "”已被占用")],
+        [/^Make\s+(.+?)\s+the default\s+(.+?)\s+account$/i, (m, acc, svc) => USE_TW ? ("將 " + acc + " 設為預設的 " + svc + " 帳戶") : ("将 " + acc + " 设为默认的 " + svc + " 账户")],
+        [/^More actions for\s+(.+)$/i, (m, t) => t + (USE_TW ? " 的更多操作" : " 的更多操作")],
+        [/^More for\s+(.+)$/i, (m, t) => USE_TW ? ("更多 " + t + " 選項") : ("更多 " + t + " 选项")],
+        [/^New secret for\s+(.+)$/i, (m, svc) => svc + (USE_TW ? " 的新密鑰" : " 的新密钥")],
+        [/^Secret for a new\s+(.+?)\s+account$/i, (m, svc) => USE_TW ? ("新 " + svc + " 帳戶的密鑰") : ("新 " + svc + " 账户的密钥")],
+        [/^Secret for\s+(.+)$/i, (m, svc) => svc + (USE_TW ? " 的密鑰" : " 的密钥")],
+        [/^Open Subagent:\s*(.+)$/i, (m, t) => (USE_TW ? "開啟子代理：" : "打开子代理：") + t],
+        [/^Open URL in system browser:\s*(.+)$/i, (m, u) => (USE_TW ? "在系統瀏覽器中開啟網址：" : "在系统浏览器中打开网址：") + u],
+        [/^Opens external link:\s*(.+)$/i, (m, u) => (USE_TW ? "開啟外部連結：" : "打开外部链接：") + u],
+        [/^Page\s+(\d+)\s+failed to load$/i, (m, n) => USE_TW ? ("第 " + n + " 頁載入失敗") : ("第 " + n + " 页加载失败")],
+        [/^Plan,\s*(\d+)\s+of\s+(\d+)\s+steps done$/i, (m, d, tot) => USE_TW ? ("計畫，已完成 " + d + " / " + tot + " 個步驟") : ("计划，已完成 " + d + " / " + tot + " 步")],
+        [/^Question\s+(\d+)\s+of\s+(\d+)$/i, (m, c, tot) => USE_TW ? ("第 " + c + " 題（共 " + tot + " 題）") : ("第 " + c + " 题（共 " + tot + " 题）")],
+        [/^Turn\s+(\d+)\s+of\s+(\d+)$/i, (m, c, tot) => USE_TW ? ("第 " + c + " 輪（共 " + tot + " 輪）") : ("第 " + c + " 轮（共 " + tot + " 轮）")],
+        [/^Go to page\s+(\d+)$/i, (m, n) => USE_TW ? ("前往第 " + n + " 頁") : ("跳至第 " + n + " 页")],
+        [/^Go to slide\s+(\d+)$/i, (m, n) => USE_TW ? ("前往第 " + n + " 張投影片") : ("跳至第 " + n + " 张幻灯片")],
+        [/^Go to turn\s+(\d+)\s+of\s+(\d+)$/i, (m, c, tot) => USE_TW ? ("前往第 " + c + " / " + tot + " 輪") : ("跳至第 " + c + " / " + tot + " 轮")],
+        [/^Playback speed\s+([0-9.]+)x$/i, (m, s) => (USE_TW ? "播放速度 " : "播放速度 ") + s + "x"],
+        [/^Plugins in\s+(.+)$/i, (m, loc) => loc + (USE_TW ? " 中的外掛程式" : " 中的插件")],
+        [/^Remove context from\s+(.+)$/i, (m, t) => USE_TW ? ("從 " + t + " 移除上下文") : ("从 " + t + " 移除上下文")],
+        [/^Remove\s+(.+?)\s+from list$/i, (m, t) => USE_TW ? ("從清單中移除 " + t) : ("从列表中移除 " + t)],
+        [/^Reset\s+(.+?)\s+to default$/i, (m, t) => USE_TW ? ("將 " + t + " 重設為預設值") : ("将 " + t + " 重置为默认值")],
+        [/^Review\s+(.+?)\s+before installing$/i, (m, t) => USE_TW ? ("安裝前請先檢閱 " + t) : ("安装前请先查看 " + t)],
+        [/^Run\s+(.+?)\s+now$/i, (m, t) => (USE_TW ? "立即執行 " : "立即运行 ") + t],
+        [/^Scroll to:\s*(.+?)\s+on page\s+(\d+)$/i, (m, t, p) => USE_TW ? ("捲動至第 " + p + " 頁的「" + t + "」") : ("滚动至第 " + p + " 页的“" + t + "”")],
+        [/^Search match on page\s+(\d+)$/i, (m, p) => USE_TW ? ("第 " + p + " 頁的搜尋相符項目") : ("第 " + p + " 页的搜索匹配项")],
+        [/^Bounding box on page\s+(\d+)$/i, (m, p) => USE_TW ? ("第 " + p + " 頁的定界框") : ("第 " + p + " 页的边界框")],
+        [/^Comment on page\s+(\d+)$/i, (m, p) => USE_TW ? ("第 " + p + " 頁的評論") : ("第 " + p + " 页的评论")],
+        [/^Show\s+(.+?)\s+in folder$/i, (m, t) => USE_TW ? ("在資料夾中顯示 " + t) : ("在文件夹中显示 " + t)],
+        [/^Sign in to\s+(.+?)\s+remotely$/i, (m, t) => (USE_TW ? "遠端登入 " : "远程登录 ") + t],
+        [/^Sign in to\s+(.+)$/i, (m, t) => (USE_TW ? "登入 " : "登录 ") + t],
+        [/^Stop\s+(\d+)\s+selected$/i, (m, n) => USE_TW ? ("停止已選取的 " + n + " 個項目") : ("停止已选中的 " + n + " 个项目")],
+        [/^Switch environment\s*\((.+)\)$/i, (m, env) => (USE_TW ? "切換環境 (" : "切换环境 (") + env + ")"],
+        [/^Toggle Word Wrap(.*)$/i, (m, rest) => (USE_TW ? "切換自動換行" : "切换自动换行") + rest],
+        [/^Using default\s+(.+?)\s+name$/i, (m, t) => USE_TW ? ("使用預設的 " + t + " 名稱") : ("使用默认的 " + t + " 名称")],
+        [/^Version\s+([0-9A-Za-z._-]+)$/i, (m, v) => "版本 " + v],
+        [/^View Diff for\s+(.+)$/i, (m, t) => USE_TW ? ("檢視 " + t + " 的差異") : ("查看 " + t + " 的差异")],
+        [/^Zoom\s+(\d+)%,\s*reset to fit$/i, (m, z) => USE_TW ? ("縮放 " + z + "%（重設為符合畫面大小）") : ("缩放 " + z + "%（重置为适合画面）")],
+        [/^Cost summary:\s*(.+)$/i, (m, s) => (USE_TW ? "費用摘要：" : "费用摘要：") + s],
+        [/^Fix with Agent:\s*(.+)$/i, (m, s) => (USE_TW ? "交由代理修復：" : "交由智能体修复：") + s],
+        [/^Filter skills and rules:\s*(.+)$/i, (m, s) => (USE_TW ? "篩選技能與規則：" : "筛选技能和规则：") + s],
+        [/^Failed to archive\s+(.+)$/i, (m, t) => USE_TW ? ("封存 " + t + " 失敗") : ("归档 " + t + " 失败")],
+        [/^Failed to create\s+(.+?)\.?$/i, (m, t) => USE_TW ? ("建立 " + t + " 失敗" + (/\.$/.test(m) ? "。" : "")) : ("创建 " + t + " 失败" + (/\.$/.test(m) ? "。" : ""))],
+        [/^Failed to delete\s+(.+?):\s*(.+)$/i, (m, t, err) => USE_TW ? ("刪除 " + t + " 失敗：" + err) : ("删除 " + t + " 失败：" + err)],
+        [/^Failed to delete\s+(.+)$/i, (m, t) => USE_TW ? ("刪除 " + t + " 失敗") : ("删除 " + t + " 失败")],
+        [/^Failed to\s+(.+?)\s+conversation$/i, (m, act) => USE_TW ? ("無法對對話執行「" + act + "」操作") : ("无法对对话执行“" + act + "”操作")],
+        [/^Couldn['’]t connect to\s+(.+)$/i, (m, t) => (USE_TW ? "無法連線至 " : "无法连接至 ") + t],
+        [/^Couldn['’]t\s+(.+?)\s+conversation$/i, (m, act) => USE_TW ? ("無法對對話執行「" + act + "」操作") : ("无法对对话执行“" + act + "”操作")],
+        [/^Low contrast ratio\s*\((.+?):1\)\.\s*Text may be hard to read\.?$/i, (m, r) => USE_TW ? ("對比度過低（" + r + ":1），文字可能難以閱讀。") : ("对比度过低（" + r + ":1），文字可能难以阅读。")],
+        [/^Preview unavailable\s*[—–-]\s*(.+)$/i, (m, r) => (USE_TW ? "無法預覽 — " : "无法预览 — ") + r],
+        [/^Help us improve\s+(.+?)\.?$/i, (m, app) => USE_TW ? ("協助我們改進 " + app.trim() + (/\.$/.test(m) ? "。" : "")) : ("帮助我们改进 " + app.trim() + (/\.$/.test(m) ? "。" : ""))],
+        [/^Endpoint\s+(.+?)\s+not implemented$/i, (m, ep) => USE_TW ? ("端點 " + ep + " 尚未實作") : ("端点 " + ep + " 尚未实现")],
+        [/^Malformed Worker RPC params for\s+(.+?):\s*expected plain object$/i, (m, fn) => USE_TW ? (fn + " 的 Worker RPC 參數格式錯誤：預期為一般物件") : (fn + " 的 Worker RPC 参数格式错误：预期为普通对象")],
+        [/^Failed to save project Google3 configuration:\s*(.+)$/i, (m, err) => (USE_TW ? "儲存專案 Google3 設定失敗：" : "保存项目 Google3 配置失败：") + err],
+        [/^Failed to save project:\s*(.+)$/i, (m, err) => (USE_TW ? "儲存專案失敗：" : "保存项目失败：") + err],
+        [/^(?:Auth|Authorization) code for\s+(.+)$/i, (m, app) => app + (USE_TW ? " 的授權碼" : " 的授权码")],
+        [/^Worker sandbox initialization failed:\s*(.+)$/i, (m, err) => (USE_TW ? "Worker 沙箱初始化失敗：" : "Worker 沙箱初始化失败：") + err],
+
+        // v2.34.0 動態模板規則（同步上游）
+        [/^Couldn['’]t disconnect\s+(.+?):\s*(.+)$/i, (m, target, reason) => (USE_TW ? "無法中斷 " + target + " 的連線：" : "无法断开 " + target + " 的连接：") + reason],
+        [/^Failed to load page\s+(.+?):\s*(.+)$/i, (m, page, reason) => (USE_TW ? "載入頁面 " + page + " 失敗：" : "加载页面 " + page + " 失败：") + reason],
+        [/^More options for\s+(.+)$/i, (m, target) => target + (USE_TW ? " 的更多選項" : " 的更多选项")],
+        [/^Opens the New Conversation screen for this\s+(.+)$/i, (m, target) => {
+            const noun = map.get(target.trim()) || lowerMap.get(target.trim().toLowerCase()) || target.trim();
+            return USE_TW ? ("開啟此 " + noun + " 的新對話畫面") : ("打开此 " + noun + " 的新会话界面");
+        }],
     ];
+
+    const ATTR_DYNAMIC_RULES = [
+        [/^Add\s+(.+)$/i, (m, t) => (USE_TW ? "新增 " : "添加 ") + t],
+        [/^Cancel\s+(.+)$/i, (m, t) => "取消 " + t],
+        [/^Close\s+(.+)$/i, (m, t) => (USE_TW ? "關閉 " : "关闭 ") + t],
+        [/^Connect\s+(.+)$/i, (m, t) => (USE_TW ? "連線 " : "连接 ") + t],
+        [/^Disconnect\s+(.+)$/i, (m, t) => (USE_TW ? "中斷連線 " : "断开连接 ") + t],
+        [/^Delete\s+(.+)$/i, (m, t) => (USE_TW ? "刪除 " : "删除 ") + t],
+        [/^Enable\s+(.+)$/i, (m, t) => (USE_TW ? "啟用 " : "启用 ") + t],
+        [/^Install\s+(.+)$/i, (m, t) => (USE_TW ? "安裝 " : "安装 ") + t],
+        [/^Keep:\s*(.+)$/i, (m, t) => "保留：" + t],
+        [/^Label for\s+(.+)$/i, (m, t) => t + (USE_TW ? " 的標籤" : " 的标签")],
+        [/^New\s+(.+)$/i, (m, t) => (USE_TW ? "新增 " : "新建 ") + t],
+        [/^Open\s+(.+)$/i, (m, t) => (USE_TW ? "開啟 " : "打开 ") + t],
+        [/^Reconnect\s+(.+)$/i, (m, t) => (USE_TW ? "重新連線 " : "重新连接 ") + t],
+        [/^Remove\s+(.+)$/i, (m, t) => "移除 " + t],
+        [/^Restart\s+(.+)$/i, (m, t) => (USE_TW ? "重新啟動 " : "重启 ") + t],
+        [/^Stop\s+(.+?)\?$/i, (m, t) => USE_TW ? ("確定要停止 " + t + " 嗎？") : ("确定要停止 " + t + " 吗？")],
+        [/^Stop\s+(.+)$/i, (m, t) => "停止 " + t],
+        [/^Toggle\s+(.+)$/i, (m, t) => (USE_TW ? "切換 " : "切换 ") + t],
+        [/^View\s+(.+)$/i, (m, t) => (USE_TW ? "檢視 " : "查看 ") + t],
+    ];
+
+    function translateAttrDynamic(t) {
+        for (const [regex, replacer] of ATTR_DYNAMIC_RULES) {
+            if (regex.test(t)) return t.replace(regex, replacer);
+        }
+        return null;
+    }
 
     function translateExactOrDynamic(t) {
         const usageTrans = translateUsageText(t);
@@ -1278,8 +1470,62 @@
         if (valNorm === 'plugins available.' && (pText.includes('Build with') || pText.includes('目前沒有可用的') || pText.includes('当前没有可用的'))) {
             return USE_TW ? " 外掛程式。" : " 插件。";
         }
+        if (valNorm === 'FAQ' && p.tagName === 'A' && p.parentElement && (p.parentElement.textContent || '').match(/visiting our|造訪我們的|访问我们的/)) {
+            return USE_TW ? "常見問題" : "常见问题";
+        }
+        if ((valNorm === 'Available for' || valNorm === 'project') && (pText.includes('Available for ') || pText.includes('適用於 ') || pText.includes('适用于 '))) {
+            return valNorm === 'Available for' ? (USE_TW ? "適用於 " : "适用于 ") : (USE_TW ? " 專案" : " 项目");
+        }
+        if ((valNorm === 'Inspect live bindings or record custom key chords filtered to' || valNorm === 'commands.') && pText.includes('antigravity.')) {
+            return valNorm === 'commands.'
+                ? (USE_TW ? " 指令的即時按鍵綁定或錄製自訂快速鍵組合。" : " 命令的实时按键绑定或录制自定义组合键。")
+                : (USE_TW ? "檢視或錄製篩選為 " : "查看或录制筛选为 ");
+        }
+        if ((valNorm === 'No hosts in' || valNorm === 'yet. Type one above.') && (pText.includes('Type one above') || pText.includes('可在上方輸入') || pText.includes('可在上方输入'))) {
+            return valNorm === 'No hosts in'
+                ? (USE_TW ? "在 " : "在 ")
+                : (USE_TW ? " 中尚無主機設定，請在上方直接輸入。" : " 中尚无主机配置，可在上方直接输入。");
+        }
+        if (valNorm === 'No MCP servers found for "' && pText.includes('No MCP servers found for "')) {
+            return USE_TW ? "找不到符合「" : "未找到匹配“";
+        }
+        if (valNorm === '"' && (pText.includes('找不到符合「') || pText.includes('未找到匹配“'))) {
+            return USE_TW ? "」的 MCP 伺服器" : "”的 MCP 服务器";
+        }
+        if (valNorm === 'If that machine is a cloudtop, reach it via' && pText.includes('If that machine is a cloudtop')) {
+            return USE_TW ? "若該電腦為 Cloudtop，請透過以下方式連線：" : "如果该机器是 Cloudtop，请通过以下方式连接：";
+        }
+        if (valNorm === 'Generation Steps (' && pText.includes('Generation Steps (')) {
+            return USE_TW ? "產生步驟 (" : "生成步骤 (";
+        }
+        if (valNorm === 'Show more (' && pText.includes('Show more (')) {
+            return USE_TW ? "顯示更多 (" : "显示更多 (";
+        }
+        if (valNorm === 'Show submitted (' && pText.includes('Show submitted (')) {
+            return USE_TW ? "顯示已提交 (" : "显示已提交 (";
+        }
+        if (valNorm === 'Start Best-of-' && pText.includes('Start Best-of-')) {
+            return USE_TW ? "開始 Best-of-" : "开始 Best-of-";
+        }
+        if ((valNorm === 'In this case,' || valNorm === 'chunks were collapsed into one. Chunks included in this read:') && pText.includes('chunks were collapsed into one')) {
+            return valNorm === 'In this case,'
+                ? (USE_TW ? "在此情況下，已將 " : "在此情况下，已将 ")
+                : (USE_TW ? " 個區塊合併為單一區塊。此次讀取包含的區塊：" : " 个区块合并为单个区块。此次读取包含的区块：");
+        }
         if (valNorm === 'Not referenced by any feature (' && pText.includes('Not referenced by any feature')) {
             return USE_TW ? "尚無任何功能參照 (" : "未被任何功能引用 (";
+        }
+        if (valNorm === 'Messages now send immediately. Configure in') {
+            return USE_TW ? '訊息現已改為立即傳送。可在 ' : '消息现已改为立即发送。可在 ';
+        }
+        if (valNorm === 'In System Settings, click') {
+            return USE_TW ? '在「系統設定」中，按一下 ' : '在“系统设置”中，点击 ';
+        }
+        if (valNorm === 'In System Settings, turn on') {
+            return USE_TW ? '在「系統設定」中，開啟 ' : '在“系统设置”中，开启 ';
+        }
+        if (valNorm === 'Already on? Select') {
+            return USE_TW ? '已經開啟？請選取 ' : '已经开启？请选择 ';
         }
         if (valNorm === 'Only for' && (pText.includes('overrides Global') || pText.includes('覆盖全局') || pText.includes('覆寫全域'))) {
             return USE_TW ? "僅針對 " : "仅针对 ";
@@ -1450,7 +1696,7 @@
                         }
                         if (!newAttr) {
                             if (isFilePathOrUri(t)) continue;
-                            newAttr = translateExactOrDynamic(t);
+                            newAttr = translateExactOrDynamic(t) || translateAttrDynamic(t);
                         }
                         if (!newAttr && inSwarmEl) {
                             newAttr = translateSwarmComposite(v);
@@ -1545,6 +1791,21 @@
                         const suffixNode = document.createTextNode(' 搞定一切');
                         translatedValues.set(suffixNode, suffixNode.nodeValue);
                         node.appendChild(suffixNode);
+                    }
+                }
+
+                // 處理 "Available for <projectId> project" 拆分文本節點
+                if (/^Available for\s+.+?\s+project$/i.test(elText)) {
+                    const textChildren = Array.from(node.childNodes).filter(c => c.nodeType === Node.TEXT_NODE);
+                    for (const tc of textChildren) {
+                        const n = norm(tc.nodeValue);
+                        if (n === 'Available for') {
+                            tc.nodeValue = USE_TW ? '適用於 ' : '适用于 ';
+                            translatedValues.set(tc, tc.nodeValue);
+                        } else if (n === 'project') {
+                            tc.nodeValue = USE_TW ? ' 專案' : ' 项目';
+                            translatedValues.set(tc, tc.nodeValue);
+                        }
                     }
                 }
 
