@@ -1,7 +1,7 @@
 # Antigravity 繁體中文在地化文字規範與體例指南 (Localization Style Guide)
 
-> **版本**：v3.7.2（適配 Antigravity v2.34.0）  
-> **維護依據**：Antigravity 繁體中文翻譯規範、L0 中文輸出底線層、老編輯統一出版體例、台灣軟體在地化業界行規（Apple / Google / Microsoft / VS Code zh-TW）  
+> **版本**：v3.7.4（適配 Antigravity v2.34.0；純翻譯包 `schemaVersion: 2`）  
+> **維護依據**：Antigravity 繁體中文翻譯規範、L0 中文輸出底線層、老編輯統一出版體例、Jserv《[資訊科技詞彙翻譯](https://hackmd.io/@sysprog/it-vocabulary)》（僅採 Domain Profile 資工分艙與四項跨領域方法論，不擴散至非科技文本）、台灣軟體在地化業界行規（Apple / Google / Microsoft / VS Code zh-TW）  
 > **適用範圍**：所有靜態字典檔（`dicts_tw/*.json`、`dicts/*.json`）、核心執行期腳本（`src/preload_runtime.js`、`localization_engine.js`）及自動化守護程序
 
 ---
@@ -76,7 +76,14 @@
 
 ## 3. 兩岸名詞標準對照與大陸黑話防護庫
 
-本專案在 `scripts/compare_dicts.js` 中固化違禁詞攔截清單。以下名詞在繁體中文（`dicts_tw/`）中必須嚴格遵守台灣標準用法：
+本專案在 `scripts/compare_dicts.js` 中固化違禁詞攔截清單，並參照 Jserv《[資訊科技詞彙翻譯](https://hackmd.io/@sysprog/it-vocabulary)》的**四項跨領域方法論**審校軟體 UI 詞彙（嚴守 Domain Profile 分艙邊界，IT 專屬強制譯名不擴散至心理、文學、料理、醫療或純統計文本）：
+
+- **詞源考據**：追溯原典詞源與學科脈絡（如 `silicon→矽`、`atomic→不可分割`、`operator / operand→運算子 / 運算元`）。
+- **反概念塌縮**：區分技術層次，不混為同一詞彙（`cache→快取` vs `buffer→緩衝區`；`process→處理程序` vs `procedure→程序`；`concurrency→並行` vs `parallelism→平行`）。
+- **反機械對應**：一詞多義依語境擇詞（`data` 於資訊脈絡作「資料」、於統計脈絡作「數據」；`function` 於程式設計作「函式」、數學作「函數」、介面說明作「功能」；`optimize` 視語意譯為「最佳化」或「改善」，不盲目硬替）。
+- **音譯防誤導**：摒棄易混淆字面與誤導音譯（取「雜湊」捨「哈希」）。
+
+以下名詞在繁體中文（`dicts_tw/`）中必須嚴格遵守台灣標準用法：
 
 | 英文術語 | 繁體中文標準 (台灣) | 簡體中文 (`dicts/`) | ❌ 嚴禁在繁中出現的大陸黑話 / 港式異體 |
 | :--- | :--- | :--- | :--- |
@@ -136,6 +143,15 @@
 | **Assist** | **協助** / **支援** | 助力 / 辅助 | ❌ 助力 |
 | **Empower** | **賦予能力** | 赋能 | ❌ 賦能 |
 | **Exit with error** | **結束並出現錯誤** | 异常退出 | ❌ 異常退出 |
+| **Render** (CG / Web 畫面) | **算繪** / **彩現** / **繪製** | 渲染 | ❌ 渲染 |
+| **Traverse / Traversal** (圖論 / 資料結構) | **走訪** | 遍历 / 周游 | ❌ 遍歷 / 周遊（「遍歷性」數學專名除外） |
+| **Hash** | **雜湊** | 哈希 / 散列 | ❌ 哈希 |
+| **Asynchronous** | **非同步** | 异步 | ❌ 異步 |
+| **Linked List** | **鏈結串列** | 链表 | ❌ 鏈表 |
+| **Command Line** | **命令列** | 命令行 | ❌ 命令行 |
+| **Iterative / Iterate** | **迭代** | 迭代 / 叠代 | ❌ 疊代 |
+| **Optimize** | **最佳化**（演算法）/ **改善**（語境） | 优化 | ❌ 盲目機械強替 |
+| **Silicon** | **矽** | 硅 | ❌ 硅 |
 
 ---
 
@@ -254,20 +270,21 @@ Slash 指令名稱保持英文字串，但其輔助說明文字一律採用精�
    ```bash
    npm test
    ```
-   *必須保證*：所有測試通過（90 項測試全數通過；Windows 專屬 `fsync` 測試於非 Windows 平台按設計略過，0 failed）。
+   *必須保證*：所有測試項目全數通過（Windows 專屬 `fsync` 測試於非 Windows 平台按設計略過，0 failed）。
 
-3. **打包純翻譯資料包（Release Assets 唯一允許產物）**：
+3. **封裝純翻譯資料包（Release Assets 唯一允許產物）**：
    ```bash
    node scripts/build_translation_pack.js \
-     --version 3.7.2 \
-     --min-engine 3.7.2 \
-     --max-engine 3.7.2 \
-     --output dist/antigravity2-TW-translations-v3.7.2.zip
+     --version 3.7.4 \
+     --min-engine 3.7.3 \
+     --max-engine 3.7.4 \
+     --output dist/antigravity2-TW-translations-v3.7.4.zip
    ```
    *注意*：完整發布規範與 Draft Preflight 稽核詳見 [`docs/RELEASING.md`](./RELEASING.md)，嚴禁將可執行程式碼 ZIP 上傳至 Release Assets。
 
-4. **本機應用程式即時重套**：
+4. **本機應用程式即時重套與 macOS 簽章驗證**：
    ```bash
    node localization_engine.js --tw --no-kill --sync-watcher --brand-title english
+   codesign --verify --deep --strict /Applications/Antigravity.app
    ```
-   驗證本機 `/Applications/Antigravity.app` 注入成功且正常運作。
+   驗證本機 `/Applications/Antigravity.app` 注入成功、簽章密封完整且正常運作。

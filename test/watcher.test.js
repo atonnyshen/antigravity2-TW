@@ -614,4 +614,29 @@ test('acquireLock recovers and reclaims stale lock with restrictive directory pe
     assert.equal(fs.existsSync(lockDir), false);
 });
 
+test('watcher removes .autolocalize temp dirs from appPath before sign runs', t => {
+    const f = fixture(t);
+    const seenTempDirs = [];
+    const ran = f.run({
+        sign(appPath) {
+            seenTempDirs.push(fs.readdirSync(appPath).filter(n => n.startsWith('.autolocalize-')));
+        }
+    });
+    assert.equal(ran, true);
+    assert.deepEqual(seenTempDirs, [[]]);
+
+    // Also verify rollback sign pass sees zero .autolocalize temp dirs
+    fs.writeFileSync(f.asarPath, 'official-v2');
+    const rollbackSeen = [];
+    let calls = 0;
+    assert.throws(() => f.run({
+        sign(appPath) {
+            rollbackSeen.push(fs.readdirSync(appPath).filter(n => n.startsWith('.autolocalize-')));
+            if (++calls === 1) throw Error('sign denied');
+        }
+    }), /sign denied/);
+    assert.deepEqual(rollbackSeen, [[], []]);
+});
+
+
 

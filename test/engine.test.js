@@ -1109,6 +1109,41 @@ test('v2.34.0 executor offload phrasing, remaining JSX templates, and Thinking e
     assert.equal(doc.getElementById('eff-lc').textContent, 'Thinking effort');
 });
 
+test('install20 and restore20 clean temp dirs from resourcesDir before resignFn runs', async t => {
+    const asar = await import('@electron/asar');
+    const { install20, restore20 } = require('../localization_engine');
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-engine-resign-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const source = path.join(root, 'source');
+    const resources = path.join(root, 'Antigravity.app', 'Contents', 'Resources');
+    fs.mkdirSync(path.join(source, 'dist'), { recursive: true });
+    fs.mkdirSync(resources, { recursive: true });
+    fs.writeFileSync(path.join(source, 'dist', 'preload.js'), '// official preload\n');
+    const archive = path.join(resources, 'app.asar');
+    await asar.createPackageWithOptions(source, archive, {});
+
+    let installDirsDuringResign = null;
+    const okInstall = install20(resources, true, false, {
+        resignFn(dir) {
+            installDirsDuringResign = fs.readdirSync(dir).filter(n => n.startsWith('.antigravity-'));
+            return true;
+        }
+    });
+    assert.equal(okInstall, true);
+    assert.deepEqual(installDirsDuringResign, []);
+
+    let restoreDirsDuringResign = null;
+    const okRestore = restore20(resources, true, {
+        resignFn(dir) {
+            restoreDirsDuringResign = fs.readdirSync(dir).filter(n => n.startsWith('.antigravity-'));
+            return true;
+        }
+    });
+    assert.equal(okRestore, true);
+    assert.deepEqual(restoreDirsDuringResign, []);
+});
+
+
 
 
 

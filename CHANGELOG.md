@@ -1,5 +1,18 @@
 # 更新紀錄
 
+## 3.7.4 — 2026-11-23
+
+- **納入 Jserv《資訊科技詞彙翻譯》資工分艙標準並校訂衝突詞條**：
+  - 參照 Jserv《[資訊科技詞彙翻譯](https://hackmd.io/@sysprog/it-vocabulary)》，僅採技術詞源考據、反概念塌縮、反機械對應與音譯防誤導四項方法論審校詞庫（維持科技領域專屬界線，不將專業用語強套至一般語境）。
+  - 修正 `dicts_tw/page_main.json` 與 `dicts_tw/page_mcp_knowledge.json` 計 14 處術語衝突與一致性落差：10 處圖學與網頁 `render`「渲染」統一改為「算繪」；`Running processes...`「執行中的程序」修正為「執行中的處理程序」；`traversing real relationships`「周遊真實關聯關係」對齊圖論標準譯為「走訪真實關聯關係」；2 處 `Chief of Staff` 語音狀態殘留「語音助手」統一改回「幕僚長」。
+  - `scripts/compare_dicts.js` 新增資工違禁詞守護（`渲染`、`哈希`、`遍歷`、`鏈表`、`套接字`、`疊代`、`命令行`、`硅`），`docs/LOCALIZATION_STYLE_GUIDE.md` 同步補齊對應規範與體例表。
+- **修復 macOS `codesign --verify --deep --strict` 資源密封失效缺陷（P0）**：
+  - `localization_engine.js`（`install20`、`restore20`）原在 `resignAppOnMac` 簽署完成後才移除 `Contents/Resources/` 內的 `.antigravity-localize-*`／`.antigravity-restore-*` 暫存目錄，`auto_localize_watcher.js` 亦在 `sign()` 之後才刪除 `.autolocalize-*` 目錄，導致 macOS 檢查出現 `a sealed resource is missing or invalid`。
+  - 修正執行時序：在喚起 `codesign` 之前先行清空 `Contents/Resources/` 內的暫存目錄；僅於簽署失敗觸發回退時按需於記憶體寫回官方原檔，回退重簽前同樣清理暫存目錄。
+- **回歸測試與發布相容性**：
+  - 新增 `install20`、`restore20` 與背景守護 `sign` 階段零暫存目錄殘留的單元測試，確保 macOS 資源密封不因暫存清理受損。
+  - `v3.7.4` 純翻譯資料包設為 `--min-engine 3.7.3 --max-engine 3.7.4`（`schemaVersion: 2`），既有的 `v3.7.3` 背景守護使用者可自動接收本次字典修訂；macOS 使用者若需同步套用 `codesign` 密封修復，請由 GitHub 下載新版原始碼重新部署。
+
 ## 3.7.3 — 2026-11-22
 
 - **規則全資料化自動更新架構（`schemaVersion: 2`）**：

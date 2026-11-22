@@ -939,6 +939,7 @@ function syncActiveWindowsWatcher(installDir, resourcesDir, {
 function install20(resourcesDir, noKill = false, staging = false, options = {}) {
     const asarPath = path.join(resourcesDir, "app.asar");
     const bakPath = path.join(resourcesDir, "app.asar.bak");
+    const resignFn = typeof options.resignFn === 'function' ? options.resignFn : resignAppOnMac;
 
     if (!fs.existsSync(asarPath)) {
         console.error(`[错误] 未在资源目录中找到 app.asar: ${resourcesDir}`);
@@ -1030,16 +1031,37 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
             throw error;
         }
 
+        // Remove staging directory from Contents/Resources before codesign seals the
+        // bundle resources; removing buildDir after resign breaks macOS sealed resources.
+        if (buildDir) {
+            try {
+                fs.rmSync(buildDir, { recursive: true, force: true });
+                buildDir = undefined;
+            } catch (error) {
+                console.warn(`[提示] 临时目录清理失败（签名前）: ${buildDir}`);
+            }
+        }
+
         if (!staging) {
             cleanElectronCache();
-            if (!resignAppOnMac(resourcesDir)) {
+            if (!resignFn(resourcesDir)) {
+                let rollbackDir;
                 try {
-                    replaceFileWithRetry(rollbackArchive, asarPath, !noKill);
+                    rollbackDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-rollback-'));
+                    const rollbackArchiveFile = path.join(rollbackDir, 'previous.asar');
+                    fs.writeFileSync(rollbackArchiveFile, originalLive);
+                    replaceFileWithRetry(rollbackArchiveFile, asarPath, !noKill);
                     if (plistBackup && plistPath) fs.writeFileSync(plistPath, plistBackup);
                     if (refreshBackup && fs.existsSync(bakPath)) fs.unlinkSync(bakPath);
                 } catch (rollbackError) {
-                    retainRecoveryFiles = true;
-                    throw new Error(`macOS 签名失败且回滚失败，原始文件保留于 ${rollbackArchive}: ${rollbackError.message}`);
+                    if (rollbackDir) {
+                        buildDir = rollbackDir;
+                        retainRecoveryFiles = true;
+                    }
+                    throw new Error(`macOS 签名失败且回滚失败，原始文件保留于 ${buildDir || resourcesDir}: ${rollbackError.message}`);
+                }
+                if (rollbackDir) {
+                    try { fs.rmSync(rollbackDir, { recursive: true, force: true }); } catch {}
                 }
                 return false;
             }
@@ -1048,14 +1070,6 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
             }
         }
 
-        if (buildDir && !retainRecoveryFiles) {
-            try {
-                fs.rmSync(buildDir, { recursive: true, force: true });
-                buildDir = undefined;
-            } catch (error) {
-                console.warn(`[提示] 临时目录已保留: ${buildDir}`);
-            }
-        }
         console.log(`[√] Antigravity 2.0 汉化部署完成！`);
         return true;
     } catch (error) {
@@ -1071,9 +1085,10 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
     }
 }
 
-function restore20(resourcesDir, noKill = false) {
+function restore20(resourcesDir, noKill = false, options = {}) {
     const asarPath = path.join(resourcesDir, "app.asar");
     const bakPath = path.join(resourcesDir, "app.asar.bak");
+    const resignFn = typeof options.resignFn === 'function' ? options.resignFn : resignAppOnMac;
 
     if (!fs.existsSync(bakPath)) {
         console.log("[!] 未找到备份文件 app.asar.bak，可能尚未安装过汉化或备份被删除。");
@@ -1086,10 +1101,7 @@ function restore20(resourcesDir, noKill = false) {
     try {
         restoreDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-restore-'));
         const candidate = path.join(restoreDir, 'app.asar');
-        const previousBackup = path.join(restoreDir, 'previous.asar');
-        if (fs.existsSync(asarPath)) {
-            fs.copyFileSync(asarPath, previousBackup);
-        }
+        const previousLive = fs.existsSync(asarPath) ? fs.readFileSync(asarPath) : null;
         const macBundleForPlist = process.platform === 'darwin' ? resolveMacAppBundle(resourcesDir) : null;
         const plistPath = macBundleForPlist ? path.join(macBundleForPlist, 'Contents', 'Info.plist') : null;
         const plistBackup = plistPath && fs.existsSync(plistPath) ? fs.readFileSync(plistPath) : null;
@@ -1097,13 +1109,32 @@ function restore20(resourcesDir, noKill = false) {
         fs.copyFileSync(bakPath, candidate);
         readAsarLayout(candidate);
         replaceFileWithRetry(candidate, asarPath, !noKill);
-        if (!resignAppOnMac(resourcesDir)) {
+
+        // Clean restoreDir from Contents/Resources before codesign seals the bundle.
+        try {
+            fs.rmSync(restoreDir, { recursive: true, force: true });
+            restoreDir = undefined;
+        } catch {}
+
+        if (!resignFn(resourcesDir)) {
+            let rollbackDir;
             try {
-                if (fs.existsSync(previousBackup)) replaceFileWithRetry(previousBackup, asarPath, !noKill);
+                if (previousLive) {
+                    rollbackDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-restore-rb-'));
+                    const previousBackup = path.join(rollbackDir, 'previous.asar');
+                    fs.writeFileSync(previousBackup, previousLive);
+                    replaceFileWithRetry(previousBackup, asarPath, !noKill);
+                }
                 if (plistBackup && plistPath) fs.writeFileSync(plistPath, plistBackup);
             } catch (rollbackError) {
-                retainRestoreFiles = true;
-                throw new Error(`macOS 恢复签名失败且回滚失败，原文件保留于 ${previousBackup}: ${rollbackError.message}`);
+                if (rollbackDir) {
+                    restoreDir = rollbackDir;
+                    retainRestoreFiles = true;
+                }
+                throw new Error(`macOS 恢复签名失败且回滚失败，原文件保留于 ${restoreDir || resourcesDir}: ${rollbackError.message}`);
+            }
+            if (rollbackDir) {
+                try { fs.rmSync(rollbackDir, { recursive: true, force: true }); } catch {}
             }
             return false;
         }
@@ -1292,6 +1323,7 @@ if (typeof module !== 'undefined' && module.exports) {
         generateJs,
         loadRuntimeRules,
         install20,
+        restore20,
         detectInstallationDir,
         checkIfAppIsRunning,
         closeAntigravityProcesses,

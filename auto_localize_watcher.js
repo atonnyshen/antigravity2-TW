@@ -868,6 +868,14 @@ function checkAndLocalizeApp(appInfo, {
         }
         replaced = true;
         fsyncDirectory(path.dirname(asarPath));
+        // Clean replacementDir from Contents/Resources before codesign seals the bundle;
+        // removing it after sign() would invalidate macOS sealed resources.
+        if (replacementDir) {
+            try {
+                fs.rmSync(replacementDir, { recursive: true, force: true });
+                replacementDir = null;
+            } catch {}
+        }
         sign(appPath, sourceStat);
         if (digest(fs.readFileSync(asarPath)) !== resultHash) {
             throw new Error('簽署期間官方 app.asar 已更新，保留較新檔案並取消本輪收據。');
@@ -890,15 +898,35 @@ function checkAndLocalizeApp(appInfo, {
                 if (digest(fs.readFileSync(asarPath)) !== resultHash) {
                     throw new Error('套用後官方包再次改變，保留新檔，不覆蓋還原。');
                 }
-                const rollback = path.join(replacementDir || stageDir, 'rollback.asar');
+                let rollbackDir = replacementDir;
+                let createdRollbackDir = false;
+                if (!rollbackDir) {
+                    try {
+                        rollbackDir = fs.mkdtempSync(path.join(path.dirname(asarPath), '.autolocalize-rb-'));
+                        createdRollbackDir = true;
+                    } catch {
+                        rollbackDir = stageDir;
+                    }
+                }
+                const rollback = path.join(rollbackDir, 'rollback.asar');
                 fs.writeFileSync(rollback, original, { flag: 'wx', mode: sourceStat.mode & 0o777 });
                 fsyncFile(rollback);
                 if (ROOT) {
                     try { fs.chownSync(rollback, sourceStat.uid, sourceStat.gid); } catch {}
                 }
-                exchangeCheckedAsar(rollback, asarPath, path.join(replacementDir || stageDir, 'rollback-previous.asar'),
-                    resultHash, originalHash, exchange);
+                try {
+                    exchangeCheckedAsar(rollback, asarPath, path.join(rollbackDir, 'rollback-previous.asar'),
+                        resultHash, originalHash, exchange);
+                } catch (exErr) {
+                    if (exErr.concurrentRecovery && createdRollbackDir) {
+                        replacementDir = rollbackDir;
+                    }
+                    throw exErr;
+                }
                 fsyncDirectory(path.dirname(asarPath));
+                if (createdRollbackDir) {
+                    try { fs.rmSync(rollbackDir, { recursive: true, force: true }); } catch {}
+                }
                 sign(appPath, sourceStat);
                 log('套用未通過，已還原原始 app.asar。');
             } catch (rollbackError) {
