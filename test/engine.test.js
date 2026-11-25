@@ -1319,6 +1319,10 @@ test('v2.35.1 split-node sentences, Show N more variants, attribute phrases and 
     assert.equal(text('more-single'), '顯示另外 3 個');
     assert.equal(text('more-sub'), '顯示另外 2 個子代理');
     assert.equal(text('more-all'), '另外 +4 項（顯示全部）');
+    // 文字直接走動態規則時，省略號同樣跟著原文
+    assert.equal(tx('Show 3 more'), '顯示另外 3 個');
+    assert.equal(tx('Show 3 more results'), '顯示另外 3 個結果');
+    assert.equal(tx('Show 3 more...'), '顯示另外 3 個...');
     // 兩個並排連結之間的空白是分隔用的，不能收掉
     assert.equal(text('links'), '隱私權政策 服務條款');
     // 「動詞＋冠詞／介系詞」片語保留原文，避免「開啟 the Swarm UI」；一般「動詞＋名稱」照常翻譯

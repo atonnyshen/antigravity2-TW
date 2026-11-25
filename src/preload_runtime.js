@@ -836,14 +836,16 @@
 
     const DYNAMIC_RULES = [
         // 列表展开 / 收起明细
-        [/^Show\s+(\d+)\s+more(\s+(results?|items?|commands?|options?))?(\.\.\.|…)?$/i, (m, num, p2, type) => {
+        // 省略號跟著原文：「Show 3 more」不補「...」
+        [/^Show\s+(\d+)\s+more(\s+(results?|items?|commands?|options?))?(\.\.\.|…)?$/i, (m, num, p2, type, ell) => {
+            const tail = ell || '';
             if (type) {
-                if (/result/i.test(type)) return USE_TW ? ("顯示另外 " + num + " 個結果...") : ("显示另外 " + num + " 个结果...");
-                if (/command/i.test(type)) return USE_TW ? ("顯示另外 " + num + " 個指令...") : ("显示另外 " + num + " 个命令...");
-                if (/item/i.test(type)) return USE_TW ? ("顯示另外 " + num + " 個項目...") : ("显示另外 " + num + " 个项目...");
-                if (/option/i.test(type)) return USE_TW ? ("顯示另外 " + num + " 個選項...") : ("显示另外 " + num + " 个选项...");
+                if (/result/i.test(type)) return (USE_TW ? ("顯示另外 " + num + " 個結果") : ("显示另外 " + num + " 个结果")) + tail;
+                if (/command/i.test(type)) return (USE_TW ? ("顯示另外 " + num + " 個指令") : ("显示另外 " + num + " 个命令")) + tail;
+                if (/item/i.test(type)) return (USE_TW ? ("顯示另外 " + num + " 個項目") : ("显示另外 " + num + " 个项目")) + tail;
+                if (/option/i.test(type)) return (USE_TW ? ("顯示另外 " + num + " 個選項") : ("显示另外 " + num + " 个选项")) + tail;
             }
-            return USE_TW ? ("顯示另外 " + num + " 個...") : ("显示另外 " + num + " 个...");
+            return (USE_TW ? ("顯示另外 " + num + " 個") : ("显示另外 " + num + " 个")) + tail;
         }],
         [/^Show\s+(\d+)\s+breakdown(s)?$/i, (m, num) => USE_TW ? ("顯示 " + num + " 項明細") : ("显示 " + num + " 项细目")],
         [/^Hide\s+breakdown(s)?$/i, () => USE_TW ? "收起明細" : "收起细目"],
