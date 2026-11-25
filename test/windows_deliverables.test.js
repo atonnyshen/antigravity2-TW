@@ -186,6 +186,7 @@ test('watcher Windows Task Scheduler XML installer/uninstaller handles spaces, C
     const decodedXml = writtenXmlBuf.slice(2).toString('utf16le');
     assert.match(decodedXml, /^<\?xml version="1\.0" encoding="UTF-16"\?>\r\n/);
     assert.match(decodedXml, /<Interval>PT5M<\/Interval>/);
+    assert.doesNotMatch(decodedXml, /<LogonTrigger>/, 'Standard Windows users must not hit Access Denied from LogonTrigger');
     assert.match(decodedXml, /<LogonType>InteractiveToken<\/LogonType>/);
     assert.match(decodedXml, /<RunLevel>LeastPrivilege<\/RunLevel>/, 'Persistent tasks must not run elevated code from a writable checkout');
     assert.match(decodedXml, /<Command>C:\\Program Files\\nodejs\\node\.exe<\/Command>/);

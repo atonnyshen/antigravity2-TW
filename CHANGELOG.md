@@ -10,6 +10,9 @@
   - 補全 `dist/remote/remoteManager.js` 於 `v2.35.1` 新增且尚未翻譯的對話框：`['Allow', "Don't Allow"]`、麥克風授權詳細說明、`['Continue', 'Cancel']`、`Finish this sign-in on ...`、`['Restart', 'Later']`、SSH 伺服器狀態（`agent or task`／`still runs Antigravity server`）、SSH 設定檔錯誤提示與 `Shared home directory` 三分支說明。
 - **Node.js 版本檢查與升級防呆（回應上游 Issue #65）**：
   - `localization_engine.js` 新增前置 `checkSupportedNodeVersion()` 檢查（拒絕 Node `< 20` 並提示升級至 Node 22.12.0+ 與檢查 `PATH`），防止舊版 Node 執行 `--check` 時於 `?.` 可選串連語法報錯中斷。
+- **Windows 背景守護免管理員授權與 AI 小白友善安裝引導**：
+  - `auto_localize_watcher.js` 的 `buildWindowsTaskXml()` 移除必須具備系統管理員權限才能註冊的 `<LogonTrigger>`，保留每 5 分鐘 `<TimeTrigger>`（搭配 `StartWhenAvailable=true` 與 `LeastPrivilege`），一般使用者於 `%LOCALAPPDATA%` 路徑註冊背景排程不再觸發 `Access is denied`。
+  - 重寫 `AI_INSTALL_GUIDE.md` 選項 1～4 與異常指引為程式小白可懂的白話說明（隱藏內部 CLI 參數與技術術語），並在 Windows 遇權限不足時優先引導透過 PowerShell `Start-Process -Verb RunAs` 直接跳出原生 UAC 確認視窗，避免使用者誤在 Antigravity 介面側邊欄按右鍵卡關。
 - **發布相容性**：
   - 純翻譯資料包設為 `--min-engine 3.7.3 --max-engine 3.8.0`（`schemaVersion: 2`），既有 `v3.7.3`／`v3.7.4` 背景守護使用者可自動接收新字典與 `rules/runtime_rules.json`；欲取得 `dist/remote/*` 與 `src/preload_runtime.js` 多分支／碎片更新，請下載 `v3.8.0` `Source code (zip)` 重新執行安裝。
 
