@@ -1143,6 +1143,72 @@ test('install20 and restore20 clean temp dirs from resourcesDir before resignFn 
     assert.deepEqual(restoreDirsDuringResign, []);
 });
 
+test('v2.35.1 Inbox Mode, Dictation, Plugins, Quota, Countdown and JSX split-node rules localize in TW', () => {
+    const { JSDOM } = require('jsdom');
+    const js = generateJs();
+    const dom = new JSDOM(`<!doctype html><html><body>
+        <span id="inbox-mode">Inbox Mode</span>
+        <span id="working-sec">Working Section</span>
+        <span id="resolved">Resolved</span>
+        <span id="dict-lang">Dictation languages</span>
+        <span id="plug-perm">Plugin permissions</span>
+        <span id="avail-proj">Available for my-gcp-proj project</span>
+        <p id="revoke-msg">All file permissions will be revoked. The plugin will ask before doing this again.</p>
+        <span id="ai-credits">Available AI credits: 1,250</span>
+        <button id="dismiss-btn" aria-label="Dismiss: Update ready">x</button>
+        <span id="move-to">Move to Archive</span>
+        <span id="new-ws">New workspace...</span>
+        <span id="no-lang">No matching languages for "klingon"</span>
+        <button id="rev-all" aria-label="Revoke all: GitHub">Revoke all</button>
+        <button id="theme-app" aria-label="Applied DarkTheme">Applied</button>
+        <button id="show-plug" aria-label="Show MyPlugin">x</button>
+        <span id="quota-reset">Your quota for Gemini 4 Pro will reset on Dec 1, 2026. Switch to another available model to continue.</span>
+        <span id="need-credits">You need at least 50 AI Credits to send messages. To continue using Gemini 4 Pro now, purchase more AI Credits.</span>
+        <span id="baseline-reset">Your plan's baseline quota will refresh on Dec 5, 2026.</span>
+        <span id="retry-in">Model unavailable, retrying in 5s (attempt 2/3)</span>
+        <span id="attach-img">3 image attachments</span>
+        <span id="left-hm">2h 15m left</span>
+        <span id="pub-origin">Published feat/x to origin.</span>
+        <div id="best-of">Start Best-of-<span>3</span></div>
+        <div id="gen-steps">Generation Steps (<span>4</span>)</div>
+    </body></html>`, { runScripts: 'outside-only' });
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: dom.window.Node, document: dom.window.document, console };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    const doc = dom.window.document;
+    translateNode(doc.body);
+
+    assert.equal(doc.getElementById('inbox-mode').textContent, '收件匣模式');
+    assert.equal(doc.getElementById('working-sec').textContent, '進行中區塊');
+    assert.equal(doc.getElementById('resolved').textContent, '已解決');
+    assert.equal(doc.getElementById('dict-lang').textContent, '聽寫語言');
+    assert.equal(doc.getElementById('plug-perm').textContent, '外掛程式權限');
+    assert.equal(doc.getElementById('avail-proj').textContent, '適用於 my-gcp-proj 專案');
+    assert.equal(doc.getElementById('revoke-msg').textContent, '將撤銷全部 file permissions。外掛程式在再次執行此操作前會先徵求您的同意。');
+    assert.equal(doc.getElementById('ai-credits').textContent, '可用 AI 點數：1,250');
+    assert.equal(doc.getElementById('dismiss-btn').getAttribute('aria-label'), '關閉：Update ready');
+    assert.equal(doc.getElementById('move-to').textContent, '移至 封存');
+    assert.equal(doc.getElementById('new-ws').textContent, '新增工作區...');
+    assert.equal(doc.getElementById('no-lang').textContent, '找不到與「klingon」相符的語言');
+    assert.equal(doc.getElementById('rev-all').getAttribute('aria-label'), '全部撤銷：GitHub');
+    assert.equal(doc.getElementById('rev-all').textContent, '全部撤銷');
+    assert.equal(doc.getElementById('theme-app').getAttribute('aria-label'), '已套用 DarkTheme');
+    assert.equal(doc.getElementById('theme-app').textContent, '已套用');
+    assert.equal(doc.getElementById('show-plug').getAttribute('aria-label'), '顯示 MyPlugin');
+    assert.equal(doc.getElementById('quota-reset').textContent, '您的 Gemini 4 Pro 配額將於 Dec 1, 2026 重設。請切換至其他可用模型以繼續。');
+    assert.equal(doc.getElementById('need-credits').textContent, '您需要至少 50 AI 點數才能傳送訊息。若要立即繼續使用 Gemini 4 Pro，請購買更多 AI 點數。');
+    assert.equal(doc.getElementById('baseline-reset').textContent, '您方案的基準配額將於 Dec 5, 2026 重設。');
+    assert.equal(doc.getElementById('retry-in').textContent, '模型暫時無法使用，5 秒後重試（第 2/3 次嘗試）');
+    assert.equal(doc.getElementById('attach-img').textContent, '3 張圖片附件');
+    assert.equal(doc.getElementById('left-hm').textContent, '剩餘 2 小時 15 分鐘');
+    assert.equal(doc.getElementById('pub-origin').textContent, '已發布 feat/x 至 origin。');
+    assert.equal(doc.getElementById('best-of').textContent, '開始 Best-of-3');
+    assert.equal(doc.getElementById('gen-steps').textContent, '產生步驟 (4)');
+});
+
+
 
 
 

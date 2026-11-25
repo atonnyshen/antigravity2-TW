@@ -426,4 +426,44 @@ test('v2.33.0 remoteManager, wizardHtml, SVG-only loadingOverlay, and runtime br
     const sshErrPatched = patches.patchSshErrorTextJs(sshErrSample, true);
     assert.ok(sshErrPatched.includes("'連線在完成前即被關閉。'"));
     assert.ok(sshErrPatched.includes('`尚未支援 Windows SSH 主機。${sshArgs_1.LINUX_HOST_NEEDED}`'));
+
+    const discSample = [
+        `<html lang="en">`,
+        `const BUTTON_LABELS = { reconnect: 'Reconnect', stop: 'Stop Server', close: 'Close', };`,
+        `const title = restarting ? 'Restarting…' : connecting ? 'Reconnecting…' : 'Disconnected';`,
+        `const heading = restarting ? \`Restarting the Antigravity server on \${host}…\` : connecting ? \`Reconnecting to \${host}…\` : \`Disconnected from \${host}\`;`,
+        `const body = restarting ? 'This window opens it again once it has started.' : connecting ? page.serverStopped ? \`Its server on \${host} stopped, and its agents with it.\` : \`Agents keep running on \${host}.\` : page.serverStopped ? \`Its agents on \${host} stopped with it.\` : \`Agents keep running on \${host} unless its server stopped.\`;`
+    ].join('\n');
+    const discPatchedTw = patches.patchRemoteDisconnectedPageJs(discSample, true);
+    assert.ok(discPatchedTw.includes('<html lang="zh-TW">'));
+    assert.ok(discPatchedTw.includes("reconnect: '重新連線',"));
+    assert.ok(discPatchedTw.includes("stop: '停止伺服器',"));
+    assert.ok(discPatchedTw.includes(": '已中斷連線';"));
+    const discPatchedSc = patches.patchRemoteDisconnectedPageJs(discSample, false);
+    assert.ok(discPatchedSc.includes('<html lang="zh-CN">'));
+    assert.ok(discPatchedSc.includes("stop: '停止服务',"));
+
+    const cbSample = [
+        `<html lang="en">`,
+        `const SIGNED_IN = page('You have successfully authenticated.', 'You can close this tab and return to Antigravity.');`,
+        `return page("Sign-in didn't finish", \`Antigravity couldn't reach \${host} to finish signing in. \` +`,
+        `'Sign in again from Antigravity.');`
+    ].join('\n');
+    const cbPatchedTw = patches.patchRemoteSignInCallbackJs(cbSample, true);
+    assert.ok(cbPatchedTw.includes('<html lang="zh-TW">'));
+    assert.ok(cbPatchedTw.includes('您已成功完成身分驗證。'));
+    assert.ok(cbPatchedTw.includes("return page('登入未完成'"));
+
+    const capSample = `<title>Browser Stream Capture</title> const err = 'Capture session failed';`;
+    const capPatchedTw = patches.patchBrowserStreamCapturePageJs(capSample, true);
+    assert.ok(capPatchedTw.includes('<title>瀏覽器串流擷取</title>'));
+    assert.ok(capPatchedTw.includes("'擷取工作階段失敗'"));
+
+    const rmNewSample = `buttons: ['Allow', "Don't Allow"], buttons: ['Continue', 'Cancel'], buttons: ['Restart', 'Later'], const what = terminals === 0 ? 'agent or task' : 'agent, task or terminal'; title: 'Shared home directory', message: \`Finish this sign-in on \${entry.label}?\``;
+    const rmPatchedTw = patches.patchRemoteManagerJs(rmNewSample, true);
+    assert.ok(rmPatchedTw.includes("buttons: ['允許', '不允許']"));
+    assert.ok(rmPatchedTw.includes("buttons: ['繼續', '取消']"));
+    assert.ok(rmPatchedTw.includes("buttons: ['重新啟動', '稍後']"));
+    assert.ok(rmPatchedTw.includes("'代理或任務' : '代理、任務或終端機'"));
+    assert.ok(rmPatchedTw.includes('要在 ${entry.label} 上完成此次登入嗎？'));
 });

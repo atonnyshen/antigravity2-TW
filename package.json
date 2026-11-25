@@ -1,6 +1,6 @@
 {
   "name": "antigravity2-tw",
-  "version": "3.7.4",
+  "version": "3.8.0",
   "private": true,
   "license": "MIT",
   "description": "Google Antigravity 2.0 台灣繁體中文（zh-TW）在地化套件。依台灣軟體體例校訂詞庫，具備原子交換、異常復原與純翻譯背景守護。",

@@ -543,16 +543,33 @@ function patchRemoteManagerJs(rmContent, useTw) {
     let out = rmContent;
     out = out.replace(/title:\s*'Choose an SSH config file'/g, useTw ? "title: '選擇 SSH 設定檔'" : "title: '选择 SSH 配置文件'")
              .replace(/title:\s*'Choose another SSH config file'/g, useTw ? "title: '選取另一個 SSH 設定檔'" : "title: '选择另一个 SSH 配置文件'")
+             .replace(/message:\s*`\$\{name\} can't be the SSH config file`/g, useTw ? "message: `${name} 無法作為 SSH 設定檔`" : "message: `${name} 不能作为 SSH 配置文件`")
              .replace(/buttons:\s*\['Choose Another File…',\s*'Cancel'\]/g, useTw ? "buttons: ['選取其他檔案…', '取消']" : "buttons: ['选择其他文件…', '取消']")
              .replace(/title:\s*'Could not restart the SSH server'/g, useTw ? "title: '無法重新啟動 SSH 伺服器'" : "title: '无法重启 SSH 服务器'")
              .replace(/'Could not restart the SSH server'/g, useTw ? "'無法重新啟動 SSH 伺服器'" : "'无法重启 SSH 服务器'")
+             .replace(/message:\s*`\$\{entry\.label\} still runs Antigravity server \$\{running\}\.`/g, useTw ? "message: `${entry.label} 仍在執行 Antigravity 伺服器 ${running}。`" : "message: `${entry.label} 仍在运行 Antigravity 服务器 ${running}。`")
              .replace(/title:\s*'Microphone access'/g, useTw ? "title: '麥克風存取權限'" : "title: '麦克风访问权限'")
              .replace(/message:\s*`Allow \$\{label\} to use your microphone\?`/g, useTw ? "message: `允許 ${label} 使用您的麥克風嗎？`" : "message: `允许 ${label} 使用您的麦克风吗？`")
+             .replace(/detail:\s*`The page in this window comes from \$\{label\}\. If you allow it, that `\s*\+\s*"host can use this computer's microphone for voice whenever one of "\s*\+\s*'its windows is open\. Antigravity asks again after you quit it\.'/g,
+                      useTw ? "detail: `此視窗中的頁面來自 ${label}。若您允許，只要該主機任一視窗處於開啟狀態，即可使用此電腦的麥克風進行語音輸入；完全結束 Antigravity 後將再次詢問。`" : "detail: `此窗口中的页面来自 ${label}。如果允许，只要该主机有任意窗口打开，即可使用此电脑的麦克风进行语音操作；完全退出 Antigravity 后将再次询问。`")
+             .replace(/buttons:\s*\['Allow',\s*"Don't Allow"\]/g, useTw ? "buttons: ['允許', '不允許']" : "buttons: ['允许', '不允许']")
              .replace(/buttons:\s*\['Allow',\s*'Block'\]/g, useTw ? "buttons: ['允許', '封鎖']" : "buttons: ['允许', '阻止']")
              .replace(/buttons:\s*\['Block',\s*'Allow'\]/g, useTw ? "buttons: ['封鎖', '允許']" : "buttons: ['阻止', '允许']")
              .replace(/title:\s*'Shared home directory'/g, useTw ? "title: '共用家目錄'" : "title: '共享主目录'")
+             .replace(/`This window's Antigravity server runs on \$\{host\}, another machine that shares your home directory\.`/g, useTw ? "`此視窗的 Antigravity 伺服器執行於共用家目錄的另一台機器 ${host}。`" : "`此窗口的 Antigravity 服务器运行于共享主目录的另一台机器 ${host}。`")
+             .replace(/`Your Antigravity server runs on \$\{host\}, another machine that shares your home directory\.`/g, useTw ? "`您的 Antigravity 伺服器執行於共用家目錄的另一台機器 ${host}。`" : "`您的 Antigravity 服务器运行于共享主目录的另一台机器 ${host}。`")
+             .replace(/`\$\{host\}, another machine that shares your home directory, started your Antigravity server\.`/g, useTw ? "`共用家目錄的另一台機器 ${host} 已啟動您的 Antigravity 伺服器。`" : "`共享主目录的另一台机器 ${host} 已启动您的 Antigravity 服务器。`")
+             .replace(/`\$\{label\} reached \$\{here\} this time\. Cancel and reconnect to try again for \$\{host\}, or take over to stop the server on \$\{host\}, and its agents, and run it on \$\{here\} instead\.`/g, useTw ? "`${label} 本次連線至 ${here}。您可選擇「取消」並重新連線以再次嘗試連接 ${host}，或選擇「接管」以停止 ${host} 上的伺服器與代理，改在 ${here} 上執行。`" : "`${label} 本次连接到了 ${here}。您可选择“取消”并重连以重新尝试连接 ${host}，或选择“接管”以停止 ${host} 上的服务器及智能体，改在 ${here} 上运行。`")
+             .replace(/`\$\{label\} reached \$\{here\}\. Take over to stop the server on \$\{host\}, and its agents, and run it on \$\{here\} instead\. To keep it running, connect to \$\{host\}\.`/g, useTw ? "`${label} 已連線至 ${here}。選擇「接管」可停止 ${host} 上的伺服器與代理並改在 ${here} 執行；若要維持其執行，請連線至 ${host}。`" : "`${label} 已连接到 ${here}。选择“接管”可停止 ${host} 上的服务器及智能体并改在 ${here} 运行；如需继续保留，请连接到 ${host}。`")
+             .replace(/`\$\{label\} reached \$\{here\}\. Take over only if that server no longer runs, for example if \$\{host\} was shut down or replaced: if it still runs, both servers would write the same files\. To check, connect to \$\{host\}\.`/g, useTw ? "`${label} 已連線至 ${here}。僅當該伺服器不再執行時（例如 ${host} 已關機或汰換）才應選擇接管，否則兩台伺服器同時寫入相同檔案將造成衝突。如需確認，請連線至 ${host}。`" : "`${label} 已连接到 ${here}。仅当原服务器不再运行时（例如 ${host} 已关机或被替换）才可接管，否则两台服务器同时写入相同文件会产生冲突。如需检查，请连接到 ${host}。`")
              .replace(/buttons:\s*\['Take Over',\s*'Cancel'\]/g, useTw ? "buttons: ['接管', '取消']" : "buttons: ['接管', '取消']")
+             .replace(/const what = terminals === 0 \? 'agent or task' : 'agent, task or terminal';/g, useTw ? "const what = terminals === 0 ? '代理或任務' : '代理、任務或終端機';" : "const what = terminals === 0 ? '智能体或任务' : '智能体、任务或终端';")
+             .replace(/buttons:\s*\['Restart',\s*'Later'\]/g, useTw ? "buttons: ['重新啟動', '稍後']" : "buttons: ['重启', '稍后']")
              .replace(/title:\s*'Restart SSH server'/g, useTw ? "title: '重新啟動 SSH 伺服器'" : "title: '重启 SSH 服务器'")
+             .replace(/buttons:\s*\['Continue',\s*'Cancel'\]/g, useTw ? "buttons: ['繼續', '取消']" : "buttons: ['继续', '取消']")
+             .replace(/message:\s*`Finish this sign-in on \$\{entry\.label\}\?`/g, useTw ? "message: `要在 ${entry.label} 上完成此次登入嗎？`" : "message: `要在 ${entry.label} 上完成此次登录吗？`")
+             .replace(/detail:\s*`Continue only if you just chose to sign in from the \$\{entry\.label\} `\s*\+\s*'window\. Your browser opens the sign-in page; once you sign in, '\s*\+\s*`\$\{entry\.label\} gets access to that account\.\\n`\s*\+\s*`Sign-in page: \$\{\(0, types_1\.sanitizeRemoteText\)\(new URL\(origin\)\.host, 200\)\}`/g,
+                      useTw ? "detail: `僅在您剛才於 ${entry.label} 視窗中選擇登入時才繼續。系統將在瀏覽器開啟登入頁面；完成登入後，${entry.label} 將取得該帳戶存取權限。\\n登入頁面：${(0, types_1.sanitizeRemoteText)(new URL(origin).host, 200)}`" : "detail: `仅在您刚才从 ${entry.label} 窗口中选择登录时才继续。浏览器将打开登录页面；完成登录后，${entry.label} 将获取该账户访问权限。\\n登录页面：${(0, types_1.sanitizeRemoteText)(new URL(origin).host, 200)}`")
              .replace(/message:\s*`\$\{label\} is running server \$\{running\}; this app is \$\{expected\}\. Restart the server now\?`/g,
                       useTw ? "message: `${label} 目前執行的伺服器版本為 ${running}；此應用程式為 ${expected}。要立即重新啟動伺服器嗎？`" : "message: `${label} 当前运行的服务器版本为 ${running}；此应用为 ${expected}。要立即重启服务器吗？`")
              .replace(/detail:\s*`Any \$\{what\} still running on it stops\. The server starts again with this app's version\.`/g,
@@ -701,17 +718,93 @@ function patchSshErrorTextJs(seContent, useTw) {
         );
 }
 
+function patchRemoteDisconnectedPageJs(dcContent, useTw) {
+    console.log(useTw ? `[修改] 正在向 remote/disconnectedPage.js 注入遠端斷線頁面漢化...` : `[修改] 正在向 remote/disconnectedPage.js 注入远程断开页面汉化...`);
+    const out = dcContent
+        .replace(/<html lang="en">/g, useTw ? '<html lang="zh-TW">' : '<html lang="zh-CN">')
+        .replace(/reconnect:\s*'Reconnect',/g, useTw ? "reconnect: '重新連線'," : "reconnect: '重新连接',")
+        .replace(/stop:\s*'Stop Server',/g, useTw ? "stop: '停止伺服器'," : "stop: '停止服务',")
+        .replace(/close:\s*'Close',/g, useTw ? "close: '關閉'," : "close: '关闭',")
+        .replace(/\?\s*'Restarting…'/g, useTw ? "? '正在重新啟動…'" : "? '正在重启…'")
+        .replace(/\?\s*'Reconnecting…'/g, useTw ? "? '正在重新連線…'" : "? '正在重新连接…'")
+        .replace(/:\s*'Disconnected';/g, useTw ? ": '已中斷連線';" : ": '已断开连接';")
+        .replace(/\?\s*`Restarting the Antigravity server on \$\{host\}…`/g, useTw ? "? `正在重新啟動 ${host} 上的 Antigravity 伺服器…`" : "? `正在重启 ${host} 上的 Antigravity 服务…`")
+        .replace(/\?\s*`Reconnecting to \$\{host\}…`/g, useTw ? "? `正在重新連線至 ${host}…`" : "? `正在重新连接到 ${host}…`")
+        .replace(/:\s*`Disconnected from \$\{host\}`;/g, useTw ? ": `已中斷與 ${host} 的連線`;" : ": `已断开与 ${host} 的连接`;")
+        .replace(/\?\s*'This window opens it again once it has started\.'/g, useTw ? "? '伺服器啟動完成後，此視窗將自動重新開啟。'" : "? '服务启动完成后，此窗口将自动重新打开。'")
+        .replace(/\?\s*`Its server on \$\{host\} stopped, and its agents with it\.`/g, useTw ? "? `其在 ${host} 上的伺服器已停止，相關的代理也已隨之停止。`" : "? `其在 ${host} 上的服务已停止，相关的智能体也已随之停止。`")
+        .replace(/:\s*`Agents keep running on \$\{host\}\.`/g, useTw ? ": `代理仍在 ${host} 上繼續執行。`" : ": `智能体仍在 ${host} 上继续运行。`")
+        .replace(/\?\s*`Its agents on \$\{host\} stopped with it\.`/g, useTw ? "? `其在 ${host} 上的代理已隨之停止。`" : "? `其在 ${host} 上的智能体已随之停止。`")
+        .replace(/:\s*`Agents keep running on \$\{host\} unless its server stopped\.`;/g, useTw ? ": `除非其伺服器已停止，否則代理仍在 ${host} 上繼續執行。`;" : ": `除非其服务已停止，否则智能体仍在 ${host} 上继续运行。`;");
+    console.log(useTw ? `[修改] 遠端斷線頁面漢化注入成功！` : `[修改] 远程断开页面汉化注入成功！`);
+    return out;
+}
+
+function patchRemoteSignInCallbackJs(cbContent, useTw) {
+    console.log(useTw ? `[修改] 正在向 remote/signInCallback.js 注入登入回呼頁面漢化...` : `[修改] 正在向 remote/signInCallback.js 注入登录回调页面汉化...`);
+    const out = cbContent
+        .replace(/<html lang="en">/g, useTw ? '<html lang="zh-TW">' : '<html lang="zh-CN">')
+        .replace(
+            "const SIGNED_IN = page('You have successfully authenticated.', 'You can close this tab and return to Antigravity.');",
+            useTw
+                ? "const SIGNED_IN = page('您已成功完成身分驗證。', '您可以關閉此分頁並返回 Antigravity。');"
+                : "const SIGNED_IN = page('您已成功完成身份验证。', '您可以关闭此标签页并返回 Antigravity。');"
+        )
+        .replace(
+            'return page("Sign-in didn\'t finish", `Antigravity couldn\'t reach ${host} to finish signing in. ` +',
+            useTw
+                ? "return page('登入未完成', `Antigravity 無法連線至 ${host} 以完成登入。` +"
+                : "return page('登录未完成', `Antigravity 无法连接到 ${host} 以完成登录。` +"
+        )
+        .replace(
+            'return page("Sign-in didn\'t finish", \'This sign-in came back from another server than the sign-in page you \' +',
+            useTw
+                ? "return page('登入未完成', '此登入回呼來自與您先前同意的登入頁不同的伺服器，' +"
+                : "return page('登录未完成', '此登录回调来自与您此前同意的登录页不同的服务器，' +"
+        )
+        .replace(
+            '`agreed to, so Antigravity didn\'t pass it on to ${host}.`);',
+            useTw
+                ? "`因此 Antigravity 未將其傳遞給 ${host}。`);"
+                : "`因此 Antigravity 未将其传递给 ${host}。`);"
+        )
+        .replace(
+            'return page("Sign-in didn\'t finish", `Antigravity on ${host} couldn\'t finish signing in (HTTP ${status}). ` +',
+            useTw
+                ? "return page('登入未完成', `${host} 上的 Antigravity 無法完成登入 (HTTP ${status})。` +"
+                : "return page('登录未完成', `${host} 上的 Antigravity 无法完成登录 (HTTP ${status})。` +"
+        )
+        .replace(
+            "'Sign in again from Antigravity.');",
+            useTw ? "'請從 Antigravity 重新進行登入。');" : "'请从 Antigravity 重新发起登录。');"
+        );
+    console.log(useTw ? `[修改] 登入回呼頁面漢化注入成功！` : `[修改] 登录回调页面汉化注入成功！`);
+    return out;
+}
+
+function patchBrowserStreamCapturePageJs(cpContent, useTw) {
+    console.log(useTw ? `[修改] 正在向 browserStream/capturePage.js 注入串流擷取頁面漢化...` : `[修改] 正在向 browserStream/capturePage.js 注入流媒体捕获页面汉化...`);
+    const out = cpContent
+        .replace('<title>Browser Stream Capture</title>', useTw ? '<title>瀏覽器串流擷取</title>' : '<title>浏览器串流捕获</title>')
+        .replace("'Capture session failed'", useTw ? "'擷取工作階段失敗'" : "'捕获会话失败'");
+    console.log(useTw ? `[修改] 串流擷取頁面漢化注入成功！` : `[修改] 流媒体捕获页面汉化注入成功！`);
+    return out;
+}
+
 const MAIN_PROCESS_PATCH_TARGETS = [
     'dist/main.js',
     'dist/ipcHandlers.js',
     'dist/remote/remoteManager.js',
     'dist/remote/sshPrompts.js',
     'dist/remote/sshErrorText.js',
+    'dist/remote/disconnectedPage.js',
+    'dist/remote/signInCallback.js',
     'dist/deviceChooser.js',
     'dist/webauthn.js',
     'dist/webviewPopupSecurity.js',
     'dist/provisionSplash.js',
     'dist/ideInstall/wizardHtml.js',
+    'dist/browserStream/capturePage.js',
     'dist/computer/hud.js',
     'dist/computer/hudState.js',
     'dist/computer/hudAgents.js'
@@ -729,11 +822,14 @@ module.exports = {
     patchRemoteManagerJs,
     patchSshPromptsJs,
     patchSshErrorTextJs,
+    patchRemoteDisconnectedPageJs,
+    patchRemoteSignInCallbackJs,
     patchDeviceChooserJs,
     patchWebauthnJs,
     patchWebviewPopupSecurityJs,
     patchProvisionSplashJs,
     patchWizardHtmlJs,
+    patchBrowserStreamCapturePageJs,
     patchComputerHudJs,
     patchComputerHudStateJs,
     patchComputerHudAgentsJs,

@@ -272,9 +272,580 @@
       "flags": "i",
       "sc": "停止已选中的 {1} 个项目",
       "tw": "停止已選取的 {1} 個項目"
+    },
+    {
+      "id": "available-for-project",
+      "pattern": "^Available for\\s+(.+?)\\s+project$",
+      "flags": "i",
+      "transforms": { "1": "trim" },
+      "sc": "适用于 {1} 项目",
+      "tw": "適用於 {1} 專案"
+    },
+    {
+      "id": "all-permissions-will-be-revoked",
+      "pattern": "^All (.+?) will be revoked\\. The plugin will ask before doing this again\\.$",
+      "flags": "",
+      "sc": "将撤销全部 {1}。插件在再次执行此操作前会先征求您的同意。",
+      "tw": "將撤銷全部 {1}。外掛程式在再次執行此操作前會先徵求您的同意。"
+    },
+    {
+      "id": "dismiss-target",
+      "pattern": "^Dismiss:\\s*(.+)$",
+      "flags": "",
+      "sc": "忽略：{1}",
+      "tw": "關閉：{1}"
+    },
+    {
+      "id": "move-to-dest",
+      "pattern": "^Move to\\s+(.+)$",
+      "flags": "",
+      "transforms": { "1": "lookupOrKeep" },
+      "sc": "移动到 {1}",
+      "tw": "移至 {1}"
+    },
+    {
+      "id": "no-matching-languages-for",
+      "pattern": "^No matching languages for \"(.+)\"$",
+      "flags": "",
+      "sc": "未找到与“{1}”匹配的语言",
+      "tw": "找不到與「{1}」相符的語言"
+    },
+    {
+      "id": "remove-from-target",
+      "pattern": "^Remove from\\s+(.+)$",
+      "flags": "",
+      "transforms": { "1": "lookupOrKeep" },
+      "sc": "从 {1} 移除",
+      "tw": "從 {1} 移除"
+    },
+    {
+      "id": "revoke-all-target",
+      "pattern": "^Revoke all:\\s*(.+)$",
+      "flags": "",
+      "sc": "全部撤销：{1}",
+      "tw": "全部撤銷：{1}"
+    },
+    {
+      "id": "revoke-one-target",
+      "pattern": "^Revoke:\\s*(.+)$",
+      "flags": "",
+      "sc": "撤销：{1}",
+      "tw": "撤銷：{1}"
+    },
+    {
+      "id": "your-plan-value",
+      "pattern": "^Your plan:\\s*(.+)$",
+      "flags": "i",
+      "sc": "您的方案：{1}",
+      "tw": "您的方案：{1}"
+    },
+    {
+      "id": "telemetry-off-account",
+      "pattern": "^Telemetry is turned off for your account\\. This means (.+?) does not collect any of your prompts, content, or model responses, but will still collect general usage patterns \\(e\\.g\\., feature adoption, active user counts\\)\\.?$",
+      "flags": "i",
+      "sc": "您的账户已关闭遥测数据收集。这意味着 {1} 不会收集您的任何提示词、内容或模型回复，但仍会收集一般使用模式（例如功能采用率、活跃用户数）。",
+      "tw": "您的帳戶已關閉遙測資料收集。這表示 {1} 不會收集您的任何提示詞、內容或模型回覆，但仍會收集一般使用模式（例如功能採用率、活躍使用者數）。"
+    },
+    {
+      "id": "waiting-command-completion",
+      "pattern": "^Waiting for command completion\\s*\\(up to (\\d+) seconds\\)$",
+      "flags": "i",
+      "sc": "正在等待命令完成（最多 {1} 秒）",
+      "tw": "正在等待指令完成（最多 {1} 秒）"
+    },
+    {
+      "id": "thinking-seconds-ellipsis",
+      "pattern": "^Thinking \\((\\d+)s\\)\\.\\.\\.$",
+      "flags": "i",
+      "sc": "正在思考 ({1} 秒)...",
+      "tw": "正在思考 ({1} 秒)..."
+    },
+    {
+      "id": "still-thinking-seconds",
+      "pattern": "^Still thinking,\\s*(\\d+) seconds$",
+      "flags": "i",
+      "sc": "仍在思考，{1} 秒",
+      "tw": "仍在思考，{1} 秒"
+    },
+    {
+      "id": "working-dot-seconds",
+      "pattern": "^Working\\s*·\\s*(\\d+)s$",
+      "flags": "i",
+      "sc": "工作中 · {1} 秒",
+      "tw": "工作中 · {1} 秒"
+    },
+    {
+      "id": "daily-at-time",
+      "pattern": "^Daily at\\s+(.+)$",
+      "flags": "i",
+      "sc": "每天 {1}",
+      "tw": "每天 {1}"
+    },
+    {
+      "id": "monthly-on-the-day-at-time",
+      "pattern": "^Monthly on the\\s+(.+?)\\s+at\\s+(.+)$",
+      "flags": "i",
+      "sc": "每月 {1} {2}",
+      "tw": "每月 {1} {2}"
+    },
+    {
+      "id": "n-attachments-parens",
+      "pattern": "^(\\d+)\\s+attachment\\(s\\)$",
+      "flags": "i",
+      "sc": "{1} 个附件",
+      "tw": "{1} 個附件"
+    },
+    {
+      "id": "n-archived-conversations",
+      "pattern": "^(\\d+)\\s+archived conversations?$",
+      "flags": "i",
+      "sc": "{1} 个已归档会话",
+      "tw": "{1} 個已封存對話"
+    },
+    {
+      "id": "n-background-tasks",
+      "pattern": "^(\\d+)\\s+background tasks?$",
+      "flags": "i",
+      "sc": "{1} 个后台任务",
+      "tw": "{1} 個背景任務"
+    },
+    {
+      "id": "n-browser-steps",
+      "pattern": "^(\\d+)\\s+browser steps?$",
+      "flags": "i",
+      "sc": "{1} 个浏览器步骤",
+      "tw": "{1} 個瀏覽器步驟"
+    },
+    {
+      "id": "n-models-selected",
+      "pattern": "^(\\d+)\\s+models?\\s+selected$",
+      "flags": "i",
+      "sc": "已选择 {1} 个模型",
+      "tw": "已選取 {1} 個模型"
+    },
+    {
+      "id": "n-waiting-on-you",
+      "pattern": "^(\\d+)\\s+waiting on you$",
+      "flags": "i",
+      "sc": "{1} 项待您处理",
+      "tw": "{1} 項待您處理"
+    },
+    {
+      "id": "n-files-with-changes",
+      "pattern": "^(\\d+)\\s+Files?\\s+With Changes$",
+      "flags": "i",
+      "sc": "{1} 个文件有更改",
+      "tw": "{1} 個檔案有變更"
+    },
+    {
+      "id": "n-lines-added-removed",
+      "pattern": "^(\\d+)\\s+lines?\\s+added,\\s*(\\d+)\\s+lines?\\s+removed$",
+      "flags": "i",
+      "sc": "新增 {1} 行，删除 {2} 行",
+      "tw": "新增 {1} 行，移除 {2} 行"
+    },
+    {
+      "id": "n-tasks-running",
+      "pattern": "^(\\d+)\\s+tasks?\\s+running$",
+      "flags": "i",
+      "sc": "{1} 个任务运行中",
+      "tw": "{1} 個任務執行中"
+    },
+    {
+      "id": "n-mcp-servers-failed",
+      "pattern": "^(\\d+)\\s+MCP servers? failed to start$",
+      "flags": "i",
+      "sc": "{1} 个 MCP 服务器启动失败",
+      "tw": "{1} 個 MCP 伺服器啟動失敗"
+    },
+    {
+      "id": "added-mcp-server-failed",
+      "pattern": "^Added MCP server \"(.+?)\",\\s*but it failed to start:\\s*(.+)$",
+      "flags": "i",
+      "sc": "已添加 MCP 服务器“{1}”，但启动失败：{2}",
+      "tw": "已新增 MCP 伺服器「{1}」，但啟動失敗：{2}"
+    },
+    {
+      "id": "mcp-server-auth-account",
+      "pattern": "^MCP server (.+?) requires authentication:\\s*sign in to \"(.+?)\" in the Accounts section of plugin \"(.+?)\"$",
+      "flags": "i",
+      "sc": "MCP 服务器 {1} 需要身份验证：请在“{3}”插件的“账户”部分登录“{2}”",
+      "tw": "MCP 伺服器 {1} 需要身分驗證：請在「{3}」外掛程式的「帳戶」區段中登入「{2}」"
+    },
+    {
+      "id": "mcp-server-requires-auth",
+      "pattern": "^MCP server (.+?) requires authentication$",
+      "flags": "i",
+      "sc": "MCP 服务器 {1} 需要身份验证",
+      "tw": "MCP 伺服器 {1} 需要身分驗證"
+    },
+    {
+      "id": "n-customizations-failed",
+      "pattern": "^(\\d+)\\s+customizations? failed to load$",
+      "flags": "i",
+      "sc": "{1} 项自定义项加载失败",
+      "tw": "{1} 項自訂項目載入失敗"
+    },
+    {
+      "id": "n-folders-invalid-locations",
+      "pattern": "^(\\d+)\\s+folders? in this project could not be loaded because their locations are invalid\\.$",
+      "flags": "i",
+      "sc": "此项目中有 {1} 个文件夹因位置无效而无法加载。",
+      "tw": "此專案中有 {1} 個資料夾因位置無效而無法載入。"
+    },
+    {
+      "id": "ext-file-uploads-remote",
+      "pattern": "^(.+?) file uploads are not currently supported in remote mode$",
+      "flags": "i",
+      "sc": "远程模式暂不支持上传 {1} 文件",
+      "tw": "遠端模式目前不支援上傳 {1} 檔案"
+    },
+    {
+      "id": "pushed-n-commits",
+      "pattern": "^Pushed (\\d+) commits? to (.+?)\\.?$",
+      "flags": "i",
+      "sc": "已推送 {1} 个提交到 {2}。",
+      "tw": "已推送 {1} 筆提交至 {2}。"
+    },
+    {
+      "id": "pushed-to-branch",
+      "pattern": "^Pushed to (.+?)\\.?$",
+      "flags": "i",
+      "sc": "已推送到 {1}。",
+      "tw": "已推送至 {1}。"
+    },
+    {
+      "id": "published-to-origin",
+      "pattern": "^Published (.+?) to origin\\.?$",
+      "flags": "i",
+      "sc": "已发布 {1} 至 origin。",
+      "tw": "已發布 {1} 至 origin。"
+    },
+    {
+      "id": "committed-to-ref",
+      "pattern": "^Committed to (.+?)\\.?$",
+      "flags": "i",
+      "sc": "已提交到 {1}。",
+      "tw": "已提交至 {1}。"
+    },
+    {
+      "id": "amended-commit-on",
+      "pattern": "^Amended commit on (.+?)\\.?$",
+      "flags": "i",
+      "sc": "已修订 {1} 上的提交。",
+      "tw": "已修訂 {1} 上的提交。"
+    },
+    {
+      "id": "checked-out-in",
+      "pattern": "^Checked out in (.+)$",
+      "flags": "i",
+      "sc": "已在 {1} 检出",
+      "tw": "已於 {1} 簽出"
+    },
+    {
+      "id": "ran-command",
+      "pattern": "^Ran command:\\s*(.+)$",
+      "flags": "i",
+      "sc": "已运行命令：{1}",
+      "tw": "已執行指令：{1}"
+    },
+    {
+      "id": "used-mcp-tool",
+      "pattern": "^Used MCP tool:\\s*(.+)$",
+      "flags": "i",
+      "sc": "已使用 MCP 工具：{1}",
+      "tw": "已使用 MCP 工具：{1}"
+    },
+    {
+      "id": "used-tool",
+      "pattern": "^Used tool:\\s*(.+)$",
+      "flags": "i",
+      "sc": "已使用工具：{1}",
+      "tw": "已使用工具：{1}"
+    },
+    {
+      "id": "searched-for-files",
+      "pattern": "^Searched for files:\\s*(.+)$",
+      "flags": "i",
+      "sc": "已搜索文件：{1}",
+      "tw": "已搜尋檔案：{1}"
+    },
+    {
+      "id": "opened-browser",
+      "pattern": "^Opened browser:\\s*(.+)$",
+      "flags": "i",
+      "sc": "已打开浏览器：{1}",
+      "tw": "已開啟瀏覽器：{1}"
+    },
+    {
+      "id": "viewed-target",
+      "pattern": "^Viewed (.+)$",
+      "flags": "i",
+      "sc": "已查看 {1}",
+      "tw": "已檢視 {1}"
+    },
+    {
+      "id": "listed-directory",
+      "pattern": "^Listed directory (.+)$",
+      "flags": "i",
+      "sc": "已列出目录 {1}",
+      "tw": "已列出目錄 {1}"
+    },
+    {
+      "id": "read-url",
+      "pattern": "^Read URL:\\s*(.+)$",
+      "flags": "i",
+      "sc": "已读取 URL：{1}",
+      "tw": "已讀取網址：{1}"
+    },
+    {
+      "id": "invoked-subagent",
+      "pattern": "^Invoked subagent:\\s*(.+)$",
+      "flags": "i",
+      "sc": "已调用子智能体：{1}",
+      "tw": "已呼叫子代理：{1}"
+    },
+    {
+      "id": "generated-image-path",
+      "pattern": "^Generated image:\\s*\"(.+)\"$",
+      "flags": "i",
+      "sc": "已生成图片：“{1}”",
+      "tw": "已產生圖片：「{1}」"
+    },
+    {
+      "id": "agent-finished-summary",
+      "pattern": "^Agent finished:\\s*(.+)$",
+      "flags": "i",
+      "sc": "智能体已完成：{1}",
+      "tw": "代理已完成：{1}"
+    },
+    {
+      "id": "side-question-failed",
+      "pattern": "^Side question failed:\\s*(.+)$",
+      "flags": "i",
+      "sc": "侧边提问失败：{1}",
+      "tw": "側邊提問失敗：{1}"
+    },
+    {
+      "id": "side-question-conversation",
+      "pattern": "^Side question \\(conversation (.+?)\\):\\s*(.+)$",
+      "flags": "i",
+      "sc": "侧边提问（会话 {1}）：{2}",
+      "tw": "側邊提問（對話 {1}）：{2}"
+    },
+    {
+      "id": "credentials-expire-in",
+      "pattern": "^Credentials expire in (.+?)\\. Refresh credentials to keep this automation running$",
+      "flags": "i",
+      "transforms": { "1": "usageDuration" },
+      "sc": "凭据将在 {1}后过期。请刷新凭据以保持此自动化任务运行",
+      "tw": "憑證將於 {1}後過期。請重新整理憑證以維持此自動化任務執行"
+    },
+    {
+      "id": "connect-account-for-automation",
+      "pattern": "^Connect an account for (.+?) so the agent can run automations\\.$",
+      "flags": "i",
+      "sc": "请为 {1} 连接账户，以便智能体运行自动化任务。",
+      "tw": "請為 {1} 連結帳戶，以便代理執行自動化任務。"
+    },
+    {
+      "id": "needs-sign-in-before-use",
+      "pattern": "^(.+?) needs you to sign in before it can be used\\.$",
+      "flags": "i",
+      "sc": "{1} 需要您先登录后才能使用。",
+      "tw": "{1} 需要您先登入後才能使用。"
+    },
+    {
+      "id": "no-messages-last-n-steps",
+      "pattern": "^No messages in last (\\d+) steps\\s*(?:·|—|,)\\s*load (?:more|older)$",
+      "flags": "i",
+      "sc": "最近 {1} 步无消息 · 加载更早消息",
+      "tw": "最近 {1} 步沒有訊息 · 載入更早訊息"
+    },
+    {
+      "id": "no-visible-messages-last-n-steps",
+      "pattern": "^No visible messages in last (\\d+) steps\\. Activate Load older messages to continue\\.$",
+      "flags": "i",
+      "sc": "最近 {1} 步没有可见消息。请点击“加载更早的消息”以继续。",
+      "tw": "最近 {1} 步沒有可見訊息。請點選「載入更早的訊息」以繼續。"
+    },
+    {
+      "id": "file-exceeds-mb-display-limit",
+      "pattern": "^File exceeds the (\\d+)MB display limit \\((\\d+)MB\\), so it can't be opened or downloaded here\\.$",
+      "flags": "i",
+      "sc": "文件超过 {1}MB 显示上限（{2}MB），因此无法在此打开或下载。",
+      "tw": "檔案超過 {1}MB 顯示上限（{2}MB），因此無法在此開啟或下載。"
+    },
+    {
+      "id": "file-exceeds-bytes",
+      "pattern": "^File exceeds (\\d+) bytes \\((\\d+) bytes\\)$",
+      "flags": "i",
+      "sc": "文件超过 {1} 字节（{2} 字节）",
+      "tw": "檔案超過 {1} 位元組（{2} 位元組）"
+    },
+    {
+      "id": "recording-exceeds-15mb",
+      "pattern": "^Recording exceeds 15MB limit \\((\\d+)MB\\)$",
+      "flags": "i",
+      "sc": "录音超过 15MB 上限（{1}MB）",
+      "tw": "錄音超過 15MB 上限（{1}MB）"
+    },
+    {
+      "id": "total-media-exceeds-mb",
+      "pattern": "^Total media size exceeds (\\d+)MB limit$",
+      "flags": "i",
+      "sc": "媒体总大小超过 {1}MB 上限",
+      "tw": "媒體總大小超過 {1}MB 上限"
+    },
+    {
+      "id": "server-ip-not-found",
+      "pattern": "^(.+?)'s server IP address could not be found\\.$",
+      "flags": "i",
+      "sc": "找不到 {1} 的服务器 IP 地址。",
+      "tw": "找不到 {1} 的伺服器 IP 位址。"
+    },
+    {
+      "id": "host-refused-connect",
+      "pattern": "^(.+?) refused to connect\\.$",
+      "flags": "i",
+      "sc": "{1} 拒绝连接。",
+      "tw": "{1} 拒絕連線。"
+    },
+    {
+      "id": "host-took-too-long",
+      "pattern": "^(.+?) took too long to respond\\.$",
+      "flags": "i",
+      "sc": "{1} 响应时间过长。",
+      "tw": "{1} 回應時間過長。"
+    },
+    {
+      "id": "host-not-find-page",
+      "pattern": "^(.+?) could not find the requested page\\.$",
+      "flags": "i",
+      "sc": "{1} 找不到请求的页面。",
+      "tw": "{1} 找不到所要求的頁面。"
+    },
+    {
+      "id": "host-unable-handle-request",
+      "pattern": "^(.+?) is currently unable to handle this request\\.$",
+      "flags": "i",
+      "sc": "{1} 当前无法处理此请求。",
+      "tw": "{1} 目前無法處理這項要求。"
+    },
+    {
+      "id": "deleted-cookies-for",
+      "pattern": "^Deleted cookies for (.+)$",
+      "flags": "i",
+      "sc": "已删除 {1} 的 Cookie",
+      "tw": "已刪除 {1} 的 Cookie"
+    },
+    {
+      "id": "moved-conversation",
+      "pattern": "^Moved conversation (.+)$",
+      "flags": "i",
+      "sc": "已移动会话 {1}",
+      "tw": "已移動對話 {1}"
+    },
+    {
+      "id": "adding-plugins-from",
+      "pattern": "^Adding plugins from (.+)$",
+      "flags": "i",
+      "sc": "正在从 {1} 添加插件",
+      "tw": "正在從 {1} 新增外掛程式"
+    },
+    {
+      "id": "no-connectors-match",
+      "pattern": "^No connectors match \"(.+)\"$",
+      "flags": "i",
+      "sc": "没有匹配“{1}”的连接器",
+      "tw": "沒有符合「{1}」的連接器"
+    },
+    {
+      "id": "view-help-side-questions",
+      "pattern": "^View (\\d+) help(?: items?)? and (\\d+) side questions?$",
+      "flags": "i",
+      "sc": "查看 {1} 条帮助和 {2} 个侧边提问",
+      "tw": "檢視 {1} 項說明與 {2} 個側邊提問"
+    },
+    {
+      "id": "work-locally-on",
+      "pattern": "^Work locally on (.+)$",
+      "flags": "i",
+      "sc": "在本地处理 {1}",
+      "tw": "在本機處理 {1}"
+    },
+    {
+      "id": "worktree-from",
+      "pattern": "^Worktree from (.+)$",
+      "flags": "i",
+      "sc": "建立 Worktree：{1}",
+      "tw": "建立 Worktree：{1}"
+    },
+    {
+      "id": "auto-create-vcs-workspace",
+      "pattern": "^Automatically create a new (.+?) workspace when the conversation starts$",
+      "flags": "i",
+      "sc": "会话开始时自动创建新的 {1} 工作区",
+      "tw": "對話開始時自動建立新的 {1} 工作區"
+    },
+    {
+      "id": "triggered-automation",
+      "pattern": "^Triggered (.+)$",
+      "flags": "",
+      "sc": "已触发 {1}",
+      "tw": "已觸發 {1}"
+    },
+    {
+      "id": "n-days-dynamic",
+      "pattern": "^(\\d+)\\s+days$",
+      "flags": "i",
+      "sc": "{1} 天",
+      "tw": "{1} 天"
+    },
+    {
+      "id": "name-download-progress",
+      "pattern": "^(.+?) download progress$",
+      "flags": "i",
+      "sc": "{1} 下载进度",
+      "tw": "{1} 下載進度"
+    },
+    {
+      "id": "name-color-picker",
+      "pattern": "^(.+?) color picker$",
+      "flags": "i",
+      "sc": "{1} 颜色选择器",
+      "tw": "{1} 色彩選擇器"
+    },
+    {
+      "id": "error-colon-msg",
+      "pattern": "^Error:\\s*(.+)$",
+      "flags": "",
+      "sc": "错误：{1}",
+      "tw": "錯誤：{1}"
+    },
+    {
+      "id": "showing-b-of-c",
+      "pattern": "^(.+?),\\s*showing (\\d+) of (\\d+)$",
+      "flags": "i",
+      "sc": "{1}，正在显示第 {2} / {3} 项",
+      "tw": "{1}，目前顯示 {2} / {3} 項"
+    },
+    {
+      "id": "annotation-on-page",
+      "pattern": "^(.+?) annotation on page (\\d+)$",
+      "flags": "i",
+      "sc": "第 {2} 页的 {1} 批注",
+      "tw": "第 {2} 頁的 {1} 註解"
     }
   ],
   "attrDynamicRules": [
+    {
+      "id": "attr-applied",
+      "pattern": "^Applied\\s+(.+)$",
+      "flags": "i",
+      "sc": "已应用 {1}",
+      "tw": "已套用 {1}"
+    },
     {
       "id": "attr-add",
       "pattern": "^Add\\s+(.+)$",
@@ -421,6 +992,14 @@
       "flags": "i",
       "sc": "查看 {1}",
       "tw": "檢視 {1}"
+    },
+    {
+      "id": "attr-show",
+      "pattern": "^Show\\s+(.+)$",
+      "flags": "i",
+      "transforms": { "1": "lookupOrKeep" },
+      "sc": "显示 {1}",
+      "tw": "顯示 {1}"
     }
   ]
 }

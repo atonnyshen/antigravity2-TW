@@ -23,10 +23,31 @@ const {
     patchProvisionSplashJs,
     patchWizardHtmlJs,
     patchSshErrorTextJs,
+    patchRemoteDisconnectedPageJs,
+    patchRemoteSignInCallbackJs,
+    patchBrowserStreamCapturePageJs,
     patchComputerHudJs,
     patchComputerHudStateJs,
     patchComputerHudAgentsJs
 } = require('./src/main_patches');
+
+function checkSupportedNodeVersion() {
+    var parts = String((typeof process !== 'undefined' && process.versions && process.versions.node) || '0.0.0').split('.');
+    var major = parseInt(parts[0], 10) || 0;
+    var minor = parseInt(parts[1], 10) || 0;
+    if (major < 20) {
+        console.error(USE_TW
+            ? '[錯誤] 目前 Node.js 版本過舊 (' + process.versions.node + ')，無法解析 Antigravity 2.x 現代語法（例如 Optional Chaining `?.`）。請安裝 Node.js 22.12.0 以上版本，並確認終端機 PATH 優先指向新版 node。'
+            : '[错误] 当前 Node.js 版本过低 (' + process.versions.node + ')，无法校验 Antigravity 2.x 现代语法（如 Optional Chaining `?.`）。请安装 Node.js 22.12.0 及以上版本，并确认终端 PATH 优先指向新版 node。');
+        return false;
+    }
+    if (major < 22 || (major === 22 && minor < 12)) {
+        console.warn(USE_TW
+            ? '[警告] 偵測到 Node.js 版本為 ' + process.versions.node + '（建議使用 22.12.0 以上版本以獲得完整相容性）。'
+            : '[警告] 检测到 Node.js 版本为 ' + process.versions.node + '（建议使用 22.12.0 及以上版本以获得完整兼容性）。');
+    }
+    return true;
+}
 
 // macOS 环境下自动补全 PATH，确保 codesign 等工具能被顺利找到
 if (process.platform === 'darwin') {
@@ -981,6 +1002,9 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
             ['dist/provisionSplash.js', content => patchProvisionSplashJs(content, USE_TW)],
             ['dist/ideInstall/wizardHtml.js', content => patchWizardHtmlJs(content, USE_TW)],
             ['dist/remote/sshErrorText.js', content => patchSshErrorTextJs(content, USE_TW)],
+            ['dist/remote/disconnectedPage.js', content => patchRemoteDisconnectedPageJs(content, USE_TW)],
+            ['dist/remote/signInCallback.js', content => patchRemoteSignInCallbackJs(content, USE_TW)],
+            ['dist/browserStream/capturePage.js', content => patchBrowserStreamCapturePageJs(content, USE_TW)],
             ['dist/computer/hud.js', content => patchComputerHudJs(content, USE_TW)],
             ['dist/computer/hudState.js', content => patchComputerHudStateJs(content, USE_TW)],
             ['dist/computer/hudAgents.js', content => patchComputerHudAgentsJs(content, USE_TW)]
@@ -1200,6 +1224,9 @@ function promptBrandTitleInteractive() {
 }
 
 function main() {
+    if (!checkSupportedNodeVersion()) {
+        process.exit(1);
+    }
     let huifu = false;
     let manualDir = "";
     let noKill = false;

@@ -724,6 +724,97 @@
         return '是，且始终允许运行 ' + command;
     }
 
+    function lookupDict(s) {
+        const k = norm(s);
+        return map.get(k) || lowerMap.get(k.toLowerCase()) || null;
+    }
+
+    const ENTITY_NOUN_MAP = {
+        project: ['项目', '專案'],
+        projects: ['项目', '專案'],
+        workspace: ['工作区', '工作區'],
+        workspaces: ['工作区', '工作區'],
+        worktree: ['Worktree', 'Worktree'],
+        folder: ['文件夹', '資料夾'],
+        folders: ['文件夹', '資料夾'],
+        rule: ['规则', '規則'],
+        rules: ['规则', '規則'],
+        workflow: ['工作流程', '工作流程'],
+        workflows: ['工作流程', '工作流程'],
+        agent: ['智能体', '代理'],
+        agents: ['智能体', '代理'],
+        subagent: ['子智能体', '子代理'],
+        subagents: ['子智能体', '子代理'],
+        group: ['分组', '群組'],
+        bundle: ['套件', '套件'],
+        bundles: ['套件', '套件'],
+        plugin: ['插件', '外掛程式'],
+        plugins: ['插件', '外掛程式'],
+        permission: ['权限', '權限'],
+        permissions: ['权限', '權限'],
+        preset: ['预设', '預設'],
+        presets: ['预设', '預設'],
+        skill: ['技能', '技能'],
+        skills: ['技能', '技能'],
+        server: ['服务器', '伺服器'],
+        servers: ['服务器', '伺服器'],
+        'mcp server': ['MCP 服务器', 'MCP 伺服器'],
+        'mcp servers': ['MCP 服务器', 'MCP 伺服器'],
+        site: ['网站', '網站'],
+        sites: ['网站', '網站'],
+        host: ['主机', '主機'],
+        hosts: ['主机', '主機'],
+        account: ['账户', '帳戶'],
+        secret: ['密钥', '密鑰'],
+        shortcut: ['快捷键', '快速鍵'],
+        shortcuts: ['快捷键', '快速鍵'],
+        conversation: ['会话', '對話'],
+        conversations: ['会话', '對話'],
+        'side question': ['侧边提问', '側邊提問'],
+        automation: ['自动化任务', '自動化任務'],
+        'scheduled task': ['定时任务', '排程任務'],
+        file: ['文件', '檔案'],
+        files: ['文件', '檔案'],
+        tab: ['标签页', '分頁'],
+        window: ['窗口', '視窗'],
+        panel: ['面板', '面板'],
+        terminal: ['终端', '終端機'],
+        recording: ['录音', '錄音'],
+        recordings: ['录音', '錄音'],
+        voice: ['声音', '聲音'],
+        model: ['模型', '模型'],
+        models: ['模型', '模型'],
+        environment: ['环境', '環境'],
+        artifact: ['产物', '成品'],
+        plan: ['计划', '計畫'],
+        comment: ['评论', '評論'],
+        preview: ['预览', '預覽'],
+        browser: ['浏览器', '瀏覽器'],
+        'virtual machine': ['虚拟机', '虛擬機器'],
+        cookies: ['Cookie', 'Cookie'],
+        app: ['应用', '應用程式'],
+        apps: ['应用', '應用程式'],
+        command: ['命令', '指令'],
+        commands: ['命令', '指令'],
+        result: ['结果', '結果'],
+        results: ['结果', '結果'],
+        item: ['项目', '項目'],
+        items: ['项目', '項目'],
+        extension: ['扩展', '擴充功能'],
+        extensions: ['扩展', '擴充功能'],
+        tool: ['工具', '工具'],
+        tools: ['工具', '工具']
+    };
+
+    function translateNoun(word) {
+        const k = norm(word);
+        const low = k.toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(ENTITY_NOUN_MAP, low)) {
+            return ENTITY_NOUN_MAP[low][USE_TW ? 1 : 0];
+        }
+        return lookupDict(k) || k;
+    }
+
     const DYNAMIC_RULES = [
         // 列表展开 / 收起明细
         [/^Show\s+(\d+)\s+more(\s+(results?|items?|commands?|options?))?(\.\.\.|…)?$/i, (m, num, p2, type) => {
@@ -796,8 +887,9 @@
         [/^(?:Refreshes|You have (?:used (?:some|all) of|reached) your (?:weekly|5-hour) limit, it will fully refresh) in (\d+) minutes?\.?$/i, (m, min) => USE_TW ? (min + " 分鐘後更新") : (min + " 分钟后刷新")],
         [/^(?:Refreshes|You have (?:used (?:some|all) of|reached) your (?:weekly|5-hour) limit, it will fully refresh) in less than a minute\.?$/i, () => USE_TW ? "不到 1 分鐘後更新" : "不到 1 分钟后刷新"],
         [/^(?:Refreshes|You have (?:used (?:some|all) of|reached) your (?:weekly|5-hour) limit, it will fully refresh) in a few seconds\.?$/i, () => USE_TW ? "幾秒後更新" : "几秒后刷新"],
-        [/^Available AI Credits: (\d+)$/i, (m, num) => USE_TW ? ("可用 AI 點數：" + num) : ("可用 AI 额度: " + num)],
+        [/^Available AI Credits:\s*(.+)$/i, (m, val) => (USE_TW ? "可用 AI 點數：" : "可用 AI 额度：") + val],
         [/^Your plan's baseline quota will refresh on (.+?)\.?\s*To continue using this model now, enable AI Credit overages\.?$/i, (m, when) => USE_TW ? ("您方案的基準配額將於 " + when + " 重設。如需立即繼續使用此模型，請啟用 AI 點數超額使用。") : ("您方案的基础配额将于 " + when + " 刷新。如需立即继续使用此模型，请启用 AI 额度超量使用。")],
+        [/^Your plan's baseline quota will refresh on (.+?)\.?$/i, (m, when) => USE_TW ? ("您方案的基準配額將於 " + when + " 重設。") : ("您方案的基础配额将于 " + when + " 刷新。")],
         [/^You have hit your (weekly|daily|monthly|\d+-hour) limit,\s*it (?:will refresh|refreshes) in (.+?)\.\s*If on a supported paid plan, you can use AI credits in the interim(?:\s*(or upgrade to a higher tier))?\.?$/i, (m, unit, when, upgrade) => {
             const u = unit.toLowerCase();
             const uTw = u === 'weekly' ? '每週額度' : u === 'daily' ? '每日額度' : u === 'monthly' ? '每月額度' : (' ' + u.replace(/-hour$/i, '') + ' 小時');
@@ -1338,6 +1430,107 @@
         [/^Failed to save project:\s*(.+)$/i, (m, err) => (USE_TW ? "儲存專案失敗：" : "保存项目失败：") + err],
         [/^(?:Auth|Authorization) code for\s+(.+)$/i, (m, app) => app + (USE_TW ? " 的授權碼" : " 的授权码")],
         [/^Worker sandbox initialization failed:\s*(.+)$/i, (m, err) => (USE_TW ? "Worker 沙箱初始化失敗：" : "Worker 沙箱初始化失败：") + err],
+        // v2.35.0 / v2.35.1 多分支動態規則與語義組裝
+        [/^New\s+(.+?)\.\.\.$/, (m, kind) => (USE_TW ? "新增" : "新建") + translateNoun(kind) + "..."],
+        [/^You need (at least \d+|more) AI Credits to send messages\. To continue using (.+?) now, purchase more AI Credits\.$/i, (m, amt, target) => {
+            const amtZh = /^more$/i.test(amt) ? "更多" : amt.replace(/^at least\s+/i, "至少 ");
+            const tZh = /^this model$/i.test(target.trim()) ? "此模型" : target.trim();
+            return USE_TW
+                ? ("您需要" + amtZh + " AI 點數才能傳送訊息。若要立即繼續使用 " + tZh + "，請購買更多 AI 點數。")
+                : ("您需要" + amtZh + " AI 额度才能发送消息。要立即继续使用 " + tZh + "，请购买更多 AI 额度。");
+        }],
+        [/^Your quota for (.+?) will reset on (.+?)\. Switch to another available model to continue\.$/i, (m, model, when) => {
+            const mZh = /^this model$/i.test(model.trim()) ? "此模型" : model.trim();
+            return USE_TW
+                ? ("您的 " + mZh + " 配額將於 " + when + " 重設。請切換至其他可用模型以繼續。")
+                : ("您的 " + mZh + " 配额将于 " + when + " 重置。请切换至其他可用模型以继续。");
+        }],
+        [/^Your quota for (.+?) has been reached\. Switch to another available model to continue\.$/i, (m, model) => {
+            const mZh = /^this model$/i.test(model.trim()) ? "此模型" : model.trim();
+            return USE_TW
+                ? ("您的 " + mZh + " 配額已用盡。請切換至其他可用模型以繼續。")
+                : ("您的 " + mZh + " 配额已用完。请切换至其他可用模型以继续。");
+        }],
+        [/^Model unavailable,\s*retrying(?:\s+in\s+(\d+)s)?(?:\s*\(attempt\s+(\d+)\/(\d+)\))?$/i, (m, sec, att, max) => {
+            const attZh = att ? (USE_TW ? ("（第 " + att + "/" + max + " 次嘗試）") : ("（第 " + att + "/" + max + " 次尝试）")) : "";
+            if (sec) return USE_TW ? ("模型暫時無法使用，" + sec + " 秒後重試" + attZh) : ("模型暂不可用，" + sec + " 秒后重试" + attZh);
+            return USE_TW ? ("模型暫時無法使用，正在重試" + attZh) : ("模型暂不可用，正在重试" + attZh);
+        }],
+        [/^Using browser(?:\s*·\s*(.+?))?(?:\s*\((\d+)s\))?$/i, (m, action, s) => {
+            const act = action ? (" · " + (lookupDict(action) || action)) : "";
+            const dur = s ? (" (" + s + " 秒)") : "";
+            return (USE_TW ? "正在使用瀏覽器" : "正在使用浏览器") + act + dur;
+        }],
+        [/^(Started|Stopped) voice chat\s*·\s*(.+)$/i, (m, act, rest) => {
+            const verb = /^Started/i.test(act) ? (USE_TW ? "已開始語音對話 · " : "已开始语音对话 · ") : (USE_TW ? "已結束語音對話 · " : "已结束语音对话 · ");
+            return verb + rest;
+        }],
+        [/^Turns?\s+(\d+)(?:[–-](\d+))?$/i, (m, a, b) => b ? ("第 " + a + "–" + b + (USE_TW ? " 輪" : " 轮")) : ("第 " + a + (USE_TW ? " 輪" : " 轮"))],
+        [/^(Turn|Tot):\s*(\d+)\/(\d+)$/i, (m, kind, a, b) => (/^Turn/i.test(kind) ? (USE_TW ? "輪次：" : "轮次：") : (USE_TW ? "總計：" : "总计：")) + a + "/" + b],
+        [/^(Today|Tomorrow|Yesterday)\s+(.+)$/i, (m, day, time) => {
+            const dLow = day.toLowerCase();
+            const dZh = dLow === "today" ? "今天" : (dLow === "tomorrow" ? "明天" : "昨天");
+            return dZh + " " + time;
+        }],
+        [/^Every\s+(\d+)\s+(hours?|minutes?)(.*)$/i, (m, n, unit, rest) => {
+            const uZh = /^hour/i.test(unit) ? (USE_TW ? " 小時" : " 小时") : (USE_TW ? " 分鐘" : " 分钟");
+            return "每 " + n + uZh + (rest || "");
+        }],
+        [/^(?:(\d+)d\s+)?(?:(\d+)h\s+)?(?:(\d+)m|(\d+)s)\s+left$/i, (m, d, h, min, sec) => {
+            const parts = [];
+            if (d) parts.push(d + " 天");
+            if (h) parts.push(h + (USE_TW ? " 小時" : " 小时"));
+            if (min) parts.push(min + (USE_TW ? " 分鐘" : " 分钟"));
+            if (sec) parts.push(sec + " 秒");
+            return (USE_TW ? "剩餘 " : "剩余 ") + parts.join(" ");
+        }],
+        [/^(\d+)\s+(image|video|audio)\s+attachments?$/i, (m, n, kind) => {
+            const kZh = kind.toLowerCase() === "image" ? (USE_TW ? "張圖片附件" : "张图片附件")
+                : kind.toLowerCase() === "video" ? (USE_TW ? "個影片附件" : "个视频附件")
+                : (USE_TW ? "個音訊附件" : "个音频附件");
+            return n + " " + kZh;
+        }],
+        [/^(\d+)\s+(questions?|turns?|comments?|subagents?|chunks?|accounts?|rows?)$/i, (m, n, kind) => {
+            const k = kind.toLowerCase();
+            const mapZh = USE_TW
+                ? { question: "個問題", questions: "個問題", turn: "輪", turns: "輪", comment: "則評論", comments: "則評論", subagent: "個子代理", subagents: "個子代理", chunk: "個區塊", chunks: "個區塊", account: "個帳戶", accounts: "個帳戶", row: "列", rows: "列" }
+                : { question: "个问题", questions: "个问题", turn: "轮", turns: "轮", comment: "条评论", comments: "条评论", subagent: "个子智能体", subagents: "个子智能体", chunk: "个区块", chunks: "个区块", account: "个账户", accounts: "个账户", row: "行", rows: "行" };
+            return n + " " + (mapZh[k] || kind);
+        }],
+        [/^(Generating|Generated|Generate) with (.+?) 🍌$/i, (m, verb, model) => {
+            const vZh = /^Generating/i.test(verb) ? "正在使用 " : (/^Generated/i.test(verb) ? "已使用 " : "使用 ");
+            return vZh + model + (USE_TW ? " 產生 🍌" : " 生成 🍌");
+        }],
+        [/^(?:Searched web|Searched for|Internal search|Code search|Browser task):\s*"(.+)"$/i, (m, q) => {
+            const prefix = /^Searched web/i.test(m) ? (USE_TW ? "已搜尋網頁：" : "已搜索网页：")
+                : /^Searched for/i.test(m) ? (USE_TW ? "已搜尋：" : "已搜索：")
+                : /^Internal search/i.test(m) ? (USE_TW ? "內部搜尋：" : "内部搜索：")
+                : /^Code search/i.test(m) ? (USE_TW ? "程式碼搜尋：" : "代码搜索：")
+                : (USE_TW ? "瀏覽器任務：" : "浏览器任务：");
+            return prefix + (USE_TW ? ("「" + q + "」") : ("“" + q + "”"));
+        }],
+        [/^Runs even when your computer is off\.\s*(Schedules and events\.|Schedules only\.)$/i, (m, kind) => (USE_TW ? "即使電腦關機也會執行。" : "即使计算机关闭也会运行。") + (/events/i.test(kind) ? (USE_TW ? "排程與事件。" : "定时与事件。") : (USE_TW ? "僅排程。" : "仅定时。"))],
+        [/^The selected (.+?) can't be found\. Pick another (.+?) from the (.+?) selector to send\.$/i, (m, n1, n2, n3) => USE_TW
+            ? ("找不到所選的" + translateNoun(n1) + "。請從" + translateNoun(n3) + "選擇器選取其他" + translateNoun(n2) + "以傳送。")
+            : ("找不到所选的" + translateNoun(n1) + "。请从" + translateNoun(n3) + "选择器中选择其他" + translateNoun(n2) + "以发送。")],
+        [/^This (.+?) overrides your global permission settings\.$/i, (m, kind) => USE_TW ? ("此" + translateNoun(kind) + "會覆寫您的全域權限設定。") : ("此" + translateNoun(kind) + "会覆盖您的全局权限设置。")],
+        [/^(.+?) needs (.+?) to use your computer\.$/i, (m, app, perms) => {
+            const pZh = perms.replace(/Accessibility/gi, USE_TW ? "輔助使用" : "辅助功能").replace(/Screen Recording/gi, USE_TW ? "螢幕錄製" : "屏幕录制").replace(/\bboth\b/gi, USE_TW ? "兩項權限" : "这两项权限");
+            return app + " 需要 " + pZh + (USE_TW ? " 權限才能操作您的電腦。" : " 权限才能控制您的电脑。");
+        }],
+        [/^Check if there is a typo in (.+?), or open the page in your external browser\.$/i, (m, h) => {
+            const hZh = /^the address$/i.test(h.trim()) ? (USE_TW ? "網址" : "地址") : h.trim();
+            return USE_TW ? ("請檢查 " + hZh + " 是否有拼字錯誤，或在外部瀏覽器中開啟該頁面。") : ("请检查 " + hZh + " 是否有拼写错误，或在外部浏览器中打开该页面。");
+        }],
+        [/^(?:(Open|Reopen)\s+)?(Accessibility|Screen Recording) settings$/i, (m, act, pane) => {
+            const pZh = /^Accessibility/i.test(pane) ? (USE_TW ? "輔助使用" : "辅助功能") : (USE_TW ? "螢幕錄製" : "屏幕录制");
+            if (!act) return pZh + (USE_TW ? "設定" : "设置");
+            return (/^Reopen/i.test(act) ? (USE_TW ? "重新開啟" : "重新打开") : (USE_TW ? "開啟" : "打开")) + pZh + (USE_TW ? "設定" : "设置");
+        }],
+        [/^Work in (.+)$/i, (m, wt) => /^progress$/i.test(wt.trim()) ? m : ("在 " + wt + " 中工作")],
+        [/^(.+?)\.\s+(Show|Hide)\s+plan$/i, (m, title, verb) => title + "。" + (/^Hide/i.test(verb) ? (USE_TW ? "隱藏計畫" : "隐藏计划") : (USE_TW ? "顯示計畫" : "显示计划"))],
+        [/^(.+?):\s*([\d,]+)\s+tokens$/i, (m, label, num) => (lookupDict(label) || label) + "：" + num + " Token"],
+        [/^(.+?)\.\s*View site information$/i, (m, summary) => summary + (USE_TW ? "。檢視網站資訊" : "。查看站点信息")]
     ];
 
     function isSafeDeclarativeRegex(pattern, flags) {

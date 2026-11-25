@@ -1,5 +1,18 @@
 # 更新紀錄
 
+## 3.8.0 — 2026-11-25
+
+- **全面適配 Antigravity v2.35.1 並接續上游進度**：
+  - 合併並以台灣繁體中文體例與 `schemaVersion: 2` 架構校訂上游（`qqxpee/antigravity2-cn` `PR #56` 後至 `1f4e9ea`）與本機 `v2.35.1` 掃描所得之全部新介面詞條（共 115 筆 static 鍵值，涵蓋 **Inbox Mode / Working Section / Resolved** 收件匣工作區、**Dictation languages** 語音聽寫設定、**Plugin permissions** 外掛程式權限管控、**Coordinators / Orchestrator** 模型選擇與音訊／影片／檢視器提示等，改「供團隊使用」「於…」「已發布」「點選」等台灣用語以完全通過 L0 與 `compare_dicts.js`）。
+  - 於 `rules/runtime_rules.json` 新增 70+ 條純資料動態規則及 `Applied (.+)`／`Show (.+)` 屬性規則；`src/preload_runtime.js` 補齊 `lookupDict`／`ENTITY_NOUN_MAP`／`translateNoun`、AI 點數含逗號數字、配額重設倒數、模型重試、`Best-of-N` 與 `Generation Steps` 等多分支／碎片節點翻譯，並補足 `Build API. Show/Hide plan`、`Error:`、`View site information` 與 `{label}: {N} tokens` 等額外規則。
+- **補全 `v2.35.1` 原生主行程對話框與 HTML 頁面補丁**：
+  - `src/main_patches.js`、`src/asar_patcher.js` 與 `localization_engine.js` 新增支援 `dist/remote/disconnectedPage.js`（SSH 斷線重連頁面）、`dist/remote/signInCallback.js`（遠端登入回呼頁面）與 `dist/browserStream/capturePage.js`（瀏覽器串流擷取頁面），並保留 `v2.34.0` `dist/computer/hud*.js` 向下相容。
+  - 補全 `dist/remote/remoteManager.js` 於 `v2.35.1` 新增且尚未翻譯的對話框：`['Allow', "Don't Allow"]`、麥克風授權詳細說明、`['Continue', 'Cancel']`、`Finish this sign-in on ...`、`['Restart', 'Later']`、SSH 伺服器狀態（`agent or task`／`still runs Antigravity server`）、SSH 設定檔錯誤提示與 `Shared home directory` 三分支說明。
+- **Node.js 版本檢查與升級防呆（回應上游 Issue #65）**：
+  - `localization_engine.js` 新增前置 `checkSupportedNodeVersion()` 檢查（拒絕 Node `< 20` 並提示升級至 Node 22.12.0+ 與檢查 `PATH`），防止舊版 Node 執行 `--check` 時於 `?.` 可選串連語法報錯中斷。
+- **發布相容性**：
+  - 純翻譯資料包設為 `--min-engine 3.7.3 --max-engine 3.8.0`（`schemaVersion: 2`），既有 `v3.7.3`／`v3.7.4` 背景守護使用者可自動接收新字典與 `rules/runtime_rules.json`；欲取得 `dist/remote/*` 與 `src/preload_runtime.js` 多分支／碎片更新，請下載 `v3.8.0` `Source code (zip)` 重新執行安裝。
+
 ## 3.7.4 — 2026-11-23
 
 - **納入 Jserv《資訊科技詞彙翻譯》資工分艙標準並校訂衝突詞條**：
