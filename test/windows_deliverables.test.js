@@ -441,7 +441,7 @@ test('v2.33.0 remoteManager, wizardHtml, SVG-only loadingOverlay, and runtime br
     assert.ok(discPatchedTw.includes("stop: '停止伺服器',"));
     assert.ok(discPatchedTw.includes(": '已中斷連線';"));
     const discPatchedSc = patches.patchRemoteDisconnectedPageJs(discSample, false);
-    assert.ok(discPatchedSc.includes('<html lang="zh-CN">'));
+    assert.ok(discPatchedSc.includes('<html lang="zh-TW">'), '原生頁面一律宣告 zh-TW');
     assert.ok(discPatchedSc.includes("stop: '停止服务',"));
 
     const cbSample = [

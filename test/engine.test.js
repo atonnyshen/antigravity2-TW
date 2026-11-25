@@ -1528,5 +1528,31 @@ test('v2.35.1 SSH remote flow: connection status, error explanations, host and c
     const wslMain = patchMainJs('const msg = `Failed to install the server into WSL distro "${WSL_DISTRO}":\\n${err.message}`;', true);
     assert.ok(wslMain.includes('`無法將伺服器安裝到 WSL 發行版「${WSL_DISTRO}」：\\n${err.message}`'));
     assert.ok(patchWizardHtmlJs('<html lang="en">', true).includes('<html lang="zh-TW">'));
-    assert.ok(patchWizardHtmlJs('<html lang="en">', false).includes('<html lang="zh-CN">'));
+    // 本專案標榜台灣中文化：原生頁面不論模式一律宣告 zh-TW
+    assert.ok(patchWizardHtmlJs('<html lang="en">', false).includes('<html lang="zh-TW">'));
+});
+
+test('plugin and feature names stay in the original language (upstream #63)', () => {
+    const { JSDOM } = require('jsdom');
+    const js = generateJs();
+    const dom = new JSDOM(`<!doctype html><html><body>
+        <span id="n1">Chief of Staff</span><span id="n2">Concierge</span><span id="n3">Data Agent Kit</span>
+        <span id="n4">Google Workspace</span><span id="n5">Google Developer Knowledge</span>
+        <span id="s1">Sent to Chief of Staff</span><span id="s2">Chief of Staff voice mode is active</span>
+        <span id="s3">Welcome to the Concierge</span><span id="s4">Welcome to your Chief of Staff</span>
+    </body></html>`, { runScripts: 'outside-only' });
+    const doc = dom.window.document;
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: dom.window.Node, document: doc, console };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    context.hooks.translateNode(doc.body);
+    const text = id => doc.getElementById(id).textContent;
+    for (const [id, name] of [['n1', 'Chief of Staff'], ['n2', 'Concierge'], ['n3', 'Data Agent Kit'], ['n4', 'Google Workspace'], ['n5', 'Google Developer Knowledge']]) {
+        assert.equal(text(id), name, `${name} 應保留原文`);
+    }
+    assert.equal(text('s1'), '已傳送給 Chief of Staff');
+    // 原本誤用 Concierge 的譯名「語音助手」
+    assert.equal(text('s2'), 'Chief of Staff 語音模式已啟用');
+    assert.equal(text('s3'), '歡迎使用 Concierge');
+    assert.equal(text('s4'), '歡迎使用您的 Chief of Staff');
 });

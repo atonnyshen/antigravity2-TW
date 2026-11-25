@@ -17,10 +17,12 @@
   - 背景守護以已繁中化的 `app.asar` 重建時，`updater.js` 不再誤報「找不到插入點」。
   - SSH 遠端連線流程原本整段是英文。新增 `REMOTE_TEXT_TABLES` 對照表，翻譯 `dist/remote/` 下五個檔案：連線畫面的進度狀態、連線失敗對話框與斷線頁面的錯誤說明，以及 SSH 主機與設定檔的格式檢查訊息；設定檔訊息依中文語序改寫句型。給 AI 代理看的錯誤碼訊息與只寫入記錄檔的字串保留英文。
   - SSH 錯誤對話框補上「無法停止 SSH 伺服器」「登入失敗」標題，以及細節欄的「錯誤代碼」「記錄檔」「回報」標籤。
-  - Windows：WSL 開啟資料夾的提示與伺服器安裝失敗訊息；IDE 安裝導覽畫面的 `lang` 改為 `zh-TW`／`zh-CN`，與其他原生頁面一致。
+  - Windows：WSL 開啟資料夾的提示與伺服器安裝失敗訊息；IDE 安裝導覽畫面補上翻譯。
+  - 原生頁面（安裝導覽、登入回呼、SSH 驗證、斷線頁、通行金鑰視窗）的 `lang` 一律宣告 `zh-TW`，簡中模式也不再改宣告 `zh-CN`。
 - **字典校訂**：
   - 統一大小寫寫法不同、譯法卻不一致的詞條（繁中 40 組、簡中 20 組），並移除撐寬按鈕的英文括號譯名（如「極速模式 (Turbo Mode)」「匯出成品 (Artifact)」）。「New Tab」與「New tab」分屬動作與名稱，維持兩種譯法。
   - 修正錯字與誤譯：「復製圖片」改為「複製圖片」、「結束登入」改為「登出」、「Side Question Selection」改為「針對選取內容側邊提問」；「Loading Antigravity」改回「正在載入 Antigravity」，保留品牌名（體例 4.3）。
+  - 外掛與功能名稱保留原文（上游 #63）：`Chief of Staff`、`Concierge`、`Data Agent Kit`、`Google Workspace`、`Google Developer Knowledge` 不再翻譯，句中的名稱也一併保留（如「已傳送給 Chief of Staff」）。簡中字典原本把兩處 Chief of Staff 誤用為 Concierge 的譯名「语音助手」，一併修正。
   - `scripts/compare_dicts.js` 新增重複鍵檢查：`JSON.parse` 遇到重複鍵只保留最後一個值，先寫的譯文會無聲失效。
 - **背景守護與還原捷徑**：
   - `auto_localize_watcher.js` 在日誌超過 5 MB 時改名保留一份舊檔（`autolocalize.log.1`），避免每 5 分鐘一次的檢查讓日誌無限增長。

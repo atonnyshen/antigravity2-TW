@@ -632,8 +632,8 @@ function patchSshPromptsJs(spContent, useTw) {
              .replace(/`\$\{label\} asks:`/g, useTw ? '`${label} 請求確認：`' : '`${label} 请求确认：`')
              .replace(/'Touch your security key'/g, useTw ? "'請輕觸您的安全性金鑰'" : "'请轻触您的安全密钥'")
              .replace(/buttons:\s*confirm\s*\?\s*\['Yes',\s*'No'\]\s*:\s*\['Cancel'\]/g, useTw ? "buttons: confirm ? ['是', '否'] : ['取消']" : "buttons: confirm ? ['是', '否'] : ['取消']")
-             // 2.35.1 起：頁面語系、連線中提示，以及依提示內容產生的標題
-             .replace(/<html lang="en"/g, useTw ? '<html lang="zh-TW"' : '<html lang="zh-CN"')
+             // 2.35.1 起：頁面語系（本專案一律宣告 zh-TW）、連線中提示，以及依提示內容產生的標題
+             .replace(/<html lang="en"/g, '<html lang="zh-TW"')
              .replace(/<p class="context">Connecting to <span id="label"><\/span><\/p>/g, useTw ? '<p class="context">正在連線至 <span id="label"></span></p>' : '<p class="context">正在连接到 <span id="label"></span></p>')
              .replace(/`Trust \$\{hostName\(host\.split\(' \('\)\[0\]\)\}\?`/g, () => useTw ? "`要信任 ${hostName(host.split(' (')[0])} 嗎？`" : "`要信任 ${hostName(host.split(' (')[0])} 吗？`")
              .replace(/`Connect to \$\{hostName\(host\)\} anyway\?`/g, () => useTw ? '`仍要連線至 ${hostName(host)} 嗎？`' : '`仍要连接到 ${hostName(host)} 吗？`')
@@ -718,7 +718,7 @@ function patchProvisionSplashJs(psContent, useTw) {
 function patchWizardHtmlJs(whContent, useTw) {
     console.log(`[修改] 正在向 wizardHtml.js 注入安裝導覽畫面漢化...`);
     const out = whContent
-        .replace(/<html lang="en"/g, useTw ? '<html lang="zh-TW"' : '<html lang="zh-CN"')
+        .replace(/<html lang="en"/g, '<html lang="zh-TW"')
         .replace('<title>Welcome to Antigravity</title>', useTw ? '<title>歡迎使用 Antigravity</title>' : '<title>欢迎使用 Antigravity</title>')
         .replace('>Setting up…<', useTw ? '>正在設定…<' : '>正在配置…<')
         .replace('<h1>Welcome to the new Antigravity!</h1>', useTw ? '<h1>歡迎來到全新的 Antigravity！</h1>' : '<h1>欢迎来到全新的 Antigravity！</h1>')
@@ -797,7 +797,7 @@ function patchSshErrorTextJs(seContent, useTw) {
 function patchRemoteDisconnectedPageJs(dcContent, useTw) {
     console.log(useTw ? `[修改] 正在向 remote/disconnectedPage.js 注入遠端斷線頁面漢化...` : `[修改] 正在向 remote/disconnectedPage.js 注入远程断开页面汉化...`);
     const out = dcContent
-        .replace(/<html lang="en">/g, useTw ? '<html lang="zh-TW">' : '<html lang="zh-CN">')
+        .replace(/<html lang="en">/g, '<html lang="zh-TW">')
         .replace(/reconnect:\s*'Reconnect',/g, useTw ? "reconnect: '重新連線'," : "reconnect: '重新连接',")
         .replace(/stop:\s*'Stop Server',/g, useTw ? "stop: '停止伺服器'," : "stop: '停止服务',")
         .replace(/close:\s*'Close',/g, useTw ? "close: '關閉'," : "close: '关闭',")
@@ -819,7 +819,7 @@ function patchRemoteDisconnectedPageJs(dcContent, useTw) {
 function patchRemoteSignInCallbackJs(cbContent, useTw) {
     console.log(useTw ? `[修改] 正在向 remote/signInCallback.js 注入登入回呼頁面漢化...` : `[修改] 正在向 remote/signInCallback.js 注入登录回调页面汉化...`);
     const out = cbContent
-        .replace(/<html lang="en">/g, useTw ? '<html lang="zh-TW">' : '<html lang="zh-CN">')
+        .replace(/<html lang="en">/g, '<html lang="zh-TW">')
         .replace(
             "const SIGNED_IN = page('You have successfully authenticated.', 'You can close this tab and return to Antigravity.');",
             useTw
@@ -872,7 +872,7 @@ function patchBrowserStreamCapturePageJs(cpContent, useTw) {
 function patchCablev2Js(cbContent, useTw) {
     console.log(useTw ? `[修改] 正在向 cablev2.js 注入通行金鑰掃碼視窗漢化...` : `[修改] 正在向 cablev2.js 注入通行密钥扫码窗口汉化...`);
     const out = cbContent
-        .replace(/<html lang="en">/g, useTw ? '<html lang="zh-TW">' : '<html lang="zh-CN">')
+        .replace(/<html lang="en">/g, '<html lang="zh-TW">')
         .replace('<title>Passkeys</title>', useTw ? '<title>通行金鑰</title>' : '<title>通行密钥</title>')
         .replace('<h1 class="sheet-title">Passkeys</h1>', useTw ? '<h1 class="sheet-title">通行金鑰</h1>' : '<h1 class="sheet-title">通行密钥</h1>')
         .replace('<p class="mechanism-header">Use your phone or tablet</p>', useTw ? '<p class="mechanism-header">使用手機或平板電腦</p>' : '<p class="mechanism-header">使用手机或平板电脑</p>')
