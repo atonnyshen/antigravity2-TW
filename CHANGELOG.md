@@ -15,6 +15,9 @@
   - 新增通行金鑰掃碼視窗（`dist/cablev2.js`、`dist/qrEncoder.js`）、彈出視窗右鍵選單、視窗標題的安全標籤與連線資訊內容，以及 WSL 發行版已移除的訊息。
   - `dist/remote/signInCallback.js` 的「Sign in again from Antigravity.」在 v2.35.1 出現兩次，原本只替換第一處，改為全部替換。
   - 背景守護以已繁中化的 `app.asar` 重建時，`updater.js` 不再誤報「找不到插入點」。
+  - SSH 遠端連線流程原本整段是英文。新增 `REMOTE_TEXT_TABLES` 對照表，翻譯 `dist/remote/` 下五個檔案：連線畫面的進度狀態、連線失敗對話框與斷線頁面的錯誤說明，以及 SSH 主機與設定檔的格式檢查訊息；設定檔訊息依中文語序改寫句型。給 AI 代理看的錯誤碼訊息與只寫入記錄檔的字串保留英文。
+  - SSH 錯誤對話框補上「無法停止 SSH 伺服器」「登入失敗」標題，以及細節欄的「錯誤代碼」「記錄檔」「回報」標籤。
+  - Windows：WSL 開啟資料夾的提示與伺服器安裝失敗訊息；IDE 安裝導覽畫面的 `lang` 改為 `zh-TW`／`zh-CN`，與其他原生頁面一致。
 - **字典校訂**：
   - 統一大小寫寫法不同、譯法卻不一致的詞條（繁中 40 組、簡中 20 組），並移除撐寬按鈕的英文括號譯名（如「極速模式 (Turbo Mode)」「匯出成品 (Artifact)」）。「New Tab」與「New tab」分屬動作與名稱，維持兩種譯法。
   - 修正錯字與誤譯：「復製圖片」改為「複製圖片」、「結束登入」改為「登出」、「Side Question Selection」改為「針對選取內容側邊提問」；「Loading Antigravity」改回「正在載入 Antigravity」，保留品牌名（體例 4.3）。

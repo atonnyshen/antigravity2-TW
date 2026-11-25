@@ -1407,3 +1407,126 @@ test('v2.35.1 main-process patches cover menu roles, SSH prompt titles, popup se
     const wsl = patchMainJs('const m = { message: `The WSL distro "${WSL_DISTRO}" is no longer installed.` };', true);
     assert.ok(wsl.includes('WSL 發行版「${WSL_DISTRO}」已不在此電腦上。'));
 });
+
+test('v2.35.1 SSH remote flow: connection status, error explanations, host and config-file checks and dialog titles are localized', () => {
+    const { REMOTE_TEXT_TABLES, patchRemoteTextJs, patchSshErrorTextJs, patchRemoteManagerJs, patchMainJs, patchWizardHtmlJs, MAIN_PROCESS_PATCH_TARGETS } = require('../src/main_patches');
+    const placeholders = s => (s.match(/\$\{(?:[^{}]|\{[^{}]*\})*\}/g) || []).map(p => p.replace(/'[^']*'/g, "''")).sort().join('|');
+    for (const [rel, rows] of Object.entries(REMOTE_TEXT_TABLES)) {
+        assert.ok(MAIN_PROCESS_PATCH_TARGETS.includes(rel), `${rel} 必須列入打包驗證的允許清單`);
+        const needles = new Set();
+        for (const [needle, sc, tc] of rows) {
+            assert.ok(!needles.has(needle), `${rel} 重複的原文：${needle}`);
+            needles.add(needle);
+            for (const zh of [sc, tc]) {
+                assert.equal(placeholders(zh), placeholders(needle), `${rel} 譯文必須保留原句的全部變數：${needle}`);
+                assert.ok(!zh.includes(needle), `${rel} 譯文不可再含原文：${needle}`);
+                assert.ok(/[　-〿一-鿿＀-￯]/.test(zh), `${rel} 譯文必須是中文：${zh}`);
+            }
+        }
+    }
+
+    const argsSrc = [
+        "exports.LINUX_HOST_NEEDED = 'Antigravity needs a Linux host on x64 or arm64 with glibc 2.26 or newer.';",
+        'function describe(code, prompts) {',
+        '    switch (code) {',
+        "        case 'CONNECTION_FAILED':",
+        "            return `Couldn't connect to the SSH host. Check its name, your network and ssh config (e.g. a ProxyCommand), and that ssh to it works in a terminal${prompts === 'no' ? ' without a prompt' : ''}.`;",
+        "        case 'UNSUPPORTED_HOST':",
+        "            return `The SSH host isn't supported. ${exports.LINUX_HOST_NEEDED} Windows and macOS hosts aren't supported yet.`;",
+        '        default:',
+        "            return `Couldn't connect to the SSH host (${String(code)}).`;",
+        '    }',
+        '}',
+        'return describe;'
+    ].join('\n');
+    const describeTw = new Function('exports', patchRemoteTextJs('dist/remote/sshArgs.js', argsSrc, true))({});
+    assert.equal(describeTw('CONNECTION_FAILED', 'no'), '無法連線至 SSH 主機。請檢查主機名稱、網路與 ssh 設定（例如 ProxyCommand），並確認在終端機中不需任何提示就能用 ssh 連線至該主機。');
+    assert.equal(describeTw('UNSUPPORTED_HOST', 'yes'), '不支援這個 SSH 主機。Antigravity 需要使用 glibc 2.26 以上版本、x64 或 arm64 架構的 Linux 主機。目前尚未支援 Windows 與 macOS 主機。');
+    assert.equal(describeTw('WEIRD'), '無法連線至 SSH 主機（WEIRD）。');
+    const describeSc = new Function('exports', patchRemoteTextJs('dist/remote/sshArgs.js', argsSrc, false))({});
+    assert.equal(describeSc('CONNECTION_FAILED', 'yes'), '无法连接到 SSH 主机。请检查主机名、网络和 ssh 配置（例如 ProxyCommand），并确认在终端中可以用 ssh 连接到该主机。');
+
+    const connSrc = [
+        'function describeStatus(text, label) {',
+        '    switch (text) {',
+        "        case 'downloading':",
+        '            return `Downloading the Antigravity server on ${label}…`;',
+        "        case 'checking other host':",
+        '            return `Checking whether another host still runs your Antigravity server…`;',
+        '        default:',
+        '            return undefined;',
+        '    }',
+        '}',
+        'function describeExit(code, signal, lastLine) {',
+        '    const how = signal ? `signal ${signal}` : `exit code ${code}`;',
+        '    return lastLine',
+        '        ? `ssh exited (${how}): ${(0, types_1.sanitizeRemoteText)(lastLine, 300)}`',
+        '        : `ssh exited (${how}).`;',
+        '}',
+        'function stall(firstLineMs) {',
+        '    return `${this.label} did not start the setup within ${Math.round(firstLineMs / 1000)} s. ` +',
+        "                    'ssh (e.g. a ProxyCommand or ProxyJump login) or a command in ' +",
+        "                    'your shell startup files (e.g. ~/.bashrc) may be waiting for input.';",
+        '}',
+        'return { describeStatus, describeExit, stall };'
+    ].join('\n');
+    const connPatched = patchRemoteTextJs('dist/remote/sshConnection.js', connSrc, true);
+    const conn = new Function('types_1', connPatched)({ sanitizeRemoteText: s => s });
+    assert.equal(conn.describeStatus('downloading', 'devbox'), '正在 devbox 上下載 Antigravity 伺服器…');
+    assert.equal(conn.describeStatus('checking other host', 'devbox'), '正在檢查是否仍有其他主機在執行您的 Antigravity 伺服器…');
+    assert.equal(conn.describeExit(255, null, ''), 'ssh 已結束（結束代碼 255）。');
+    assert.equal(conn.describeExit(null, 'SIGTERM', 'Connection reset'), 'ssh 已結束（訊號 SIGTERM）：Connection reset');
+    assert.equal(conn.stall.call({ label: 'devbox' }, 15000), 'devbox 未在 15 秒內開始設定。可能是 ssh（例如 ProxyCommand 或 ProxyJump 登入）或 shell 啟動檔（例如 ~/.bashrc）中的指令正在等待輸入。');
+    assert.equal(patchRemoteTextJs('dist/remote/sshConnection.js', connPatched, true), connPatched, '重複套用不得再改動');
+
+    const cfgSrc = [
+        'const invalid = (problem) => new Error(`The SSH config file ${problem}`);',
+        'const NOT_CONFIG = "isn\'t an SSH config file";',
+        "const CHOOSE_CONFIG = 'Choose a file of ssh settings, such as ~/.ssh/config.';",
+        'const notConfig = (why) => ({ what: NOT_CONFIG, why, fix: CHOOSE_CONFIG });',
+        'const BINARY = notConfig("it\'s a binary file");',
+        'function describeSshConfigProblem(file, { what, why, fix }) {',
+        '    return `${file} ${what}: ${why}. ${fix}`;',
+        '}',
+        "const shown = 'cfg';",
+        "return [describeSshConfigProblem('/bin/ls', BINARY), invalid(`must be an absolute path (got ${shown}).`).message, invalid(`${shown} doesn't exist or can't be read.`).message];"
+    ].join('\n');
+    assert.deepEqual(new Function(patchRemoteTextJs('dist/remote/sshConfigHosts.js', cfgSrc, true))(), [
+        '/bin/ls 不是 SSH 設定檔：這是二進位檔案。請選擇 ssh 設定檔，例如 ~/.ssh/config。',
+        'SSH 設定檔必須是絕對路徑（目前為 cfg）。',
+        'SSH 設定檔（cfg）不存在或無法讀取。'
+    ]);
+
+    const destSrc = "const port = 'x'; return ['The host name is missing.', `Invalid port \"${port}\": use a number from 1 to 65535.`, 'Enter an SSH host, for example \"devbox\" or \"user@host:2222\".'];";
+    assert.deepEqual(new Function(patchRemoteTextJs('dist/remote/sshDestination.js', destSrc, true))(), ['缺少主機名稱。', '連接埠「x」無效：請使用 1 到 65535 之間的數字。', '請輸入 SSH 主機，例如「devbox」或「user@host:2222」。']);
+
+    const errSrc = [
+        "function logPath() { return '/tmp/main.log'; }",
+        'function codeAndLogs(err) {',
+        '    return `Error code: ${err.code}\\nLogs: ${logPath()}`;',
+        '}',
+        'function detailOf(err, label) {',
+        '    const text = err.message;',
+        '    return err.reportedByRemote ? `${label} reported: ${text}` : text;',
+        '}',
+        'function withLog(text) { return `${text}\\nLogs: ${logPath()}`; }',
+        'return { codeAndLogs, detailOf, withLog };'
+    ].join('\n');
+    const errTw = new Function(patchSshErrorTextJs(errSrc, true))();
+    assert.equal(errTw.codeAndLogs({ code: 'UNKNOWN' }), '錯誤代碼：UNKNOWN\n記錄檔：/tmp/main.log');
+    assert.equal(errTw.detailOf({ reportedByRemote: true, message: 'disk full' }, 'devbox'), 'devbox 回報：disk full');
+    assert.equal(errTw.withLog('無法連線'), '無法連線\n記錄檔：/tmp/main.log');
+    assert.equal(new Function(patchSshErrorTextJs(errSrc, false))().codeAndLogs({ code: 'UNKNOWN' }), '错误代码：UNKNOWN\n日志：/tmp/main.log');
+
+    const rm = patchRemoteManagerJs([
+        "this.reportError(err, entry.label, 'Could not stop the SSH server', win);",
+        "this.reportError(err, entry.label, 'Sign-in failed', win);",
+        "throw new types_1.RemoteError('CANCELLED', 'Connection cancelled.');"
+    ].join('\n'), true);
+    for (const zh of ["'無法停止 SSH 伺服器'", "'登入失敗'", "'已取消連線。'"]) assert.ok(rm.includes(zh), zh);
+
+    const wslMain = patchMainJs('const msg = `Failed to install the server into WSL distro "${WSL_DISTRO}":\\n${err.message}`;', true);
+    assert.ok(wslMain.includes('`無法將伺服器安裝到 WSL 發行版「${WSL_DISTRO}」：\\n${err.message}`'));
+    assert.ok(patchWizardHtmlJs('<html lang="en">', true).includes('<html lang="zh-TW">'));
+    assert.ok(patchWizardHtmlJs('<html lang="en">', false).includes('<html lang="zh-CN">'));
+});

@@ -30,7 +30,9 @@ const {
     patchQrEncoderJs,
     patchComputerHudJs,
     patchComputerHudStateJs,
-    patchComputerHudAgentsJs
+    patchComputerHudAgentsJs,
+    patchRemoteTextJs,
+    REMOTE_TEXT_TABLES
 } = require('./src/main_patches');
 
 function checkSupportedNodeVersion() {
@@ -1012,7 +1014,8 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
             ['dist/qrEncoder.js', content => patchQrEncoderJs(content, USE_TW)],
             ['dist/computer/hud.js', content => patchComputerHudJs(content, USE_TW)],
             ['dist/computer/hudState.js', content => patchComputerHudStateJs(content, USE_TW)],
-            ['dist/computer/hudAgents.js', content => patchComputerHudAgentsJs(content, USE_TW)]
+            ['dist/computer/hudAgents.js', content => patchComputerHudAgentsJs(content, USE_TW)],
+            ...Object.keys(REMOTE_TEXT_TABLES).map(relPath => [relPath, content => patchRemoteTextJs(relPath, content, USE_TW)])
         ]);
 
         console.log(`[打包] 正在使用原生引擎生成并校验汉化候选包...`);
