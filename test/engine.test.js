@@ -937,7 +937,7 @@ test('quota limits, combined reset strings, region eligibility notices, and v2.3
     assert.equal(tx("Couldn't disconnect GitHub: token expired"), '無法中斷 GitHub 的連線：token expired');
     assert.equal(tx('Failed to load page 2: timeout'), '載入頁面 2 失敗：timeout');
     assert.equal(tx('More options for Plugins'), 'Plugins 的更多選項');
-    assert.equal(tx('Opens the New Conversation screen for this project'), '開啟此 專案 的新對話畫面');
+    assert.equal(tx('Opens the New Conversation screen for this project'), '開啟此專案的新對話畫面');
     assert.equal(tx('Replaced by newer request'), '已由較新的請求取代');
 
     // v2.34.0 server-returned RPC & model picker / quota strings
@@ -1189,7 +1189,7 @@ test('v2.35.1 Inbox Mode, Dictation, Plugins, Quota, Countdown and JSX split-nod
     assert.equal(doc.getElementById('revoke-msg').textContent, '將撤銷全部 file permissions。外掛程式在再次執行此操作前會先徵求您的同意。');
     assert.equal(doc.getElementById('ai-credits').textContent, '可用 AI 點數：1,250');
     assert.equal(doc.getElementById('dismiss-btn').getAttribute('aria-label'), '關閉：Update ready');
-    assert.equal(doc.getElementById('move-to').textContent, '移至 封存');
+    assert.equal(doc.getElementById('move-to').textContent, '移至封存');
     assert.equal(doc.getElementById('new-ws').textContent, '新增工作區...');
     assert.equal(doc.getElementById('no-lang').textContent, '找不到與「klingon」相符的語言');
     assert.equal(doc.getElementById('rev-all').getAttribute('aria-label'), '全部撤銷：GitHub');
@@ -1215,3 +1215,191 @@ test('v2.35.1 Inbox Mode, Dictation, Plugins, Quota, Countdown and JSX split-nod
 
 
 
+
+test('v2.35.1 icon-font ligature fallbacks render SVG, stay untranslated, and permission pill uses short labels', () => {
+    const { JSDOM } = require('jsdom');
+    const js = generateJs();
+    const dom = new JSDOM(`<!doctype html><html><body>
+        <div id="menu-comment"><span class="google-symbols" style="font-size: 18px">comment</span><span>Comment on Selection</span></div>
+        <span id="icon-quote" class="google-symbols">format_quote</span>
+        <span id="icon-shield" class="google-symbols">laptop_shield</span>
+        <span id="icon-restore" class="google-symbols">restore_page</span>
+        <span id="icon-unknown" class="material-symbols-outlined">settings</span>
+        <button id="perm-pill" data-testid="permissions-selector-trigger"><span>Turbo</span></button>
+        <button id="perm-pill-default" data-testid="permissions-selector-trigger"><span>Default</span></button>
+        <span id="plain-default">Default</span>
+    </body></html>`, { runScripts: 'outside-only' });
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: dom.window.Node, document: dom.window.document, console };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const { translateNode } = context.hooks;
+
+    const doc = dom.window.document;
+    translateNode(doc.body);
+
+    const commentIcon = doc.querySelector('#menu-comment .google-symbols');
+    assert.equal(commentIcon.textContent, '');
+    assert.equal(commentIcon.querySelector('svg').getAttribute('data-ag-icon-fallback'), 'comment');
+    assert.equal(commentIcon.querySelector('svg').getAttribute('width'), '18');
+    assert.notEqual(doc.querySelector('#menu-comment span:last-child').textContent, 'Comment on Selection');
+    for (const [id, name] of [['icon-quote', 'format_quote'], ['icon-shield', 'laptop_shield'], ['icon-restore', 'restore_page']]) {
+        const el = doc.getElementById(id);
+        assert.equal(el.textContent, '');
+        assert.equal(el.querySelectorAll('svg').length, 1);
+        assert.equal(el.querySelector('svg').getAttribute('data-ag-icon-fallback'), name);
+    }
+    // 未知圖示名稱不翻譯，保留給字型連字
+    assert.equal(doc.getElementById('icon-unknown').textContent, 'settings');
+    assert.equal(doc.getElementById('perm-pill').textContent, '極速');
+    assert.equal(doc.getElementById('perm-pill-default').textContent, '預設');
+    assert.equal(doc.getElementById('plain-default').textContent, '預設 (Default)');
+
+    // React 重設同一圖示文字時不重複插入 SVG；換成別的圖示時替換 SVG
+    const quote = doc.getElementById('icon-quote');
+    const quoteText = Array.from(quote.childNodes).find(n => n.nodeType === dom.window.Node.TEXT_NODE);
+    quoteText.nodeValue = 'format_quote';
+    translateNode(quote);
+    assert.equal(quote.querySelectorAll('svg').length, 1);
+    quoteText.nodeValue = 'comment';
+    translateNode(quote);
+    assert.equal(quote.querySelectorAll('svg').length, 1);
+    assert.equal(quote.querySelector('svg').getAttribute('data-ag-icon-fallback'), 'comment');
+});
+
+test('v2.35.1 split-node sentences, Show N more variants, attribute phrases and CJK gap spacing localize cleanly', () => {
+    const { JSDOM } = require('jsdom');
+    const js = generateJs();
+    // <!----> 只用來讓 HTML 解析器把相鄰字串拆成獨立文字節點；解析後移除，還原 React 用戶端渲染的真實 DOM
+    const dom = new JSDOM(`<!doctype html><html><body>
+        <span role="status" id="perm-guide">In System Settings, click <strong>+</strong>, choose<!----> <!----><strong>Antigravity</strong>, then turn it on.<!----> <!---->Already on? Select <strong>Antigravity</strong>, click <strong>–</strong>, then<!----> <!---->click <strong>+</strong> and add it again.</span>
+        <span role="status" id="perm-guide-shown">In System Settings, turn on <strong>Antigravity</strong>. If it isn't in the list, drag it in from the small window next to System Settings.<!----> <!---->Already on? Select <strong>Antigravity</strong>, click <strong>–</strong>, then<!----> <!---->drag it back in from the small window.</span>
+        <span id="send-now">Messages now send immediately. Configure in<!----> <span class="whitespace-nowrap"><button>settings</button>.</span></span>
+        <span id="keybind">Inspect live bindings or record custom key chords filtered to<!----> <code>antigravity.</code> <!---->commands.</span>
+        <span id="weekly"><span class="font-semibold">Weekly</span> on<!----> <!----><span class="font-semibold">Monday</span> around<!----> <!----><span class="font-semibold">9:00 AM</span></span>
+        <span id="weekdays"><span class="font-semibold">Weekdays</span> around<!----> <!----><span class="font-semibold">9:00 AM</span></span>
+        <div id="declared">Agents created by <!---->Foo Plugin<!----> run in a dedicated<!----> <!---->project<!----> with its own permissions, which you can change anytime in the <!---->project<!----> settings page.</div>
+        <div id="no-plugin">No plugin found for<!----> <!----><span class="font-mono">foo-bar</span>.</div>
+        <div data-testid="running-selection-bar"><span id="selected" class="text-foreground">3<!----> selected</span></div>
+        <div id="more-ell">Show <!---->3<!----> more...</div>
+        <div id="more-split">Show <!---->3<!----> more</div>
+        <button id="more-single">Show 3 More</button>
+        <button id="more-sub">Show 2 more subagents</button>
+        <button id="more-all">+4 more (Show all)</button>
+        <p id="links"><a>Privacy Policy</a> <a>Terms of Service</a></p>
+        <button id="attr-phrase" aria-label="Open the Swarm UI" title="Add to chat input">x</button>
+        <button id="attr-name" aria-label="Open Settings" title="Close Foo">y</button>
+        <div class="agy-aux-tab"><div id="swarm-tab" class="agy-aux-tab-title" title="Swarm">Swarm</div></div>
+        <div data-testid="conversation-row-history"><span id="history-title" class="truncate text-left">Settings</span></div>
+        <span id="starting">Starting…</span>
+    </body></html>`, { runScripts: 'outside-only' });
+    const doc = dom.window.document;
+    const walker = doc.createTreeWalker(doc.body, dom.window.NodeFilter.SHOW_COMMENT);
+    const comments = [];
+    while (walker.nextNode()) comments.push(walker.currentNode);
+    comments.forEach(c => c.remove());
+
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: dom.window.Node, document: doc, console };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode, translateExactOrDynamic }; })();', context);
+    const { translateNode, translateExactOrDynamic: tx } = context.hooks;
+    translateNode(doc.body);
+    const text = id => doc.getElementById(id).textContent;
+
+    assert.equal(text('perm-guide'), '在「系統設定」中，按一下 +，選取 Antigravity，然後將它開啟。已經開啟？請選取 Antigravity，按一下 –，然後按一下 + 重新加入。');
+    assert.equal(text('perm-guide-shown'), '在「系統設定」中，開啟 Antigravity。如果清單中沒有，請從「系統設定」旁的小視窗將它拖曳進來。已經開啟？請選取 Antigravity，按一下 –，然後從小視窗將它重新拖曳進來。');
+    assert.equal(text('send-now'), '訊息現已改為立即傳送。可在設定中調整。');
+    assert.equal(text('keybind'), '檢視目前生效的按鍵繫結，或錄製自訂按鍵組合，僅限 antigravity. 指令。');
+    assert.equal(text('weekly'), '每週星期一約 9:00 AM');
+    assert.equal(text('weekdays'), '平日約 9:00 AM');
+    assert.equal(text('declared'), '由 Foo Plugin 建立的代理執行於專用的專案中並擁有獨立權限，您可以隨時在專案設定頁面中變更。');
+    assert.equal(text('no-plugin'), '找不到外掛程式 foo-bar。');
+    assert.equal(text('selected'), '3 項已選取');
+    assert.equal(text('more-ell'), '顯示另外 3 個...');
+    assert.equal(text('more-split'), '顯示另外 3 個');
+    assert.equal(text('more-single'), '顯示另外 3 個');
+    assert.equal(text('more-sub'), '顯示另外 2 個子代理');
+    assert.equal(text('more-all'), '另外 +4 項（顯示全部）');
+    // 兩個並排連結之間的空白是分隔用的，不能收掉
+    assert.equal(text('links'), '隱私權政策 服務條款');
+    // 「動詞＋冠詞／介系詞」片語保留原文，避免「開啟 the Swarm UI」；一般「動詞＋名稱」照常翻譯
+    assert.equal(doc.getElementById('attr-phrase').getAttribute('aria-label'), 'Open the Swarm UI');
+    assert.equal(doc.getElementById('attr-phrase').getAttribute('title'), 'Add to chat input');
+    assert.equal(doc.getElementById('attr-name').getAttribute('aria-label'), '開啟設定');
+    assert.equal(doc.getElementById('attr-name').getAttribute('title'), '關閉 Foo');
+    assert.equal(text('swarm-tab'), '蜂群');
+    assert.equal(doc.getElementById('swarm-tab').getAttribute('title'), '蜂群');
+    assert.equal(text('history-title'), 'Settings');
+
+    assert.equal(tx('Stop 3 items?'), '確定要停止 3 個項目嗎？');
+    assert.equal(tx('Stop 1 item?'), '確定要停止 1 個項目嗎？');
+    assert.equal(tx('Antigravity needs Accessibility to use your computer.'), 'Antigravity 需要「輔助使用」權限才能操作您的電腦。');
+    assert.equal(tx('Antigravity needs both to use your computer.'), 'Antigravity 需要這兩項權限才能操作您的電腦。');
+    assert.equal(tx('Relaunch Antigravity to finish Screen Recording.'), '請重新啟動 Antigravity 以完成「螢幕錄製」設定。');
+    assert.equal(tx('Agents created by this automation run in a dedicated project with its own permissions. You can change the permissions in the project settings page.'),
+        '此自動化建立的代理會在專用的專案中執行，並擁有獨立權限。您可以在專案設定頁面中變更權限。');
+    assert.equal(tx('1 tool'), '1 個工具');
+    assert.equal(tx('5 tools · sign in for more'), '5 個工具 · 登入以取得更多');
+    assert.equal(tx('See go/sidecars: https://example.com/x'), '請參閱 go/sidecars：https://example.com/x');
+    assert.equal(tx('Starting...'), '正在啟動...');
+    assert.equal(text('starting'), '正在啟動...');
+    assert.equal(tx('Loading bundle...'), '正在載入外掛程式套件...');
+    assert.equal(tx('See more'), '顯示更多');
+    assert.equal(tx('See less'), '顯示較少');
+});
+
+test('v2.35.1 main-process patches cover menu roles, SSH prompt titles, popup security, passkey QR and WSL notices', () => {
+    const { patchMenuJs, patchSshPromptsJs, patchWebviewPopupSecurityJs, patchCablev2Js, patchQrEncoderJs, patchMainJs } = require('../src/main_patches');
+
+    const menuTw = patchMenuJs('function build(menu){ electron_1.Menu.setApplicationMenu(menu); }', true);
+    for (const pair of ["'Reload': '重新載入'", "'Force Reload': '強制重新載入'", "'Show Substitutions': '顯示替代'", "'Smart Quotes': '智慧型引號'", "'Start Speaking': '開始朗讀'"]) {
+        assert.ok(menuTw.includes(pair), pair);
+    }
+    assert.ok(patchMenuJs('function build(menu){ electron_1.Menu.setApplicationMenu(menu); }', false).includes("'Force Reload': '强制重新加载'"));
+
+    const fakeSp = [
+        '<html lang="en"${dark ? \' class="dark"\' : \'\'}>',
+        '<p class="context">Connecting to <span id="label"></span></p>',
+        '<div class="buttons"><button id="cancel" class="secondary">Cancel</button><button id="continue" class="primary">Continue</button></div>',
+        'function a(who) { return `Password for ${who}`; }',
+        'function b(asked, hostPromptsMarked, label) { return `${asked[0]} for ${hostPromptsMarked ? asked[1] : label}`; }'
+    ].join('\n');
+    const sp = patchSshPromptsJs(fakeSp, true);
+    assert.ok(sp.includes('<html lang="zh-TW"'));
+    assert.ok(sp.includes('<p class="context">正在連線至 <span id="label"></span></p>'));
+    assert.ok(sp.includes('<button id="cancel" class="secondary">取消</button><button id="continue" class="primary">繼續</button>'));
+    const titleFns = new Function(sp.split('\n').slice(3).join('\n') + '\nreturn { a, b };')();
+    assert.equal(titleFns.a('me@devbox'), 'me@devbox 的密碼');
+    assert.equal(titleFns.b(['Passphrase', 'id_ed25519'], true, 'devbox'), 'id_ed25519 的金鑰密碼');
+    assert.equal(titleFns.b(['Password'], false, 'devbox'), 'devbox 的密碼');
+    assert.equal(titleFns.b(['Token'], false, 'devbox'), 'Token for devbox');
+
+    const fakeWps = [
+        "    insecure: 'Not secure',",
+        "            { role: 'cut', enabled: canCut },",
+        "        lines.push('', state.level === 'secure' ? 'Certificate is valid' : 'Certificate details');",
+        "        message: extractOrigin(state.url) ?? (state.url || 'This page'),"
+    ].join('\n');
+    const wps = patchWebviewPopupSecurityJs(fakeWps, true);
+    assert.ok(wps.includes("insecure: '不安全',"));
+    assert.ok(wps.includes("{ role: 'cut', label: '剪下', enabled: canCut }"));
+    assert.ok(wps.includes("'憑證有效' : '憑證詳細資訊'"));
+    assert.ok(wps.includes("(state.url || '此頁面')"));
+
+    const fakeCable = [
+        '<html lang="en">',
+        '<title>Passkeys</title>',
+        '<h1 class="sheet-title">Passkeys</h1>',
+        '<p class="mechanism-header">Use your phone or tablet</p>',
+        '<p class="hint">Scan this QR code with the camera on the device that has your passkey for ${safeRpId}</p>',
+        '<button onclick="window.close()">Cancel</button>',
+        "updateStatus('Connecting to your device…')"
+    ].join('\n');
+    const cable = patchCablev2Js(fakeCable, true);
+    for (const zh of ['<html lang="zh-TW">', '<title>通行金鑰</title>', '使用手機或平板電腦', '請使用存有 ${safeRpId} 通行金鑰的裝置，以相機掃描此 QR 碼', 'onclick="window.close()">取消</button>', "updateStatus('正在連線至您的裝置…')"]) {
+        assert.ok(cable.includes(zh), zh);
+    }
+    assert.ok(patchQrEncoderJs('<svg aria-label="Passkey QR code">', true).includes('aria-label="通行金鑰 QR 碼"'));
+
+    const wsl = patchMainJs('const m = { message: `The WSL distro "${WSL_DISTRO}" is no longer installed.` };', true);
+    assert.ok(wsl.includes('WSL 發行版「${WSL_DISTRO}」已不在此電腦上。'));
+});

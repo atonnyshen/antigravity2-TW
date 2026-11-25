@@ -266,3 +266,19 @@ test('patchTrayJs and patchUtilsJs guard missing actions and missing win variabl
     });
     assert.doesNotThrow(() => hubEvents['did-frame-finish-load']({}, false, 1, 2));
 });
+
+test('compareDicts rejects a dictionary key defined twice because JSON.parse silently keeps only the last value', t => {
+    const { compareDicts } = require('../scripts/compare_dicts');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ag2tw-dupkey-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const tmpSc = path.join(root, 'dicts');
+    const tmpTw = path.join(root, 'dicts_tw');
+    fs.mkdirSync(tmpSc, { recursive: true });
+    fs.mkdirSync(tmpTw, { recursive: true });
+    fs.writeFileSync(path.join(tmpSc, 'test.json'), '{\n  "Open": "打开",\n  "Close": "关闭"\n}\n', 'utf8');
+    fs.writeFileSync(path.join(tmpTw, 'test.json'), '{\n  "Open": "開啟",\n  "Close": "關閉"\n}\n', 'utf8');
+    assert.equal(compareDicts(tmpSc, tmpTw), true);
+    fs.writeFileSync(path.join(tmpTw, 'test.json'), '{\n  "Open": "開啟",\n  "Close": "關閉",\n  "Open": "打開"\n}\n', 'utf8');
+    assert.equal(compareDicts(tmpSc, tmpTw), false);
+});
+

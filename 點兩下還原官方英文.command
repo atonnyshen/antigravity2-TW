@@ -1,5 +1,6 @@
 #!/bin/bash
 cd "$(dirname "$0")"
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 # 檢查系統管理員權限，若非 root 則自動透過 sudo 提權
 if [ "$EUID" -ne 0 ]; then
@@ -7,7 +8,7 @@ if [ "$EUID" -ne 0 ]; then
     echo " 提示：macOS 修改應用程式（/Applications）需要管理員權限"
     echo " 請在下方輸入您的電腦開機密碼（輸入時畫面不會顯示密碼，直接按 Enter）："
     echo "======================================================"
-    exec sudo bash "$0" "$@"
+    exec sudo env "PATH=$PATH" bash "$0" "$@"
 fi
 
 TARGET_USER="${SUDO_USER:-$USER}"

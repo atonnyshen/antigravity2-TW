@@ -1,5 +1,30 @@
 # 更新紀錄
 
+## 3.8.1 — 2026-11-26
+
+- **修正 Antigravity v2.35.1 的介面跑版與誤譯**：
+  - v2.35.1 沒有載入 Google Symbols 圖示字型，內建 SVG 表缺少的圖示會直接顯示圖示名稱。`src/preload_runtime.js` 改為圖示名稱一律不翻譯（原本 `comment` 會被字典譯成「評論」），並為 `comment`、`format_quote`、`laptop_shield`、`restore_page` 補畫 SVG。
+  - 輸入框下方的權限預設膠囊鈕改用短標籤（預設、自動、極速、請求審查、全機），不再以雙語括號譯名擠壓同列的模型選擇鈕。
+  - 動態規則模板的中文與填入的中文譯名相鄰時，刪去中間的半形空格（「移至 封存」改為「移至封存」）；填入英文時保留空格。
+  - `rules/runtime_rules.json` 新增 7 條動態規則，涵蓋「Show N more subagents」「+N more (Show all)」「Stop N items?」「Relaunch … to finish Screen Recording.」、自動化建立代理的權限提示與「See …: 網址」；工具數量另支援單數「1 tool」與「· sign in for more」後綴。
+  - React 拆成多個文字節點的句子改為整句翻譯，包括電腦操作權限引導、自動化排程摘要、自動化代理的權限說明、外掛程式找不到項目與執行中項目的批次選取列；兩側都譯成中文時，收掉夾在中間的空白節點。
+  - 「Show 3 more」不再自行補上「...」；`Open the Swarm UI`、`Add to chat input` 這類以「動詞＋冠詞／介系詞」開頭的英文片語保留原文，不再只翻動詞而成為「開啟 the Swarm UI」；蜂群分頁標題改為「蜂群」，與關閉鈕一致；歷史對話列的標題比照側邊欄隔離，不經字典翻譯。
+- **主行程補丁補齊 v2.35.1 的改動**：
+  - 選單補上 `Reload`、`Force Reload`、`Substitutions`、`Speech` 等 10 個項目。
+  - `dist/remote/sshPrompts.js`：按鈕加上 class 後的新錨點、頁面語系、「Connecting to」提示，以及密碼、驗證碼、主機金鑰、ssh-agent 等提示標題。
+  - 新增通行金鑰掃碼視窗（`dist/cablev2.js`、`dist/qrEncoder.js`）、彈出視窗右鍵選單、視窗標題的安全標籤與連線資訊內容，以及 WSL 發行版已移除的訊息。
+  - `dist/remote/signInCallback.js` 的「Sign in again from Antigravity.」在 v2.35.1 出現兩次，原本只替換第一處，改為全部替換。
+  - 背景守護以已繁中化的 `app.asar` 重建時，`updater.js` 不再誤報「找不到插入點」。
+- **字典校訂**：
+  - 統一大小寫寫法不同、譯法卻不一致的詞條（繁中 40 組、簡中 20 組），並移除撐寬按鈕的英文括號譯名（如「極速模式 (Turbo Mode)」「匯出成品 (Artifact)」）。「New Tab」與「New tab」分屬動作與名稱，維持兩種譯法。
+  - 修正錯字與誤譯：「復製圖片」改為「複製圖片」、「結束登入」改為「登出」、「Side Question Selection」改為「針對選取內容側邊提問」；「Loading Antigravity」改回「正在載入 Antigravity」，保留品牌名（體例 4.3）。
+  - `scripts/compare_dicts.js` 新增重複鍵檢查：`JSON.parse` 遇到重複鍵只保留最後一個值，先寫的譯文會無聲失效。
+- **背景守護與還原捷徑**：
+  - `auto_localize_watcher.js` 在日誌超過 5 MB 時改名保留一份舊檔（`autolocalize.log.1`），避免每 5 分鐘一次的檢查讓日誌無限增長。
+  - `點兩下還原官方英文.command` 補上 Homebrew 路徑，並在 `sudo` 提權時保留 `PATH`，避免提權後找不到 `node`。
+- **發布相容性**：
+  - 本版修正多數位於 `src/preload_runtime.js` 與主行程補丁，需下載 `v3.8.1` 原始碼重新執行安裝才會完整生效；純翻譯資料包只帶入字典與 `rules/runtime_rules.json`。
+
 ## 3.8.0 — 2026-11-25
 
 - **全面適配 Antigravity v2.35.1 並接續上游進度**：

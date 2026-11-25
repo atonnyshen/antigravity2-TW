@@ -49,7 +49,26 @@
     const SKIP_TAGS = ['SCRIPT', 'STYLE', 'PRE', 'CODE', 'HEAD', 'LINK', 'META', 'NOSCRIPT'];
 
     // 代码、富文本输入框及对话内容隔离选择器：排除 Lexical 输入框、用户消息、AI 响应正文、思考内容、代码块、终端、文件路径及模型思考強度選項
-    const CODE_ISOLATION_SELECTOR = 'script, style, pre, code, .monaco-editor, .cm-editor, .cm-line, [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-lexical-editor], .terminal, .xterm, .code-line, .code-block, .line-content, [aria-label="File Viewer"], [aria-label="文件查看器"], [aria-label="檔案檢視器"], [data-file-uri], [data-uri], [class*="diffEditor"], .token, .hljs, [class*="mtk"], .font-mono, [data-quotable-inline="true"], .context-scope-mention, [data-mention-menu] [data-testid="menu-option-label"], [role="listbox"][aria-label="Mentions"] [data-testid="menu-option-label"], [data-testid="model-selector-effort-option"], [data-testid*="model-selector-effort"], [data-testid*="effort-option"], [data-testid="file-title-name"], [data-testid="entity-pill"], [data-project-card="true"], [data-testid="conversation-row-sidebar"] span.truncate, [translate="no"], .notranslate, .md-divider-spacing, .cursor-edit, [data-testid="user-input-step"] [data-quotable="true"], [data-testid="user-input-step"] .whitespace-pre-wrap, [data-testid="planner-response-text"], [data-testid="thinking-collapsible-trigger"] + div, [data-testid="thinking-collapsible-trigger"] ~ div, .msg-body, .sys-text, .node-label, .raw-meta .path, .o2-mauth, .hv-nm, .o2-wchip.bee > span:last-child, .o2-m[data-o2who]:not(.all) > span:last-child';
+    const CODE_ISOLATION_SELECTOR = 'script, style, pre, code, .monaco-editor, .cm-editor, .cm-line, [contenteditable="true"], [contenteditable="plaintext-only"], [contenteditable=""], [data-lexical-editor], .terminal, .xterm, .code-line, .code-block, .line-content, [aria-label="File Viewer"], [aria-label="文件查看器"], [aria-label="檔案檢視器"], [data-file-uri], [data-uri], [class*="diffEditor"], .token, .hljs, [class*="mtk"], .font-mono, [data-quotable-inline="true"], .context-scope-mention, [data-mention-menu] [data-testid="menu-option-label"], [role="listbox"][aria-label="Mentions"] [data-testid="menu-option-label"], [data-testid="model-selector-effort-option"], [data-testid*="model-selector-effort"], [data-testid*="effort-option"], [data-testid="file-title-name"], [data-testid="entity-pill"], [data-project-card="true"], [data-testid="conversation-row-sidebar"] span.truncate, [data-testid="conversation-row-history"] span.truncate, [translate="no"], .notranslate, .md-divider-spacing, .cursor-edit, [data-testid="user-input-step"] [data-quotable="true"], [data-testid="user-input-step"] .whitespace-pre-wrap, [data-testid="planner-response-text"], [data-testid="thinking-collapsible-trigger"] + div, [data-testid="thinking-collapsible-trigger"] ~ div, .msg-body, .sys-text, .node-label, .raw-meta .path, .o2-mauth, .hv-nm, .o2-wchip.bee > span:last-child, .o2-m[data-o2who]:not(.all) > span:last-child';
+
+    // 字型圖示容器：文字內容是圖示名稱，不是介面文字
+    const ICON_FONT_SELECTOR = '.google-symbols, .material-symbols-outlined, .material-symbols-rounded, .material-symbols-sharp, .material-icons';
+    // Antigravity 2.35.1 內建 SVG 表缺少、會退回字型渲染的圖示（由 main.js 圖示元件與 icon 屬性比對得出）
+    const ICON_FONT_FALLBACK_PATHS = {
+        restore_page: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
+        comment: ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],
+        format_quote: ['M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z', 'M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z'],
+        laptop_shield: ['M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16', 'M12 8l3 1.2v1.8c0 1.6-1.3 2.7-3 3.2-1.7-.5-3-1.6-3-3.2V9.2z']
+    };
+    // 權限預設膠囊鈕短標籤 [簡體, 繁體]
+    const PERMISSION_PILL_LABELS = {
+        'Request Review': ['请求审查', '請求審查'],
+        'Default': ['默认', '預設'],
+        'Auto': ['自动', '自動'],
+        'Turbo': ['极速', '極速'],
+        // 「Full machine」的短標籤；字典裡的 Machine 指雲端執行環境，不適用於此
+        'Machine': ['整机', '全機']
+    };
 
     function isCodeOrEditor(node) {
         try {
@@ -965,7 +984,8 @@
         [/^Yes, always allow (.+)$/i, (m, target) => USE_TW ? ("是，一律允許 " + target) : ("是，始终允许 " + target)],
         [/^(\d+) tools? enabled$/i, (m, num) => USE_TW ? (num + " 個工具已啟用") : (num + " 个工具已启用")],
         [/^Hide\s+tools$/i, () => "收起工具"],
-        [/^(\d+)\s+tools$/i, (m, num) => num + (USE_TW ? " 個工具" : " 个工具")],
+        [/^(\d+)\s+tools?$/i, (m, num) => num + (USE_TW ? " 個工具" : " 个工具")],
+        [/^(\d+)\s+tools?\s+·\s+sign in for more$/i, (m, num) => num + (USE_TW ? " 個工具 · 登入以取得更多" : " 个工具 · 登录以获取更多")],
         [/^(\d+)\s+tools?\s+excluded$/i, (m, num) => num + (USE_TW ? " 個工具已排除" : " 个工具已排除")],
         [/^Exceeded the rules token budget\.\s+Full rule content\s+\(([\d,]+)\s+tokens?\)\s+was replaced with a lightweight file-path pointer in context\.$/i, (m, num) => USE_TW ? ("已超出規則 Token 預算。完整規則內容 (" + num + " 個 Token) 已在上下文中換成輕量級檔案路徑指標。") : ("已超出规则 Token 预算。完整规则内容 (" + num + " 个 Token) 已在上下文中替换为轻量级文件路径指针。")],
         [/^All tools in this MCP server\s+\(([\d,]+)\s+tokens?\)\s+exceeded the customization budget and were excluded from context\.$/i, (m, num) => USE_TW ? ("此 MCP 伺服器中的所有工具 (" + num + " 個 Token) 均已超出自訂項預算，並已從上下文中排除。") : ("此 MCP 服务器中的所有工具 (" + num + " 个 Token) 均已超出自定义项预算，并已从上下文中排除。")],
@@ -1131,7 +1151,7 @@
         [/^(\d+)\s+Drafts?$/i, (m, n) => n + (USE_TW ? " 則草稿" : " 条草稿")],
         [/^Resume\s+(\d+)\s+comment drafts?$/i, (m, n) => USE_TW ? ("恢復 " + n + " 則評論草稿") : ("恢复 " + n + " 条评论草稿")],
         [/^Couldn't connect to\s+(.+)$/i, (m, rest) => (USE_TW ? "無法連線至 " : "无法连接到 ") + rest],
-        [/^Connecting to\s+(.+?)(\.\.\.|…)?$/i, (m, host) => (USE_TW ? "正在連線至 " : "正在连接到 ") + host + "..."],
+        [/^Connecting to\s+(.+?)(\.\.\.|…)?$/i, (m, host, ell) => (USE_TW ? "正在連線至 " : "正在连接到 ") + host + (ell || "")],
         [/^Connected to\s+(.+)$/i, (m, host) => (USE_TW ? "已連線至 " : "已连接到 ") + host],
         [/^SSH Config\s*\((.+)\)$/i, (m, cfg) => (USE_TW ? "SSH 設定 (" : "SSH 配置 (") + cfg + ")"],
         [/^(\d+)\s+hidden hosts?$/i, (m, n) => n + (USE_TW ? " 個已隱藏的主機" : " 个已隐藏的主机")],
@@ -1515,8 +1535,9 @@
             : ("找不到所选的" + translateNoun(n1) + "。请从" + translateNoun(n3) + "选择器中选择其他" + translateNoun(n2) + "以发送。")],
         [/^This (.+?) overrides your global permission settings\.$/i, (m, kind) => USE_TW ? ("此" + translateNoun(kind) + "會覆寫您的全域權限設定。") : ("此" + translateNoun(kind) + "会覆盖您的全局权限设置。")],
         [/^(.+?) needs (.+?) to use your computer\.$/i, (m, app, perms) => {
-            const pZh = perms.replace(/Accessibility/gi, USE_TW ? "輔助使用" : "辅助功能").replace(/Screen Recording/gi, USE_TW ? "螢幕錄製" : "屏幕录制").replace(/\bboth\b/gi, USE_TW ? "兩項權限" : "这两项权限");
-            return app + " 需要 " + pZh + (USE_TW ? " 權限才能操作您的電腦。" : " 权限才能控制您的电脑。");
+            if (/^both$/i.test(perms.trim())) return app + (USE_TW ? " 需要這兩項權限才能操作您的電腦。" : " 需要这两项权限才能控制您的电脑。");
+            const pZh = perms.replace(/Accessibility/gi, USE_TW ? "「輔助使用」" : "“辅助功能”").replace(/Screen Recording/gi, USE_TW ? "「螢幕錄製」" : "“屏幕录制”");
+            return app + " 需要" + pZh + (USE_TW ? "權限才能操作您的電腦。" : "权限才能控制您的电脑。");
         }],
         [/^Check if there is a typo in (.+?), or open the page in your external browser\.$/i, (m, h) => {
             const hZh = /^the address$/i.test(h.trim()) ? (USE_TW ? "網址" : "地址") : h.trim();
@@ -1675,7 +1696,14 @@
             try {
                 const regex = new RegExp(def.pattern, flags);
                 const transforms = (def.transforms && typeof def.transforms === 'object') ? def.transforms : null;
-                compiled.push([regex, match => tpl.replace(/\{([1-9])\}/g, (_w, idx) => applyRuleTransform(match[Number(idx)] || '', transforms && transforms[idx]))]);
+                // 模板中文字與填入的中文譯名相鄰時去掉中間半形空格（「移至 封存」→「移至封存」）；填入英文時保留盤古之白
+                compiled.push([regex, match => tpl.replace(/([㐀-鿿　-〿＀-￯]?)( ?)\{([1-9])\}( ?)(?=([㐀-鿿　-〿＀-￯]?))/g, (_w, before, preSpace, idx, postSpace, after) => {
+                    const val = applyRuleTransform(match[Number(idx)] || '', transforms && transforms[idx]);
+                    const cjk = /[㐀-鿿　-〿＀-￯]/;
+                    const pre = before && preSpace && cjk.test(val.charAt(0)) ? '' : preSpace;
+                    const post = after && postSpace && cjk.test(val.charAt(val.length - 1)) ? '' : postSpace;
+                    return before + pre + val + post;
+                })]);
             } catch {}
         }
         return compiled;
@@ -1694,6 +1722,9 @@
     }
 
     function translateAttrDynamic(t) {
+        // 「動詞＋冠詞／介系詞」開頭的是完整英文片語（Open the Swarm UI、Add to chat input），
+        // 只換掉動詞會變成「開啟 the Swarm UI」這種中英夾雜，寧可保留原文
+        if (/^[A-Za-z]+\s+(?:the|a|an|to|into|in|on|from|with|for|this|that|your|my|all|as|at|by|of)\s/i.test(t)) return null;
         return matchRuleList(JSON_ATTR_DYNAMIC_RULES, t);
     }
 
@@ -1873,9 +1904,10 @@
             return valNorm === 'Available for' ? (USE_TW ? "適用於 " : "适用于 ") : (USE_TW ? " 專案" : " 项目");
         }
         if ((valNorm === 'Inspect live bindings or record custom key chords filtered to' || valNorm === 'commands.') && pText.includes('antigravity.')) {
+            // 前後各有 React 的 " " 空白節點夾著 <code>antigravity.</code>，譯文本身不再加空格
             return valNorm === 'commands.'
-                ? (USE_TW ? " 指令的即時按鍵綁定或錄製自訂快速鍵組合。" : " 命令的实时按键绑定或录制自定义组合键。")
-                : (USE_TW ? "檢視或錄製篩選為 " : "查看或录制筛选为 ");
+                ? (USE_TW ? "指令。" : "命令。")
+                : (USE_TW ? "檢視目前生效的按鍵繫結，或錄製自訂按鍵組合，僅限" : "查看当前生效的按键绑定，或录制自定义组合键，仅限");
         }
         if ((valNorm === 'No hosts in' || valNorm === 'yet. Type one above.') && (pText.includes('Type one above') || pText.includes('可在上方輸入') || pText.includes('可在上方输入'))) {
             return valNorm === 'No hosts in'
@@ -1912,7 +1944,12 @@
             return USE_TW ? "尚無任何功能參照 (" : "未被任何功能引用 (";
         }
         if (valNorm === 'Messages now send immediately. Configure in') {
-            return USE_TW ? '訊息現已改為立即傳送。可在 ' : '消息现已改为立即发送。可在 ';
+            return USE_TW ? '訊息現已改為立即傳送。可在' : '消息现已改为立即发送。可在';
+        }
+        // 「Configure in <settings>.」的句點與連結同在 whitespace-nowrap 的 span 內
+        const msgHead = p.parentElement && p.parentElement.firstChild;
+        if (valNorm === '.' && msgHead && msgHead.nodeType === Node.TEXT_NODE && /^(?:Messages now send immediately|訊息現已改為立即傳送|消息现已改为立即发送)/.test((msgHead.nodeValue || '').trim())) {
+            return USE_TW ? '中調整。' : '中调整。';
         }
         if (valNorm === 'In System Settings, click') {
             return USE_TW ? '在「系統設定」中，按一下 ' : '在“系统设置”中，点击 ';
@@ -1922,6 +1959,38 @@
         }
         if (valNorm === 'Already on? Select') {
             return USE_TW ? '已經開啟？請選取 ' : '已经开启？请选择 ';
+        }
+        // macOS 權限引導句（電腦操作權限狀態列）：React Fragment 把句子拆成文字節點與 <strong>App</strong>／<strong>+</strong>
+        if (typeof p.getAttribute === 'function' && p.getAttribute('role') === 'status' && /System Settings|系統設定|系统设置/.test(pText)) {
+            const guide = {
+                ". If it isn't in the list, drag it in from the small window next to System Settings.": ['。如果列表中没有，请从“系统设置”旁的小窗口将它拖入。', '。如果清單中沒有，請從「系統設定」旁的小視窗將它拖曳進來。'],
+                ', choose': ['，选择', '，選取'],
+                ', then turn it on.': ['，然后将其开启。', '，然後將它開啟。'],
+                ', click': ['，点击 ', '，按一下 '],
+                ', then': ['，然后', '，然後'],
+                'drag it back in from the small window.': ['从小窗口将它重新拖入。', '從小視窗將它重新拖曳進來。'],
+                'click': ['点击 ', '按一下 '],
+                'and add it again.': [' 重新添加。', ' 重新加入。']
+            };
+            if (Object.prototype.hasOwnProperty.call(guide, valNorm)) return guide[valNorm][USE_TW ? 1 : 0];
+        }
+        // 自動化排程摘要：<b>Weekly</b> on <b>Monday</b> around <b>9:00 AM</b>
+        if ((valNorm === 'around' || valNorm === 'on') && typeof p.querySelector === 'function' && p.querySelector('.font-semibold') &&
+            /^(?:Daily|Weekdays|Weekly|每天|平日|工作日|每週|每周)/.test(pText.trim())) {
+            return valNorm === 'around' ? (USE_TW ? '約' : '约') : '';
+        }
+        // 宣告權限說明句結尾：「…which you can change anytime in the <project> settings page.」
+        if (valNorm === 'settings page.' && /its own permissions|獨立權限|独立权限/.test(pText)) {
+            return USE_TW ? '設定頁面中變更。' : '设置页面中更改。';
+        }
+        // 外掛程式詳細頁找不到項目：「No plugin found for <code>id</code>.」（前半句由字典翻譯）
+        if (valNorm === '.' && typeof p.querySelector === 'function' && p.querySelector('.font-mono') &&
+            /^(?:No (?:app|plugin|bundle) found for|找不到(?:應用程式|外掛程式)|未找到(?:应用|插件))/.test(pText.trim())) {
+            return '。';
+        }
+        // 執行中項目批次選取列：「3 selected」
+        if (valNorm === 'selected' && typeof p.closest === 'function' && p.closest('[data-testid="running-selection-bar"]')) {
+            return USE_TW ? ' 項已選取' : ' 项已选中';
         }
         if (valNorm === 'Only for' && (pText.includes('overrides Global') || pText.includes('覆盖全局') || pText.includes('覆寫全域'))) {
             return USE_TW ? "僅針對 " : "仅针对 ";
@@ -2012,12 +2081,6 @@
             if (valNorm === 'No sites match "' || originalVal.startsWith('No sites match')) return USE_TW ? '找不到符合「' : '未找到匹配“';
             if (valNorm === '".' || originalVal === '\u201d.') return USE_TW ? '」的網站。' : '”的站点。';
         }
-        if (pText.includes('Inspect live bindings or record custom key chords filtered to')) {
-            if (valNorm === 'Inspect live bindings or record custom key chords filtered to') {
-                return USE_TW ? '檢視即時繫結或錄製僅篩選 ' : '查看实时绑定或录制筛选范围限定为 ';
-            }
-            if (valNorm === 'commands.') return USE_TW ? ' 指令的自訂按鍵組合。' : ' 命令的自定义快捷键组合。';
-        }
         if (valNorm === 'Layout' && p.parentElement && p.parentElement.hasAttribute && p.parentElement.hasAttribute('data-agy-layout-bar')) {
             return USE_TW ? '版面配置' : '布局';
         }
@@ -2057,6 +2120,40 @@
         return replaced ? out + text.slice(pos) : null;
     }
 
+    // React 會把相鄰字串之間的 " " 拆成獨立文字節點；兩側譯成中文後收掉這個空白（中文字之間不留空格）
+    const CJK_TAIL = /[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]$/;
+    const CJK_HEAD = /^[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]/;
+    function gapNeighborText(n) {
+        if (!n) return null;
+        if (n.nodeType === Node.TEXT_NODE) return n.nodeValue || '';
+        // 只看行內小元素（<strong>、連結按鈕），避免對大型容器計算 textContent
+        if (n.nodeType === Node.ELEMENT_NODE && n.childElementCount <= 2) return n.textContent || '';
+        return null;
+    }
+    function isGapFiller(n) {
+        return n && (n.nodeType === Node.COMMENT_NODE || (n.nodeType === Node.TEXT_NODE && !n.nodeValue));
+    }
+    function collapseCjkGap(node) {
+        let prev = node.previousSibling;
+        let skippedText = false;
+        while (isGapFiller(prev)) {
+            if (prev.nodeType === Node.TEXT_NODE) skippedText = true;
+            prev = prev.previousSibling;
+        }
+        const before = gapNeighborText(prev);
+        if (!before || !CJK_TAIL.test(before)) return;
+        let next = node.nextSibling;
+        while (next && next.nodeType === Node.COMMENT_NODE) next = next.nextSibling;
+        if (!next || gapNeighborText(next) === null) return;
+        // 兩側都是元素（例如並排的兩個連結或按鈕）時，這個空白是分隔用的，保留
+        if (!skippedText && prev.nodeType !== Node.TEXT_NODE && next.nodeType !== Node.TEXT_NODE) return;
+        translateNode(next);
+        if (CJK_HEAD.test(gapNeighborText(next) || '')) {
+            translatedValues.set(node, '');
+            node.nodeValue = '';
+        }
+    }
+
     function translateNode(node) {
         try {
             if (!node) return;
@@ -2093,6 +2190,9 @@
                                 newAttr = USE_TW ? '版面配置' : '布局';
                             }
                         }
+                        if (!newAttr && attr === 'title' && t === 'Swarm' && node.classList && node.classList.contains('agy-aux-tab-title')) {
+                            newAttr = '蜂群';
+                        }
                         if (!newAttr) {
                             if (isFilePathOrUri(t)) continue;
                             newAttr = translateExactOrDynamic(t) || translateAttrDynamic(t);
@@ -2116,23 +2216,25 @@
 
                 // 处理 FastPick / 列表底部的 "Show <N> more..." 复合节点
                 const elText = node.textContent ? node.textContent.trim() : '';
+                // 省略號跟著原文：「Show 3 more」不補「...」，「Show 3 more…」保留原本的省略號字元
                 if (/^Show\s+\d+\s+more(?:\.\.\.|…)?$/i.test(elText)) {
                     const textChildren = Array.from(node.childNodes).filter(c => c.nodeType === Node.TEXT_NODE);
                     if (textChildren.length >= 2) {
                         for (const tc of textChildren) {
                             const v = tc.nodeValue;
+                            const moreTail = v.trim().match(/^more(\.\.\.|…)?$/i);
                             if (v === 'Show ' || norm(v) === 'Show') {
                                 tc.nodeValue = USE_TW ? '顯示另外 ' : '显示另外 ';
                                 translatedValues.set(tc, tc.nodeValue);
-                            } else if (v === ' more...' || v === ' more…' || norm(v) === 'more...') {
-                                tc.nodeValue = USE_TW ? ' 個...' : ' 个...';
+                            } else if (moreTail) {
+                                tc.nodeValue = (USE_TW ? ' 個' : ' 个') + (moreTail[1] || '');
                                 translatedValues.set(tc, tc.nodeValue);
                             }
                         }
                     } else if (textChildren.length === 1 && node.childNodes.length === 1) {
-                        const m = elText.match(/^Show\s+(\d+)\s+more(?:\.\.\.|…)?$/i);
+                        const m = elText.match(/^Show\s+(\d+)\s+more(\.\.\.|…)?$/i);
                         if (m) {
-                            textChildren[0].nodeValue = USE_TW ? ('顯示另外 ' + m[1] + ' 個...') : ('显示另外 ' + m[1] + ' 个...');
+                            textChildren[0].nodeValue = (USE_TW ? ('顯示另外 ' + m[1] + ' 個') : ('显示另外 ' + m[1] + ' 个')) + (m[2] || '');
                             translatedValues.set(textChildren[0], textChildren[0].nodeValue);
                         }
                     }
@@ -2218,6 +2320,10 @@
                 if (isCodeOrEditor(node)) return;
 
                 let originalVal = node.nodeValue;
+                if (originalVal === ' ') {
+                    collapseCjkGap(node);
+                    return;
+                }
                 if (!originalVal || originalVal.trim().length < 1) return;
 
                 if (translatedValues.get(node) !== originalVal) {
@@ -2241,8 +2347,9 @@
                         translatedValues.set(node, node.nodeValue);
                         return;
                     }
-                    if (originalVal === ' more...' || originalVal === ' more…' || norm(originalVal) === 'more...') {
-                        node.nodeValue = USE_TW ? ' 個...' : ' 个...';
+                    const moreTail = originalVal.trim().match(/^more(\.\.\.|…)?$/i);
+                    if (moreTail) {
+                        node.nodeValue = (USE_TW ? ' 個' : ' 个') + (moreTail[1] || '');
                         translatedValues.set(node, node.nodeValue);
                         return;
                     }
@@ -2283,18 +2390,27 @@
                     return;
                 }
 
-                // Material Symbol 字体缺失图标修复（保留 React TextNode 避免遍历失同步）
-                if (valNorm === 'restore_page' && node.parentElement && (
-                    (typeof node.parentElement.classList?.contains === 'function' && node.parentElement.classList.contains('google-symbols')) ||
-                    (typeof node.parentElement.className === 'string' && node.parentElement.className.includes('google-symbols'))
-                )) {
-                    const iconHost = node.parentElement;
-                    if (!iconHost.querySelector?.('svg[data-ag-restore-icon]') && typeof document !== 'undefined' && typeof document.createElementNS === 'function') {
+                // 字型圖示（ligature）文字：Antigravity 2.35.1 未載入 Google Symbols 字型，
+                // 內建 SVG 表缺少的圖示會以圖示名稱純文字顯示。已知缺口改畫 SVG，
+                // 其餘圖示名稱一律不翻譯，避免 "comment" 之類被字典譯成中文（保留 React TextNode 避免遍歷失同步）
+                const iconHost = node.parentElement && typeof node.parentElement.matches === 'function' && node.parentElement.matches(ICON_FONT_SELECTOR)
+                    ? node.parentElement
+                    : null;
+                if (iconHost) {
+                    const oldSvg = Array.from(iconHost.children || []).find(c => c.hasAttribute && c.hasAttribute('data-ag-icon-fallback'));
+                    if (oldSvg && oldSvg.getAttribute('data-ag-icon-fallback') !== valNorm) oldSvg.remove();
+                    const paths = Object.prototype.hasOwnProperty.call(ICON_FONT_FALLBACK_PATHS, valNorm) ? ICON_FONT_FALLBACK_PATHS[valNorm] : null;
+                    if (!paths || typeof document === 'undefined' || typeof document.createElementNS !== 'function') {
+                        unchangedTextValues.set(node, originalVal);
+                        return;
+                    }
+                    if (!oldSvg || oldSvg.getAttribute('data-ag-icon-fallback') !== valNorm) {
+                        const px = String(parseFloat(iconHost.style?.fontSize) || 16);
                         const svgNs = 'http://www.w3.org/2000/svg';
                         const svg = document.createElementNS(svgNs, 'svg');
-                        svg.setAttribute('data-ag-restore-icon', '1');
-                        svg.setAttribute('width', '16');
-                        svg.setAttribute('height', '16');
+                        svg.setAttribute('data-ag-icon-fallback', valNorm);
+                        svg.setAttribute('width', px);
+                        svg.setAttribute('height', px);
                         svg.setAttribute('viewBox', '0 0 24 24');
                         svg.setAttribute('fill', 'none');
                         svg.setAttribute('stroke', 'currentColor');
@@ -2303,7 +2419,7 @@
                         svg.setAttribute('stroke-linejoin', 'round');
                         svg.setAttribute('class', 'shrink-0');
                         svg.setAttribute('style', 'display:inline-block;vertical-align:middle');
-                        for (const d of ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5']) {
+                        for (const d of paths) {
                             const pSvg = document.createElementNS(svgNs, 'path');
                             pSvg.setAttribute('d', d);
                             svg.appendChild(pSvg);
@@ -2312,6 +2428,21 @@
                     }
                     translatedValues.set(node, '');
                     node.nodeValue = '';
+                    return;
+                }
+
+                // 輸入框底部權限預設膠囊鈕為 shrink-0 + whitespace-nowrap，雙語括號譯名會擠壓同列的模型選擇鈕，改用短標籤
+                if (Object.prototype.hasOwnProperty.call(PERMISSION_PILL_LABELS, valNorm) && node.parentElement?.closest?.('[data-testid="permissions-selector-trigger"]')) {
+                    const pillLabel = PERMISSION_PILL_LABELS[valNorm][USE_TW ? 1 : 0];
+                    translatedValues.set(node, pillLabel);
+                    node.nodeValue = pillLabel;
+                    return;
+                }
+
+                // 側邊分頁的蜂群分頁標題固定為 "Swarm"；字典刻意不收這個字（避免 /swarm 指令被翻），這裡單獨處理以和關閉鈕「關閉蜂群」一致
+                if (valNorm === 'Swarm' && node.parentElement?.closest?.('.agy-aux-tab-title')) {
+                    translatedValues.set(node, '蜂群');
+                    node.nodeValue = '蜂群';
                     return;
                 }
 

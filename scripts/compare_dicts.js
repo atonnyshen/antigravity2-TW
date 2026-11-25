@@ -104,6 +104,19 @@ function validateTraditionalText(tcVal, label) {
     return ok;
 }
 
+function findDuplicateKeys(rawText) {
+    const seen = new Set();
+    const duplicates = [];
+    for (const line of rawText.split('\n')) {
+        const m = line.match(/^\s*("(?:[^"\\]|\\.)*")\s*:/);
+        if (!m) continue;
+        const key = JSON.parse(m[1]);
+        if (seen.has(key)) duplicates.push(key);
+        else seen.add(key);
+    }
+    return duplicates;
+}
+
 function compareRules(targetRulesDir) {
     if (!targetRulesDir || !fs.existsSync(targetRulesDir)) return true;
     let hasError = false;
@@ -169,8 +182,18 @@ function compareDicts(targetDictsDir = dictsDir, targetDictsTwDir = dictsTwDir, 
         }
         
         try {
-            const scData = JSON.parse(fs.readFileSync(scFilePath, 'utf8'));
-            const tcData = JSON.parse(fs.readFileSync(tcFilePath, 'utf8'));
+            const scRaw = fs.readFileSync(scFilePath, 'utf8');
+            const tcRaw = fs.readFileSync(tcFilePath, 'utf8');
+            const scData = JSON.parse(scRaw);
+            const tcData = JSON.parse(tcRaw);
+
+            // JSON.parse 遇到重複鍵只保留最後一個值，前面的譯文會無聲失效
+            for (const [label, raw] of [[`dicts/${file}`, scRaw], [`dicts_tw/${file}`, tcRaw]]) {
+                for (const key of findDuplicateKeys(raw)) {
+                    console.error(`Error in ${label}: Key "${key}" is defined more than once; only the last value takes effect.`);
+                    hasError = true;
+                }
+            }
 
             if (!scData || typeof scData !== 'object' || Array.isArray(scData)) {
                 console.error(`Error in dicts/${file}: Root JSON value must be a plain object.`);

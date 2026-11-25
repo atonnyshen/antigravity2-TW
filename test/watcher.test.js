@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { checkAndLocalizeApp, exchangeAsar, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir, recipeHash } = require('../auto_localize_watcher');
+const { checkAndLocalizeApp, exchangeAsar, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir, recipeHash, rotateLogs } = require('../auto_localize_watcher');
 
 function fixture(t) {
     const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-watcher-'));
@@ -638,5 +638,17 @@ test('watcher removes .autolocalize temp dirs from appPath before sign runs', t 
     assert.deepEqual(rollbackSeen, [[], []]);
 });
 
-
-
+test('rotateLogs keeps one previous log once the size limit is exceeded and leaves small logs alone', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-watcher-log-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const big = path.join(root, 'big.log');
+    const small = path.join(root, 'small.log');
+    fs.writeFileSync(big + '.1', 'older rotation');
+    fs.writeFileSync(big, 'x'.repeat(64));
+    fs.writeFileSync(small, 'ok');
+    rotateLogs([big, small, path.join(root, 'missing.log')], 32);
+    assert.equal(fs.existsSync(big), false);
+    assert.equal(fs.readFileSync(big + '.1', 'utf8'), 'x'.repeat(64));
+    assert.equal(fs.readFileSync(small, 'utf8'), 'ok');
+    assert.equal(fs.existsSync(small + '.1'), false);
+});

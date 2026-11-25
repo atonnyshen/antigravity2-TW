@@ -1,7 +1,7 @@
 {
   "Loading...": "加载中...",
-  "Loading Antigravity": "反重力引擎已启动，正在摆脱地心引力...",
-  "Loading Antigravity...": "反重力引擎已启动，正在摆脱地心引力...",
+  "Loading Antigravity": "正在加载 Antigravity",
+  "Loading Antigravity...": "正在加载 Antigravity...",
   "Projects": "项目列表",
   "No items found": "未找到项",
   "No matching results": "没有匹配的结果",
@@ -332,7 +332,7 @@
   "Split Right": "向右拆分",
   "Split Down": "向下拆分",
   "Replace With New": "替换为新会话",
-  "Remove From Split": "退出拆分",
+  "Remove From Split": "从拆分视图中移除",
   "Show in File Explorer": "在文件资源管理器中显示",
   "Reveal in Finder": "在访达中显示",
   "Show in File Manager": "在文件管理器中显示",

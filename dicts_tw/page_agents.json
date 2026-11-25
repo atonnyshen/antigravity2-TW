@@ -18,7 +18,7 @@
   "Running": "執行中",
   "Stopped": "已停止",
   "Idle": "閒置",
-  "In Progress": "處理中",
+  "In Progress": "進行中",
   "Automation": "自動化",
   "No Custom Agents or Plugins": "尚無自訂代理或外掛程式",
   "No subagents": "尚無子代理",

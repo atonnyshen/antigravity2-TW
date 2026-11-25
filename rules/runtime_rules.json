@@ -836,6 +836,57 @@
       "flags": "i",
       "sc": "第 {2} 页的 {1} 批注",
       "tw": "第 {2} 頁的 {1} 註解"
+    },
+    {
+      "id": "show-n-more-subagents",
+      "pattern": "^Show (\\d+) more subagents?$",
+      "flags": "i",
+      "sc": "显示另外 {1} 个子代理",
+      "tw": "顯示另外 {1} 個子代理"
+    },
+    {
+      "id": "plus-n-more-show-all",
+      "pattern": "^\\+(\\d+) more \\(Show all\\)$",
+      "flags": "i",
+      "sc": "另外 +{1} 项（显示全部）",
+      "tw": "另外 +{1} 項（顯示全部）"
+    },
+    {
+      "id": "stop-n-items-confirm",
+      "pattern": "^Stop (\\d+) items?\\?$",
+      "flags": "i",
+      "sc": "确定要停止 {1} 个项目吗？",
+      "tw": "確定要停止 {1} 個項目嗎？"
+    },
+    {
+      "id": "relaunch-finish-screen-recording",
+      "pattern": "^Relaunch (.+?) to finish Screen Recording\\.$",
+      "flags": "i",
+      "sc": "请重新启动 {1} 以完成“屏幕录制”设置。",
+      "tw": "請重新啟動 {1} 以完成「螢幕錄製」設定。"
+    },
+    {
+      "id": "agents-created-by-automation-toast",
+      "pattern": "^Agents created by this automation run in a dedicated (.+?) with its own permissions\\. You can change the permissions in the (.+?) settings page\\.$",
+      "flags": "i",
+      "transforms": { "1": "lookupOrKeep", "2": "lookupOrKeep" },
+      "sc": "此自动化创建的智能体会在专用的 {1} 中运行，并拥有独立权限。您可以在 {2} 设置页面中更改权限。",
+      "tw": "此自動化建立的代理會在專用的 {1} 中執行，並擁有獨立權限。您可以在 {2} 設定頁面中變更權限。"
+    },
+    {
+      "id": "agents-created-by-entity-toast",
+      "pattern": "^Agents created by this (.+?) run in a dedicated (.+?) with its own permissions\\. You can change the permissions in the (.+?) settings page\\.$",
+      "flags": "i",
+      "transforms": { "1": "lookupOrKeep", "2": "lookupOrKeep", "3": "lookupOrKeep" },
+      "sc": "此 {1} 创建的智能体会在专用的 {2} 中运行，并拥有独立权限。您可以在 {3} 设置页面中更改权限。",
+      "tw": "此 {1} 建立的代理會在專用的 {2} 中執行，並擁有獨立權限。您可以在 {3} 設定頁面中變更權限。"
+    },
+    {
+      "id": "see-doc-link",
+      "pattern": "^See (.+?): (https?://\\S+)$",
+      "flags": "i",
+      "sc": "请参阅 {1}：{2}",
+      "tw": "請參閱 {1}：{2}"
     }
   ],
   "attrDynamicRules": [

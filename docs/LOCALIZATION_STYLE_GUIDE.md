@@ -1,6 +1,6 @@
 # Antigravity 繁體中文在地化文字規範與體例指南 (Localization Style Guide)
 
-> **版本**：v3.8.0（適配 Antigravity v2.35.1；純翻譯包 `schemaVersion: 2`）  
+> **版本**：v3.8.1（適配 Antigravity v2.35.1；純翻譯包 `schemaVersion: 2`）  
 > **維護依據**：Antigravity 繁體中文翻譯規範、L0 中文輸出底線層、老編輯統一出版體例、Jserv《[資訊科技詞彙翻譯](https://hackmd.io/@sysprog/it-vocabulary)》（僅採 Domain Profile 資工分艙與四項跨領域方法論，不擴散至非科技文本）、台灣軟體在地化業界行規（Apple / Google / Microsoft / VS Code zh-TW）  
 > **適用範圍**：所有靜態字典檔（`dicts_tw/*.json`、`dicts/*.json`）、核心執行期腳本（`src/preload_runtime.js`、`localization_engine.js`）及自動化守護程序
 
@@ -275,10 +275,10 @@ Slash 指令名稱保持英文字串，但其輔助說明文字一律採用精�
 3. **封裝純翻譯資料包（Release Assets 唯一允許產物）**：
    ```bash
    node scripts/build_translation_pack.js \
-     --version 3.8.0 \
+     --version 3.8.1 \
      --min-engine 3.7.3 \
-     --max-engine 3.8.0 \
-     --output dist/antigravity2-TW-translations-v3.8.0.zip
+     --max-engine 3.8.1 \
+     --output dist/antigravity2-TW-translations-v3.8.1.zip
    ```
    *注意*：完整發布規範與 Draft Preflight 稽核詳見 [`docs/RELEASING.md`](./RELEASING.md)，嚴禁將可執行程式碼 ZIP 上傳至 Release Assets。
 

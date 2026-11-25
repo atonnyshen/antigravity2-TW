@@ -62,6 +62,26 @@ function log(message) {
     }
 }
 
+// 排程每 5 分鐘執行一次，日誌超過上限時改名保留一份舊檔，避免無限增長。
+// launchd 每次啟動都會重新開啟 StandardOutPath，所以改名後下一輪會寫入新檔。
+const LOG_ROTATE_BYTES = 5 * 1024 * 1024;
+function watcherLogPaths() {
+    const paths = [path.join(DIR, 'autolocalize.log')];
+    if (IS_MAC) {
+        paths.push(ROOT
+            ? '/Library/Logs/Antigravity2TW/autolocalize.log'
+            : path.join(os.homedir(), 'Library', 'Logs', 'Antigravity2TW', 'autolocalize.log'));
+    }
+    return paths;
+}
+function rotateLogs(candidates = watcherLogPaths(), limit = LOG_ROTATE_BYTES) {
+    for (const lp of candidates) {
+        try {
+            if (fs.statSync(lp).size > limit) fs.renameSync(lp, lp + '.1');
+        } catch {}
+    }
+}
+
 function digest(data) {
     return crypto.createHash('sha256').update(data).digest('hex');
 }
@@ -1310,6 +1330,7 @@ async function main() {
 
     try {
         if (fs.existsSync(path.join(DIR, '.disable_autowatcher'))) return;
+        rotateLogs();
         const appInfo = getAppInfo();
         if (!appInfo) { log('尚未找到 Antigravity，等待下次排程。'); return; }
         checkAndLocalizeApp(appInfo);
@@ -1339,6 +1360,7 @@ module.exports = {
     exchangeAsar,
     exchangeCheckedAsar,
     waitForStableFile,
+    rotateLogs,
     acquireLock,
     isLocalized,
     digest,

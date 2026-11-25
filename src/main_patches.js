@@ -207,7 +207,17 @@ function patchMenuJs(menuContent, useTw) {
         'Delete': '刪除',
         'Bring All to Front': '將此程式所有視窗移至最前',
         'Close Window': '關閉視窗',
-        'Version': '版本'
+        'Version': '版本',
+        'Reload': '重新載入',
+        'Force Reload': '強制重新載入',
+        'Substitutions': '替代',
+        'Show Substitutions': '顯示替代',
+        'Smart Quotes': '智慧型引號',
+        'Smart Dashes': '智慧型破折號',
+        'Text Replacement': '文字替代',
+        'Speech': '語音',
+        'Start Speaking': '開始朗讀',
+        'Stop Speaking': '停止朗讀'
     }` : `{
         'File': '文件',
         'Edit': '编辑',
@@ -264,7 +274,17 @@ function patchMenuJs(menuContent, useTw) {
         'Delete': '删除',
         'Bring All to Front': '前置全部窗口',
         'Close Window': '关闭窗口',
-        'Version': '版本'
+        'Version': '版本',
+        'Reload': '重新加载',
+        'Force Reload': '强制重新加载',
+        'Substitutions': '替换',
+        'Show Substitutions': '显示替换',
+        'Smart Quotes': '智能引号',
+        'Smart Dashes': '智能破折号',
+        'Text Replacement': '文本替换',
+        'Speech': '语音',
+        'Start Speaking': '开始朗读',
+        'Stop Speaking': '停止朗读'
     }`};
     function translateMenu(items) {
         for (const item of items) {
@@ -476,6 +496,9 @@ function patchUpdaterJs(updaterContent, useTw) {
         .replace('MenuUpdateStep["RestartToUpdate"] = "Restart to Update";', `MenuUpdateStep["RestartToUpdate"] = ${useTw ? '"重新啟動以更新"' : '"重启以更新"'};`);
     if (out !== updaterContent) {
         console.log(`[修改] 更新弹窗汉化注入成功！`);
+    } else if (updaterContent.includes(`MenuUpdateStep["CheckForUpdates"] = ${useTw ? '"檢查更新"' : '"检查更新"'};`)) {
+        // 背景守護以已漢化的 app.asar 重建時會走到這裡，不是插入點遺失
+        console.log(`[修改] 更新弹窗已是汉化版本，无需重复注入。`);
     } else {
         console.warn(`[警告] 未能在 updater.js 中找到更新弹窗插入点。`);
     }
@@ -520,6 +543,7 @@ function patchMainJs(mainContent, useTw) {
              .replace(/dialog\.showErrorBox\('WSL setup failed'/g, useTw ? "dialog.showErrorBox('WSL 設定失敗'" : "dialog.showErrorBox('WSL 设置失败'")
              .replace(/dialog\.showErrorBox\('Startup failed'/g, useTw ? "dialog.showErrorBox('啟動失敗'" : "dialog.showErrorBox('启动失败'")
              .replace(/title:\s*'WSL distro not found'/g, useTw ? "title: '找不到 WSL 發行版'" : "title: '未找到 WSL 发行版'")
+             .replace(/message:\s*`The WSL distro "\$\{WSL_DISTRO\}" is no longer installed\.`/g, useTw ? "message: `WSL 發行版「${WSL_DISTRO}」已不在此電腦上。`" : "message: `WSL 发行版“${WSL_DISTRO}”已不在此电脑上。`")
              .replace(/detail:\s*'Antigravity opened on Windows instead\.'/g, useTw ? "detail: 'Antigravity 已改在 Windows 上開啟。'" : "detail: 'Antigravity 已改为在 Windows 上打开。'");
 
     console.log(`[修改] 主行程對話框漢化注入成功！`);
@@ -598,10 +622,24 @@ function patchSshPromptsJs(spContent, useTw) {
     let out = spContent;
     out = out.replace(/Asked again: your last answer may not have worked\./g, useTw ? '再次詢問：您上次的輸入可能未通過驗證。' : '再次询问：您上次的输入可能未通过验证。')
              .replace(/That's too long\./g, useTw ? '輸入內容過長。' : '输入内容过长。')
-             .replace(/<button id="cancel">Cancel<\/button><button id="continue">Continue<\/button>/g, useTw ? '<button id="cancel">取消</button><button id="continue">繼續</button>' : '<button id="cancel">取消</button><button id="continue">继续</button>')
+             .replace(/<button id="cancel"((?: class="[^"]*")?)>Cancel<\/button><button id="continue"((?: class="[^"]*")?)>Continue<\/button>/g, useTw ? '<button id="cancel"$1>取消</button><button id="continue"$2>繼續</button>' : '<button id="cancel"$1>取消</button><button id="continue"$2>继续</button>')
              .replace(/`\$\{label\} asks:`/g, useTw ? '`${label} 請求確認：`' : '`${label} 请求确认：`')
              .replace(/'Touch your security key'/g, useTw ? "'請輕觸您的安全性金鑰'" : "'请轻触您的安全密钥'")
-             .replace(/buttons:\s*confirm\s*\?\s*\['Yes',\s*'No'\]\s*:\s*\['Cancel'\]/g, useTw ? "buttons: confirm ? ['是', '否'] : ['取消']" : "buttons: confirm ? ['是', '否'] : ['取消']");
+             .replace(/buttons:\s*confirm\s*\?\s*\['Yes',\s*'No'\]\s*:\s*\['Cancel'\]/g, useTw ? "buttons: confirm ? ['是', '否'] : ['取消']" : "buttons: confirm ? ['是', '否'] : ['取消']")
+             // 2.35.1 起：頁面語系、連線中提示，以及依提示內容產生的標題
+             .replace(/<html lang="en"/g, useTw ? '<html lang="zh-TW"' : '<html lang="zh-CN"')
+             .replace(/<p class="context">Connecting to <span id="label"><\/span><\/p>/g, useTw ? '<p class="context">正在連線至 <span id="label"></span></p>' : '<p class="context">正在连接到 <span id="label"></span></p>')
+             .replace(/`Trust \$\{hostName\(host\.split\(' \('\)\[0\]\)\}\?`/g, () => useTw ? "`要信任 ${hostName(host.split(' (')[0])} 嗎？`" : "`要信任 ${hostName(host.split(' (')[0])} 吗？`")
+             .replace(/`Connect to \$\{hostName\(host\)\} anyway\?`/g, () => useTw ? '`仍要連線至 ${hostName(host)} 嗎？`' : '`仍要连接到 ${hostName(host)} 吗？`')
+             .replace(/return 'Accept updated host keys\?';/g, () => useTw ? "return '要接受更新後的主機金鑰嗎？';" : "return '要接受更新后的主机密钥吗？';")
+             .replace(/`Add \$\{baseName\(key\.split\(' \('\)\[0\]\)\} to ssh-agent\?`/g, () => useTw ? "`要將 ${baseName(key.split(' (')[0])} 加入 ssh-agent 嗎？`" : "`要将 ${baseName(key.split(' (')[0])} 添加到 ssh-agent 吗？`")
+             .replace(/return `Question from \$\{who\}`;/g, () => useTw ? 'return `來自 ${who} 的問題`;' : 'return `来自 ${who} 的问题`;')
+             .replace(/return `Verification code for \$\{who\}`;/g, () => useTw ? 'return `${who} 的驗證碼`;' : 'return `${who} 的验证码`;')
+             .replace(/return `Password for \$\{who\}`;/g, () => useTw ? 'return `${who} 的密碼`;' : 'return `${who} 的密码`;')
+             .replace(/\? `PIN for \$\{who\}` : `Sign in to \$\{who\}`;/g, () => useTw ? '? `${who} 的 PIN 碼` : `登入 ${who}`;' : '? `${who} 的 PIN 码` : `登录 ${who}`;')
+             .replace(/`\$\{asked\[0\]\} for \$\{hostPromptsMarked \? asked\[1\] : label\}`/g, () => useTw
+                 ? "((what, who) => ({ 'Password': `${who} 的密碼`, 'Current password': `${who} 的目前密碼`, 'New password': `${who} 的新密碼`, 'Confirm new password': `再次輸入 ${who} 的新密碼`, 'Passphrase': `${who} 的金鑰密碼`, 'PIN': `${who} 的 PIN 碼` })[what] ?? `${what} for ${who}`)(asked[0], hostPromptsMarked ? asked[1] : label)"
+                 : "((what, who) => ({ 'Password': `${who} 的密码`, 'Current password': `${who} 的当前密码`, 'New password': `${who} 的新密码`, 'Confirm new password': `再次输入 ${who} 的新密码`, 'Passphrase': `${who} 的密钥口令`, 'PIN': `${who} 的 PIN 码` })[what] ?? `${what} for ${who}`)(asked[0], hostPromptsMarked ? asked[1] : label)");
     console.log(`[修改] SSH 驗證提示漢化注入成功！`);
     return out;
 }
@@ -634,7 +672,31 @@ function patchWebviewPopupSecurityJs(wpsContent, useTw) {
     const out = wpsContent
         .replace(/label:\s*'Connection info…'/g, useTw ? "label: '連線資訊…'" : "label: '连接信息…'")
         .replace(/title:\s*'Connection info'/g, useTw ? "title: '連線資訊'" : "title: '连接信息'")
-        .replace(/buttons:\s*\['OK'\]/g, useTw ? "buttons: ['確定']" : "buttons: ['确定']");
+        .replace(/buttons:\s*\['OK'\]/g, useTw ? "buttons: ['確定']" : "buttons: ['确定']")
+        // 彈出視窗右鍵選單：Electron 的 role 預設標籤是英文
+        .replace(/\{ role: 'cut', enabled: canCut \}/g, useTw ? "{ role: 'cut', label: '剪下', enabled: canCut }" : "{ role: 'cut', label: '剪切', enabled: canCut }")
+        .replace(/\{ role: 'copy', enabled: canCopy \}/g, useTw ? "{ role: 'copy', label: '複製', enabled: canCopy }" : "{ role: 'copy', label: '复制', enabled: canCopy }")
+        .replace(/\{ role: 'paste', enabled: canPaste \}/g, useTw ? "{ role: 'paste', label: '貼上', enabled: canPaste }" : "{ role: 'paste', label: '粘贴', enabled: canPaste }")
+        .replace(/\{ role: 'selectAll', enabled: canSelectAll \}/g, useTw ? "{ role: 'selectAll', label: '全選', enabled: canSelectAll }" : "{ role: 'selectAll', label: '全选', enabled: canSelectAll }")
+        // 視窗標題的安全標籤與「連線資訊」內容（譯法與字典內的瀏覽器連線資訊詞條一致）
+        .replace(/insecure: 'Not secure',/g, "insecure: '不安全',")
+        .replace(/dangerous: '⚠ Not secure',/g, "dangerous: '⚠ 不安全',")
+        .replace(/'Your connection to this site is not secure',/g, useTw ? "'您與此網站的連線不安全'," : "'您与此网站的连接不安全',")
+        .replace(/'You should not enter any sensitive information on this site \(for '\s*\+\s*'example, passwords or credit cards\), because it could be stolen by '\s*\+\s*'attackers\.',/g,
+                 useTw ? "'您不應在此網站輸入任何機密資訊（例如密碼或信用卡卡號），否則可能會遭到攻擊者竊取。'," : "'您不应在此网站输入任何敏感信息（例如密码或信用卡号），否则可能会被攻击者窃取。',")
+        .replace(/'Connection is secure',/g, useTw ? "'連線安全'," : "'连接安全',")
+        .replace(/'Your information \(for example, passwords or credit card numbers\) is '\s*\+\s*'private when it is sent to this site\.',/g,
+                 useTw ? "'傳送至此網站的資訊（例如密碼或信用卡卡號）是私密的。'," : "'发送到此网站的信息（例如密码或信用卡号）是私密的。',")
+        .replace(/neutral: \['Connection security information is not available for this page'\]/g, useTw ? "neutral: ['無法取得此頁面的連線安全資訊']" : "neutral: ['无法获取此页面的连接安全信息']")
+        .replace(/'Certificate is valid' : 'Certificate details'/g, useTw ? "'憑證有效' : '憑證詳細資訊'" : "'证书有效' : '证书详情'")
+        .replace(/`Error: \$\{state\.certificateError\}`/g, () => useTw ? '`錯誤：${state.certificateError}`' : '`错误：${state.certificateError}`')
+        .replace(/`Issued to: \$\{certificate\.subjectName\}`/g, () => useTw ? '`發給：${certificate.subjectName}`' : '`颁发给：${certificate.subjectName}`')
+        .replace(/`Issued by: \$\{certificate\.issuer\}`/g, () => useTw ? '`發證者：${certificate.issuer}`' : '`颁发者：${certificate.issuer}`')
+        .replace(/`Valid from: \$\{formatDate\(certificate\.validFromMs\)\}`/g, () => useTw ? '`生效時間：${formatDate(certificate.validFromMs)}`' : '`生效时间：${formatDate(certificate.validFromMs)}`')
+        .replace(/`Valid until: \$\{formatDate\(certificate\.validToMs\)\}`/g, () => useTw ? '`有效期限至：${formatDate(certificate.validToMs)}`' : '`有效期至：${formatDate(certificate.validToMs)}`')
+        .replace(/`Protocol: \$\{certificate\.protocol\}`/g, () => useTw ? '`協定：${certificate.protocol}`' : '`协议：${certificate.protocol}`')
+        .replace(/toLocaleString\(\) : 'unknown'/g, useTw ? "toLocaleString() : '不明'" : "toLocaleString() : '未知'")
+        .replace(/\(state\.url \|\| 'This page'\)/g, useTw ? "(state.url || '此頁面')" : "(state.url || '此页面')");
     console.log(`[修改] 連線資訊對話框漢化注入成功！`);
     return out;
 }
@@ -774,7 +836,8 @@ function patchRemoteSignInCallbackJs(cbContent, useTw) {
                 ? "return page('登入未完成', `${host} 上的 Antigravity 無法完成登入 (HTTP ${status})。` +"
                 : "return page('登录未完成', `${host} 上的 Antigravity 无法完成登录 (HTTP ${status})。` +"
         )
-        .replace(
+        // 2.35.1 的無法連線頁與 HTTP 錯誤頁都以這句結尾，需全部替換
+        .replaceAll(
             "'Sign in again from Antigravity.');",
             useTw ? "'請從 Antigravity 重新進行登入。');" : "'请从 Antigravity 重新发起登录。');"
         );
@@ -791,6 +854,29 @@ function patchBrowserStreamCapturePageJs(cpContent, useTw) {
     return out;
 }
 
+// 2.35.1 起：用手機或平板登入通行金鑰時的 QR 碼視窗
+function patchCablev2Js(cbContent, useTw) {
+    console.log(useTw ? `[修改] 正在向 cablev2.js 注入通行金鑰掃碼視窗漢化...` : `[修改] 正在向 cablev2.js 注入通行密钥扫码窗口汉化...`);
+    const out = cbContent
+        .replace(/<html lang="en">/g, useTw ? '<html lang="zh-TW">' : '<html lang="zh-CN">')
+        .replace('<title>Passkeys</title>', useTw ? '<title>通行金鑰</title>' : '<title>通行密钥</title>')
+        .replace('<h1 class="sheet-title">Passkeys</h1>', useTw ? '<h1 class="sheet-title">通行金鑰</h1>' : '<h1 class="sheet-title">通行密钥</h1>')
+        .replace('<p class="mechanism-header">Use your phone or tablet</p>', useTw ? '<p class="mechanism-header">使用手機或平板電腦</p>' : '<p class="mechanism-header">使用手机或平板电脑</p>')
+        .replace('>Scan this QR code with the camera on the device that has your passkey for ${safeRpId}</p>', () => useTw
+            ? '>請使用存有 ${safeRpId} 通行金鑰的裝置，以相機掃描此 QR 碼</p>'
+            : '>请使用存有 ${safeRpId} 通行密钥的设备，用摄像头扫描此二维码</p>')
+        .replace('onclick="window.close()">Cancel</button>', useTw ? 'onclick="window.close()">取消</button>' : 'onclick="window.close()">取消</button>')
+        .replace(/title:\s*'Passkeys'/g, useTw ? "title: '通行金鑰'" : "title: '通行密钥'")
+        .replace("updateStatus('Connecting to your device…')", useTw ? "updateStatus('正在連線至您的裝置…')" : "updateStatus('正在连接到您的设备…')")
+        .replace("updateStatus('Verify on your device to continue…')", useTw ? "updateStatus('請在您的裝置上完成驗證以繼續…')" : "updateStatus('请在您的设备上完成验证以继续…')");
+    console.log(useTw ? `[修改] 通行金鑰掃碼視窗漢化注入成功！` : `[修改] 通行密钥扫码窗口汉化注入成功！`);
+    return out;
+}
+
+function patchQrEncoderJs(qrContent, useTw) {
+    return qrContent.replace('aria-label="Passkey QR code"', useTw ? 'aria-label="通行金鑰 QR 碼"' : 'aria-label="通行密钥二维码"');
+}
+
 const MAIN_PROCESS_PATCH_TARGETS = [
     'dist/main.js',
     'dist/ipcHandlers.js',
@@ -805,6 +891,8 @@ const MAIN_PROCESS_PATCH_TARGETS = [
     'dist/provisionSplash.js',
     'dist/ideInstall/wizardHtml.js',
     'dist/browserStream/capturePage.js',
+    'dist/cablev2.js',
+    'dist/qrEncoder.js',
     'dist/computer/hud.js',
     'dist/computer/hudState.js',
     'dist/computer/hudAgents.js'
@@ -830,6 +918,8 @@ module.exports = {
     patchProvisionSplashJs,
     patchWizardHtmlJs,
     patchBrowserStreamCapturePageJs,
+    patchCablev2Js,
+    patchQrEncoderJs,
     patchComputerHudJs,
     patchComputerHudStateJs,
     patchComputerHudAgentsJs,

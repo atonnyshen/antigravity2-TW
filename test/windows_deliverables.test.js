@@ -448,12 +448,31 @@ test('v2.33.0 remoteManager, wizardHtml, SVG-only loadingOverlay, and runtime br
         `<html lang="en">`,
         `const SIGNED_IN = page('You have successfully authenticated.', 'You can close this tab and return to Antigravity.');`,
         `return page("Sign-in didn't finish", \`Antigravity couldn't reach \${host} to finish signing in. \` +`,
+        `'Sign in again from Antigravity.');`,
+        `return page("Sign-in didn't finish", \`Antigravity on \${host} couldn't finish signing in (HTTP \${status}). \` +`,
         `'Sign in again from Antigravity.');`
     ].join('\n');
     const cbPatchedTw = patches.patchRemoteSignInCallbackJs(cbSample, true);
     assert.ok(cbPatchedTw.includes('<html lang="zh-TW">'));
     assert.ok(cbPatchedTw.includes('您已成功完成身分驗證。'));
     assert.ok(cbPatchedTw.includes("return page('登入未完成'"));
+    // 2.35.1 有兩個頁面以同一句結尾，兩處都要翻譯
+    assert.equal(cbPatchedTw.split('請從 Antigravity 重新進行登入。').length - 1, 2);
+    assert.ok(!cbPatchedTw.includes('Sign in again from Antigravity.'));
+
+    // 背景守護以已漢化的 app.asar 重建時，updater.js 補丁應保持不變且不印出「找不到插入點」警告
+    const updSample = `MenuUpdateStep["CheckForUpdates"] = "Check for Updates";`;
+    const updWarnings = [];
+    const origWarn = console.warn;
+    console.warn = (...args) => updWarnings.push(args.join(' '));
+    try {
+        const updOnce = patches.patchUpdaterJs(updSample, true);
+        assert.ok(updOnce.includes('"檢查更新"'));
+        assert.equal(patches.patchUpdaterJs(updOnce, true), updOnce);
+    } finally {
+        console.warn = origWarn;
+    }
+    assert.deepEqual(updWarnings, []);
 
     const capSample = `<title>Browser Stream Capture</title> const err = 'Capture session failed';`;
     const capPatchedTw = patches.patchBrowserStreamCapturePageJs(capSample, true);

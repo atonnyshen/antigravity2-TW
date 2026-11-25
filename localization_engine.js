@@ -26,6 +26,8 @@ const {
     patchRemoteDisconnectedPageJs,
     patchRemoteSignInCallbackJs,
     patchBrowserStreamCapturePageJs,
+    patchCablev2Js,
+    patchQrEncoderJs,
     patchComputerHudJs,
     patchComputerHudStateJs,
     patchComputerHudAgentsJs
@@ -147,6 +149,7 @@ if (USE_TW) {
         "[修改] 加载页汉化注入成功！": "[修改] 載入頁漢化注入成功！",
         "[修改] 正在向 updater.js 注入更新弹窗汉化...": "[修改] 正在向 updater.js 注入更新彈出視窗漢化...",
         "[修改] 更新弹窗汉化注入成功！": "[修改] 更新彈出視窗漢化注入成功！",
+        "[修改] 更新弹窗已是汉化版本，无需重复注入。": "[修改] 更新彈出視窗已是繁中版本，無須重複注入。",
         "[修改] 正在向 utils.js 注入伴生面板 (Sidecar) 汉化钩子...": "[修改] 正在向 utils.js 注入伴生面板 (Sidecar) 漢化掛鉤...",
         "[修改] 伴生面板 (Sidecar) 汉化钩子注入成功！": "[修改] 伴生面板 (Sidecar) 漢化掛鉤注入成功！",
         "[警告] 未能在 utils.js 中找到 Sidecar 钩子插入点。": "[警告] 未能在 utils.js 中找到 Sidecar 掛鉤插入點。",
@@ -1005,6 +1008,8 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
             ['dist/remote/disconnectedPage.js', content => patchRemoteDisconnectedPageJs(content, USE_TW)],
             ['dist/remote/signInCallback.js', content => patchRemoteSignInCallbackJs(content, USE_TW)],
             ['dist/browserStream/capturePage.js', content => patchBrowserStreamCapturePageJs(content, USE_TW)],
+            ['dist/cablev2.js', content => patchCablev2Js(content, USE_TW)],
+            ['dist/qrEncoder.js', content => patchQrEncoderJs(content, USE_TW)],
             ['dist/computer/hud.js', content => patchComputerHudJs(content, USE_TW)],
             ['dist/computer/hudState.js', content => patchComputerHudStateJs(content, USE_TW)],
             ['dist/computer/hudAgents.js', content => patchComputerHudAgentsJs(content, USE_TW)]
