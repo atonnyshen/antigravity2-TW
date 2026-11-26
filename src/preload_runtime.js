@@ -1724,8 +1724,9 @@
     }
 
     // 規則代入的片段以冠詞／介系詞開頭時（Open the Swarm UI、Add to chat input），那是完整的英文片語，
-    // 只換掉動詞會變成「開啟 the Swarm UI」這種中英夾雜：跳過這條規則，都不適用就保留原文
-    const ATTR_PHRASE_LEAD = /^(?:the|a|an|to|into|in|on|from|with|for|this|that|your|my|all|as|at|by|of)\s/i;
+    // 只換掉動詞會變成「開啟 the Swarm UI」這種中英夾雜：跳過這條規則，都不適用就保留原文。
+    // 只比對小寫：片語裡的冠詞與介系詞是小寫，大寫開頭的是名稱（Keep: My Project 要譯成「保留：My Project」）
+    const ATTR_PHRASE_LEAD = /^(?:the|a|an|to|into|in|on|from|with|for|this|that|your|my|all|as|at|by|of)\s/;
     function translateAttrDynamic(t) {
         if (!t || t.length > 1000) return null;
         for (const [regex, replacer] of JSON_ATTR_DYNAMIC_RULES) {
@@ -2139,43 +2140,61 @@
     // 鄰近節點靠空白那一側的文字節點：元素只往下找行內小元素（每層至多兩個子元素、最多 GAP_EDGE_DEPTH 層），
     // 不讀大型容器的 textContent；超出範圍時回傳 GAP_UNKNOWN（不收合）。refreshGapsAround 往上找同樣的層數，範圍一致
     const GAP_EDGE_DEPTH = 4;
+    // 跳過占位節點（註解、空文字）的上限：超過時視為無法判斷，不收合，避免大量空節點讓每次變動都掃一長串
+    const GAP_FILLER_MAX = 4;
     const GAP_UNKNOWN = {};
     function gapEdgeTextNode(n, fromEnd, depth = 0) {
         if (!n || n.nodeType === Node.COMMENT_NODE) return null;
         if (n.nodeType === Node.TEXT_NODE) return n.nodeValue ? n : null;
         if (n.nodeType !== Node.ELEMENT_NODE || depth >= GAP_EDGE_DEPTH || n.childElementCount > 2) return GAP_UNKNOWN;
         const kids = n.childNodes;
-        for (let k = 0; k < kids.length; k++) {
+        const limit = Math.min(kids.length, GAP_FILLER_MAX + 1);
+        for (let k = 0; k < limit; k++) {
             const found = gapEdgeTextNode(kids[fromEnd ? kids.length - 1 - k : k], fromEnd, depth + 1);
             if (found) return found;
         }
-        return null;
+        return kids.length > limit ? GAP_UNKNOWN : null;
     }
+    // 註解與空文字節點是 React 的占位，不算鄰居；收合過的空白不算占位，它本身要重新判斷
     function isGapFiller(n) {
-        return n && (n.nodeType === Node.COMMENT_NODE || (n.nodeType === Node.TEXT_NODE && !n.nodeValue));
+        return !!n && (n.nodeType === Node.COMMENT_NODE || (n.nodeType === Node.TEXT_NODE && !n.nodeValue && !collapsedGaps.has(n)));
+    }
+    // 往 dir 方向跳過占位節點，回傳第一個實際鄰居（超過 GAP_FILLER_MAX 個占位時為 GAP_UNKNOWN），
+    // 以及是否跳過了空文字節點。收合判斷、前後空白與變動後的重新判斷都用這一個，兩個方向的規則一致
+    function gapNeighbor(n, dir) {
+        let s = n[dir];
+        let skippedText = false;
+        for (let i = 0; isGapFiller(s); i++) {
+            if (i >= GAP_FILLER_MAX) return { node: GAP_UNKNOWN, skippedText };
+            if (s.nodeType === Node.TEXT_NODE) skippedText = true;
+            s = s[dir];
+        }
+        return { node: s, skippedText };
     }
     function isCjkGap(n) {
         return !!n && n.nodeType === Node.TEXT_NODE && (n.nodeValue === ' ' || (n.nodeValue === '' && collapsedGaps.has(n)));
     }
+    // 這段文字是本套件寫進去的譯文，而且之後沒被 React 改過（React 改寫時，文字節點分支會先清掉舊紀錄）
+    function isOwnTranslation(n) {
+        return translatedValues.has(n) && translatedValues.get(n) === n.nodeValue;
+    }
     function cjkGapShouldCollapse(gap) {
-        let prev = gap.previousSibling;
-        let skippedText = false;
-        while (isGapFiller(prev)) {
-            if (prev.nodeType === Node.TEXT_NODE) skippedText = true;
-            prev = prev.previousSibling;
-        }
-        let next = gap.nextSibling;
-        while (next && next.nodeType === Node.COMMENT_NODE) next = next.nextSibling;
-        if (!prev || !next) return false;
+        const p = gapNeighbor(gap, 'previousSibling');
+        const q = gapNeighbor(gap, 'nextSibling');
+        const prev = p.node;
+        const next = q.node;
+        if (!prev || !next || prev === GAP_UNKNOWN || next === GAP_UNKNOWN) return false;
         // 兩側都是元素（例如並排的兩個連結或按鈕）時，這個空白是分隔用的，保留
-        if (!skippedText && prev.nodeType !== Node.TEXT_NODE && next.nodeType !== Node.TEXT_NODE) return false;
+        if (!p.skippedText && !q.skippedText && prev.nodeType !== Node.TEXT_NODE && next.nodeType !== Node.TEXT_NODE) return false;
         const before = gapEdgeTextNode(prev, true);
         const after = gapEdgeTextNode(next, false);
         if (!before || !after || before === GAP_UNKNOWN || after === GAP_UNKNOWN) return false;
         if (!CJK_TAIL.test(before.nodeValue) || !CJK_HEAD.test(after.nodeValue)) return false;
-        return translatedValues.get(before) === before.nodeValue || translatedValues.get(after) === after.nodeValue;
+        return isOwnTranslation(before) || isOwnTranslation(after);
     }
     function refreshCjkGap(gap) {
+        // 編輯區與程式碼區的內容屬於使用者：事後才變成可編輯的段落也不再改動
+        if (isCodeOrEditor(gap)) return;
         if (cjkGapShouldCollapse(gap)) {
             if (gap.nodeValue) {
                 collapsedGaps.set(gap, gap.nodeValue);
@@ -2189,59 +2208,60 @@
             gap.nodeValue = original;
         }
     }
-    // 節點新增或文字變動後，重新判斷它兩側的空白；所在元素是行內小元素時，連同元素兩側一起判斷（層數同 GAP_EDGE_DEPTH）
+    function refreshNeighborSpacing(n, dir) {
+        const s = gapNeighbor(n, dir).node;
+        if (!s || s === GAP_UNKNOWN) return;
+        if (isCjkGap(s)) refreshCjkGap(s);
+        else if (edgeSpacedBase.has(s)) refreshEdgeSpaces(s);
+    }
+    // 節點新增或文字變動後，重新判斷它兩側的空白，再往上 GAP_EDGE_DEPTH 層判斷各層祖先兩側的空白。
+    // 不因祖先的子元素變多就提早停下：祖先剛多了子元素時，原本依它收合的空白要還原
     function refreshGapsAround(node) {
         let n = node;
         for (let depth = 0; n && depth <= GAP_EDGE_DEPTH; depth++) {
-            for (const dir of ['previousSibling', 'nextSibling']) {
-                let s = n[dir];
-                while (s && s.nodeType === Node.COMMENT_NODE) s = s[dir];
-                if (isCjkGap(s)) {
-                    if (!isCodeOrEditor(s)) refreshCjkGap(s);
-                } else if (s && edgeSpacedBase.has(s)) {
-                    refreshEdgeSpaces(s);
-                }
-            }
-            const parent = n.parentElement;
-            if (!parent || parent.childElementCount > 2) break;
-            n = parent;
+            refreshNeighborSpacing(n, 'previousSibling');
+            refreshNeighborSpacing(n, 'nextSibling');
+            n = n.parentElement;
         }
     }
     // 只刪除節點時 addedNodes 是空的：重新判斷刪除位置兩側的空白
     function refreshGapsAtRemoval(m) {
         for (const s of [m.previousSibling, m.nextSibling]) {
+            if (!s) continue;
             if (isCjkGap(s)) {
-                if (!isCodeOrEditor(s)) refreshCjkGap(s);
-            } else if (s) {
+                refreshCjkGap(s);
+            } else {
                 if (edgeSpacedBase.has(s)) refreshEdgeSpaces(s);
                 refreshGapsAround(s);
             }
         }
         refreshGapsAround(m.target);
     }
-    // norm() 會先把「…」換成「...」再查詞典與規則；原文用「…」時，譯文結尾也用「…」
+    // norm() 會先把「…」換成「...」再查詞典與規則；原文只用「…」時，譯文裡的「...」都換回「…」
+    // （規則調整語序後，原文結尾的「…」可能落在譯文中間，例如「{1} 的標籤」）
     function keepSourceEllipsis(source, out) {
-        if (typeof out !== 'string' || typeof source !== 'string' || !/…\s*$/.test(source)) return out;
-        return out.replace(/\.\.\.(\s*)$/, '…$1');
+        if (typeof out !== 'string' || typeof source !== 'string' || !source.includes('…')) return out;
+        if (!source.includes('...')) return out.replace(/\.\.\./g, '…');
+        return /…\s*$/.test(source) ? out.replace(/\.\.\.(\s*)$/, '…$1') : out;
     }
     // 譯文片段自帶的前後半形空白是替英文名稱與數字留的（「由 Foo 建立」）；緊鄰的文字是中文時拿掉
     // （「由我的外掛建立」，中文字之間不留空格）。原始譯文記在 edgeSpacedBase，鄰近內容改變時依目前的 DOM 重新判斷，
     // 找鄰近文字的範圍與空白收合相同（gapEdgeTextNode）
     const edgeSpacedBase = new WeakMap();
     function adjacentEdgeText(node, dir) {
-        let s = node[dir];
-        while (isGapFiller(s)) s = s[dir];
-        if (!s) return null;
+        const s = gapNeighbor(node, dir).node;
+        if (!s || s === GAP_UNKNOWN) return null;
         const edge = gapEdgeTextNode(s, dir === 'previousSibling');
         return edge && edge !== GAP_UNKNOWN ? edge.nodeValue : null;
     }
+    // 只拿掉兩側都是中文的空白：譯文靠空白那一側是英文、數字或符號時保留（「遵守 Google 隱私權政策」「設定 - 一般」）
     function adaptEdgeSpaces(node, base) {
         let out = base;
-        if (out.length > 1 && out.charAt(0) === ' ') {
+        if (out.length > 1 && out.charAt(0) === ' ' && CJK_HEAD.test(out.slice(1))) {
             const before = adjacentEdgeText(node, 'previousSibling');
             if (before && CJK_TAIL.test(before)) out = out.slice(1);
         }
-        if (out.length > 1 && out.charAt(out.length - 1) === ' ') {
+        if (out.length > 1 && out.charAt(out.length - 1) === ' ' && CJK_TAIL.test(out.slice(0, -1))) {
             const after = adjacentEdgeText(node, 'nextSibling');
             if (after && CJK_HEAD.test(after)) out = out.slice(0, -1);
         }
@@ -2249,12 +2269,95 @@
     }
     function refreshEdgeSpaces(node) {
         const base = edgeSpacedBase.get(node);
-        if (!base || translatedValues.get(node) !== node.nodeValue) return;
+        if (!base || translatedValues.get(node) !== node.nodeValue || isCodeOrEditor(node)) return;
         const out = adaptEdgeSpaces(node, base);
         if (out !== node.nodeValue) {
             translatedValues.set(node, out);
             node.nodeValue = out;
         }
+    }
+
+    function isIconFallbackSvg(n) {
+        return !!n && n.nodeType === Node.ELEMENT_NODE && typeof n.hasAttribute === 'function' && n.hasAttribute('data-ag-icon-fallback');
+    }
+    // 補畫的 SVG 跟著宿主的無障礙設定：宿主已隱藏或另有名稱時隱藏 SVG；否則由 SVG 帶著圖示名稱
+    // （字型圖示的名稱文字原本就是無障礙名稱的一部分，文字清空後改由 SVG 提供）
+    function syncIconFallbackA11y(host, svg) {
+        if (host.getAttribute('aria-hidden') === 'true' || host.hasAttribute('aria-label') || host.hasAttribute('aria-labelledby')) {
+            if (svg.getAttribute('aria-hidden') !== 'true') svg.setAttribute('aria-hidden', 'true');
+            svg.removeAttribute('role');
+            svg.removeAttribute('aria-label');
+        } else {
+            svg.removeAttribute('aria-hidden');
+            if (svg.getAttribute('role') !== 'img') svg.setAttribute('role', 'img');
+            if (!svg.hasAttribute('aria-label')) svg.setAttribute('aria-label', svg.getAttribute('data-ag-icon-fallback'));
+        }
+    }
+    // 字型圖示（ligature）文字：Antigravity 2.35.1 未載入 Google Symbols 字型，內建 SVG 表缺少的圖示會以圖示名稱純文字顯示。
+    // 已知缺口改畫 SVG 並清空文字，其餘圖示名稱一律不翻譯，避免 "comment" 之類被字典譯成中文（保留 React 的文字節點，避免遍歷失同步）。
+    // 文字清空或改成空白時也在這裡處理，才不會被後面的空白與快取判斷提早擋下而留著舊 SVG。回傳 true 表示已處理完
+    function handleIconFontText(node, originalVal) {
+        const parent = node.parentElement;
+        const iconHost = parent && typeof parent.matches === 'function' && parent.matches(ICON_FONT_SELECTOR) ? parent : null;
+        if (!iconHost) {
+            // React 重用圖示的文字節點並拿掉圖示 class 後改了文字：移除先前補畫在它前面的 SVG
+            if (isIconFallbackSvg(node.previousSibling)) node.previousSibling.remove();
+            return false;
+        }
+        const oldSvg = Array.from(iconHost.children).find(isIconFallbackSvg) || null;
+        // 本套件清空的文字（SVG 還在）：維持現狀
+        if (originalVal === '' && oldSvg && translatedValues.get(node) === '') return true;
+        const valNorm = norm(originalVal || '');
+        if (oldSvg && oldSvg.getAttribute('data-ag-icon-fallback') !== valNorm) oldSvg.remove();
+        const paths = valNorm && Object.prototype.hasOwnProperty.call(ICON_FONT_FALLBACK_PATHS, valNorm) ? ICON_FONT_FALLBACK_PATHS[valNorm] : null;
+        if (!paths || typeof document === 'undefined' || typeof document.createElementNS !== 'function') {
+            if (originalVal) unchangedTextValues.set(node, originalVal);
+            return true;
+        }
+        if (!oldSvg || oldSvg.getAttribute('data-ag-icon-fallback') !== valNorm) {
+            const svgNs = 'http://www.w3.org/2000/svg';
+            const svg = document.createElementNS(svgNs, 'svg');
+            svg.setAttribute('data-ag-icon-fallback', valNorm);
+            // 1em 跟隨圖示宿主的字級（px、rem 或繼承值都適用），與字型圖示原本的大小一致
+            svg.setAttribute('width', '1em');
+            svg.setAttribute('height', '1em');
+            svg.setAttribute('viewBox', '0 0 24 24');
+            svg.setAttribute('fill', 'none');
+            svg.setAttribute('stroke', 'currentColor');
+            svg.setAttribute('stroke-width', '2');
+            svg.setAttribute('stroke-linecap', 'round');
+            svg.setAttribute('stroke-linejoin', 'round');
+            svg.setAttribute('class', 'shrink-0');
+            svg.setAttribute('style', 'display:inline-block;vertical-align:middle');
+            syncIconFallbackA11y(iconHost, svg);
+            for (const d of paths) {
+                const pSvg = document.createElementNS(svgNs, 'path');
+                pSvg.setAttribute('d', d);
+                svg.appendChild(pSvg);
+            }
+            iconHost.insertBefore(svg, node);
+        }
+        // 同一文字節點之後換回不需 SVG 的圖示名稱時，不能被「未翻譯」快取提早擋下而留著舊 SVG
+        unchangedTextValues.delete(node);
+        translatedValues.set(node, '');
+        node.nodeValue = '';
+        return true;
+    }
+
+    // 拆段句子裡由使用者命名的欄位（自動化、外掛名稱）：依前後片段辨認，片段可能已翻譯，也可能還是原文
+    const USER_NAME_SLOTS = [['Agents created by', 'run in a dedicated']];
+    function isFragmentNode(n, source) {
+        if (!n || n === GAP_UNKNOWN || n.nodeType !== Node.TEXT_NODE || !n.nodeValue) return false;
+        const v = norm(n.nodeValue);
+        if (v === source) return true;
+        const tr = map.get(source);
+        return typeof tr === 'string' && v === norm(tr);
+    }
+    function isUserNameSlot(node) {
+        const prev = gapNeighbor(node, 'previousSibling').node;
+        if (!prev || prev === GAP_UNKNOWN || prev.nodeType !== Node.TEXT_NODE) return false;
+        const next = gapNeighbor(node, 'nextSibling').node;
+        return USER_NAME_SLOTS.some(([before, after]) => isFragmentNode(prev, before) && isFragmentNode(next, after));
     }
 
     function translateNode(node) {
@@ -2429,8 +2532,15 @@
                 if (isCodeOrEditor(node)) return;
 
                 let originalVal = node.nodeValue;
+                // React 改寫了這個節點（內容和本套件上次寫入的不同）：先前的翻譯與前後空白紀錄都不再適用，
+                // 之後判斷「是不是本套件的譯文」才不會誤用舊紀錄（例如節點被重用為使用者內容，或改成圖示名稱）
+                if (translatedValues.has(node) && translatedValues.get(node) !== originalVal) {
+                    translatedValues.delete(node);
+                    edgeSpacedBase.delete(node);
+                }
                 // 收合過的空白被 React 改成別的內容（換了分隔字或清空後再寫入），不再當作可還原的空白
                 if (originalVal && collapsedGaps.has(node)) collapsedGaps.delete(node);
+                if (handleIconFontText(node, originalVal)) return;
                 if (originalVal === ' ') {
                     refreshCjkGap(node);
                     return;
@@ -2500,59 +2610,9 @@
                     unchangedTextValues.set(node, originalVal);
                     return;
                 }
-
-                // 字型圖示（ligature）文字：Antigravity 2.35.1 未載入 Google Symbols 字型，
-                // 內建 SVG 表缺少的圖示會以圖示名稱純文字顯示。已知缺口改畫 SVG，
-                // 其餘圖示名稱一律不翻譯，避免 "comment" 之類被字典譯成中文（保留 React TextNode 避免遍歷失同步）
-                const iconHost = node.parentElement && typeof node.parentElement.matches === 'function' && node.parentElement.matches(ICON_FONT_SELECTOR)
-                    ? node.parentElement
-                    : null;
-                if (!iconHost) {
-                    // React 重用圖示的文字節點並拿掉圖示 class 時，移除先前補畫在它前面的 SVG
-                    const staleIcon = node.previousSibling;
-                    if (staleIcon && staleIcon.nodeType === Node.ELEMENT_NODE && staleIcon.hasAttribute('data-ag-icon-fallback')) staleIcon.remove();
-                }
-                if (iconHost) {
-                    const oldSvg = Array.from(iconHost.children || []).find(c => c.hasAttribute && c.hasAttribute('data-ag-icon-fallback'));
-                    if (oldSvg && oldSvg.getAttribute('data-ag-icon-fallback') !== valNorm) oldSvg.remove();
-                    const paths = Object.prototype.hasOwnProperty.call(ICON_FONT_FALLBACK_PATHS, valNorm) ? ICON_FONT_FALLBACK_PATHS[valNorm] : null;
-                    if (!paths || typeof document === 'undefined' || typeof document.createElementNS !== 'function') {
-                        unchangedTextValues.set(node, originalVal);
-                        return;
-                    }
-                    if (!oldSvg || oldSvg.getAttribute('data-ag-icon-fallback') !== valNorm) {
-                        const svgNs = 'http://www.w3.org/2000/svg';
-                        const svg = document.createElementNS(svgNs, 'svg');
-                        svg.setAttribute('data-ag-icon-fallback', valNorm);
-                        // 1em 跟隨圖示宿主的字級（px、rem 或繼承值都適用），與字型圖示原本的大小一致
-                        svg.setAttribute('width', '1em');
-                        svg.setAttribute('height', '1em');
-                        svg.setAttribute('viewBox', '0 0 24 24');
-                        svg.setAttribute('fill', 'none');
-                        svg.setAttribute('stroke', 'currentColor');
-                        svg.setAttribute('stroke-width', '2');
-                        svg.setAttribute('stroke-linecap', 'round');
-                        svg.setAttribute('stroke-linejoin', 'round');
-                        svg.setAttribute('class', 'shrink-0');
-                        svg.setAttribute('style', 'display:inline-block;vertical-align:middle');
-                        // 圖示名稱原本是無障礙名稱的一部分（宿主未隱藏、也沒另給名稱時）；清空文字後改由 SVG 帶著同一名稱
-                        if (iconHost.getAttribute('aria-hidden') === 'true' || iconHost.hasAttribute('aria-label') || iconHost.hasAttribute('aria-labelledby')) {
-                            svg.setAttribute('aria-hidden', 'true');
-                        } else {
-                            svg.setAttribute('role', 'img');
-                            svg.setAttribute('aria-label', valNorm);
-                        }
-                        for (const d of paths) {
-                            const pSvg = document.createElementNS(svgNs, 'path');
-                            pSvg.setAttribute('d', d);
-                            svg.appendChild(pSvg);
-                        }
-                        iconHost.insertBefore(svg, node);
-                    }
-                    // 同一文字節點之後換回不需 SVG 的圖示名稱時，不能被「未翻譯」快取提早擋下而留著舊 SVG
-                    unchangedTextValues.delete(node);
-                    translatedValues.set(node, '');
-                    node.nodeValue = '';
+                // 拆段句子裡由使用者命名的欄位不翻譯，即使名稱剛好和字典詞條相同（例如名為 Settings 的外掛）
+                if (isUserNameSlot(node)) {
+                    unchangedTextValues.set(node, originalVal);
                     return;
                 }
 
@@ -2667,6 +2727,9 @@
                 translateNode(m.target);
                 if (m.attributeName === 'aria-label' || m.attributeName === 'aria-labelledby') {
                     refreshMenusLabelledBy(m.target);
+                    // 字型圖示宿主的無障礙名稱改了：補畫的 SVG 跟著調整（宿主拿掉名稱後改由 SVG 帶圖示名稱）
+                    const fallbackSvg = Array.from(m.target.children || []).find(isIconFallbackSvg);
+                    if (fallbackSvg) syncIconFallbackA11y(m.target, fallbackSvg);
                 }
             }
         }

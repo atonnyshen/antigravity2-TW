@@ -1440,7 +1440,144 @@ test('icon fallbacks clean up after the icon class is removed and keep accessibl
     win.close();
 });
 
-test('dictionary fragments drop built-in edge spaces next to Chinese names and restore them when React swaps the name', async () => {
+test('CJK spacing keeps the space beside Latin or symbols, ignores reused nodes, skips fillers the same way on both sides, re-checks grown ancestors, stays bounded and leaves editors alone', async () => {
+    const { JSDOM } = require('jsdom');
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only' });
+    const win = dom.window;
+    const doc = win.document;
+    const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
+    // JSDOM 沒有實作 isContentEditable：照瀏覽器的行為補上，才能測「事後變成可編輯」的段落
+    Object.defineProperty(win.HTMLElement.prototype, 'isContentEditable', { configurable: true, get() { return !!this.closest('[contenteditable="true"]'); } });
+    win.eval(generateJs());
+    win.__agCnRuntimeStart();
+    const el = (tag, ...parts) => { const e = doc.createElement(tag); for (const p of parts) e.append(p); return e; };
+    const para = (...parts) => { const p = el('p', ...parts); doc.body.append(p); return p; };
+    // v2.35.1 宣告權限對話框的實際切法（名稱之後的片段）
+    const rest = [' run in a dedicated', ' ', 'workspace', ' with its own permissions, which you can change anytime in the ', 'workspace', ' settings page.'];
+    const tail = '建立的代理執行於專用的工作區中並擁有獨立權限，您可以隨時在工作區設定頁面中變更。';
+
+    // 譯文靠空白那一側是英文或符號：空白保留
+    const google = para('by allowing Google to collect and use my Interactions data, subject to the Google ', el('a', 'Privacy Policy'));
+    const crumb = para('Settings - ', el('a', 'General'));
+    // 曾是譯文的節點被 React 重用為使用者內容
+    const reused = para('Settings', ' ', '乙');
+    // 片段與名稱之間有空文字節點（占位）
+    const filler = para('Agents created by ', '', '我的外掛', ...rest);
+    // 名稱是行內小元素，之後 React 在開頭插入第三個子元素
+    const inline = el('span', el('b', '我的'), el('i', '外掛'));
+    const grown = para('Agents created by ', inline, ...rest);
+    // 翻譯後才變成可編輯的段落
+    const editable = para('Agents created by ', 'Foo', ...rest);
+    await pause();
+
+    assert.equal(google.textContent, '，允許 Google 收集並使用我的互動資料，並遵守 Google 隱私權政策');
+    assert.equal(crumb.textContent, '設定 - 一般');
+
+    assert.equal(reused.textContent, '設定乙');
+    reused.firstChild.data = '甲';
+    await pause();
+    assert.equal(reused.textContent, '甲 乙');
+    // 使用者內容之後剛好等於舊譯文：不再當作本套件的譯文，兩側都是使用者的中文，空白不動
+    reused.firstChild.data = '設定';
+    await pause();
+    assert.equal(reused.textContent, '設定 乙');
+
+    assert.equal(filler.textContent, '由我的外掛' + tail);
+    filler.childNodes[2].data = 'Foo';
+    await pause();
+    assert.equal(filler.textContent, '由 Foo ' + tail);
+
+    assert.equal(grown.textContent, '由我的外掛' + tail);
+    inline.prepend(el('em', 'Foo'));
+    await pause();
+    assert.ok(grown.textContent.startsWith('由 Foo我的外掛 建立'), grown.textContent);
+
+    assert.equal(editable.textContent, '由 Foo ' + tail);
+    editable.setAttribute('contenteditable', 'true');
+    editable.childNodes[1].data = '我的';
+    await pause();
+    assert.equal(editable.textContent, '由 我的 ' + tail);
+
+    // 緊鄰空白的元素開頭有大量空文字節點（例如串流回覆）：每次變動只看有限個鄰居
+    const nodeTypeDesc = Object.getOwnPropertyDescriptor(win.Node.prototype, 'nodeType');
+    const countReads = async fillers => {
+        const reply = el('div');
+        for (let i = 0; i < fillers; i++) reply.append('');
+        const stream = doc.createTextNode('x');
+        reply.append(stream);
+        para('Settings', ' ', reply);
+        await pause();
+        let reads = 0;
+        Object.defineProperty(win.Node.prototype, 'nodeType', { configurable: true, get() { reads++; return nodeTypeDesc.get.call(this); } });
+        try {
+            for (let i = 0; i < 3; i++) { stream.data = 'y' + i; await pause(); }
+        } finally {
+            Object.defineProperty(win.Node.prototype, 'nodeType', nodeTypeDesc);
+        }
+        return reads;
+    };
+    const few = await countReads(0);
+    const many = await countReads(1000);
+    assert.ok(many - few < 200, `nodeType 讀取次數：沒有空節點 ${few}、1000 個空節點 ${many}`);
+    win.close();
+});
+
+test('icon fallbacks handle blank text, host label removal and reused text nodes; capitalized names stay translatable and a moved source ellipsis keeps its form', async () => {
+    const { JSDOM } = require('jsdom');
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only' });
+    const win = dom.window;
+    const doc = win.document;
+    const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
+    win.eval(generateJs());
+    win.__agCnRuntimeStart();
+    const add = html => { const el = doc.createElement('div'); el.innerHTML = html; doc.body.append(el); return el; };
+    const textOf = el => Array.from(el.childNodes).find(n => n.nodeType === win.Node.TEXT_NODE);
+
+    const blank = add('<span class="google-symbols">comment</span>');
+    const labelled = add('<button><span class="google-symbols" aria-label="Comments">comment</span></button>');
+    const sentence = doc.createElement('p');
+    for (const t of ['Agents created by ', '我的外掛', ' run in a dedicated', ' ', 'workspace', ' settings page.']) sentence.append(t);
+    doc.body.append(sentence);
+    const attrs = add('<button title="Keep: My Project">a</button><button aria-label="Label for Foo…">b</button>');
+    await pause();
+
+    // 圖示文字改成空白：補畫的 SVG 要移除，不能被空白判斷提早擋下
+    const blankHost = blank.firstChild;
+    assert.equal(blankHost.querySelectorAll('svg').length, 1);
+    textOf(blankHost).data = ' ';
+    await pause();
+    assert.equal(blankHost.querySelectorAll('svg').length, 0);
+
+    // 宿主另有名稱時 SVG 隱藏；React 拿掉宿主的名稱後，改由 SVG 帶圖示名稱
+    const labelledHost = labelled.querySelector('.google-symbols');
+    const labelledSvg = labelledHost.querySelector('svg');
+    assert.equal(labelledSvg.getAttribute('aria-hidden'), 'true');
+    labelledHost.removeAttribute('aria-label');
+    await pause();
+    assert.equal(labelledSvg.hasAttribute('aria-hidden'), false);
+    assert.equal(labelledSvg.getAttribute('role'), 'img');
+    assert.ok(labelledSvg.getAttribute('aria-label'));
+
+    // 曾顯示「由 」的文字節點被重用為圖示：之後鄰近內容改變，也不得把「由 」寫回 SVG 旁
+    const prefix = sentence.firstChild;
+    assert.equal(prefix.data, '由');
+    sentence.className = 'google-symbols';
+    prefix.data = 'comment';
+    await pause();
+    assert.equal(sentence.querySelectorAll('svg').length, 1);
+    sentence.childNodes[2].data = 'Foo';
+    await pause();
+    assert.equal(prefix.data, '');
+
+    // 大寫開頭的是名稱，不是英文片語：照常套用規則
+    const [keep, labelFor] = attrs.querySelectorAll('button');
+    assert.equal(keep.getAttribute('title'), '保留：My Project');
+    // 規則調整語序後，原文結尾的「…」落在譯文中間，仍維持原文的寫法
+    assert.equal(labelFor.getAttribute('aria-label'), 'Foo… 的標籤');
+    win.close();
+});
+
+test('dictionary fragments drop built-in edge spaces next to Chinese names, restore them when React swaps the name, and leave user-chosen names untranslated', async () => {
     const { JSDOM } = require('jsdom');
     const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only' });
     const win = dom.window;
@@ -1458,12 +1595,12 @@ test('dictionary fragments drop built-in edge spaces next to Chinese names and r
     const tail = '建立的代理執行於專用的工作區中並擁有獨立權限，您可以隨時在工作區設定頁面中變更。';
     const cjk = sentence('自動化任務');
     const latin = sentence('Foo Plugin');
-    // 名稱本身在走訪較後面才被翻成中文：走訪結束後重新判斷
-    const translatedLater = sentence('Settings');
+    // 名稱是使用者取的：剛好和字典詞條相同（Settings）也不翻譯
+    const dictionaryName = sentence('Settings');
     await pause();
     assert.equal(cjk.textContent, '由自動化任務' + tail);
     assert.equal(latin.textContent, '由 Foo Plugin ' + tail);
-    assert.equal(translatedLater.textContent, '由設定' + tail);
+    assert.equal(dictionaryName.textContent, '由 Settings ' + tail);
 
     cjk.childNodes[1].data = 'Foo Plugin';
     latin.childNodes[1].data = '我的外掛';
