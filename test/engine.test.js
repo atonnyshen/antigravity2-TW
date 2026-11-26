@@ -809,6 +809,167 @@ test('L0 Taiwan prose fixes in preload_runtime, main_patches, and multi-partitio
     for (const d of dirsToKeep) assert.equal(fs.existsSync(d), true, 'must keep ' + d);
 });
 
+test('the installer writes no runtime receipt for a runtime whose lock was taken over during the install, and reports it', t => {
+    const engine = require('../localization_engine');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-mac-sync-lost-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const kept = path.join(root, 'kept');
+    const lost = path.join(root, 'lost');
+    fs.mkdirSync(kept);
+    fs.mkdirSync(lost);
+    const fakeAsar = path.join(root, 'app.asar');
+    fs.writeFileSync(fakeAsar, 'new-asar-bytes');
+    const session = engine.prepareMacWatcherSync({
+        sourceDir: repo,
+        runtimes: [{ kind: 'user', runtimeDir: kept }, { kind: 'user', runtimeDir: lost }]
+    });
+    assert.deepEqual(session.synced, [kept, lost]);
+    // 安裝期間心跳停止，守護程式判定殘留並接手 lost 的鎖
+    fs.writeFileSync(path.join(lost, '.watcher-state', 'run.lock', 'token'), 'watcher-took-over');
+    const warnings = [];
+    t.mock.method(console, 'warn', message => warnings.push(String(message)));
+    t.mock.method(console, 'log', () => {});
+    const result = engine.commitMacWatcherSync(session, '/Applications/Antigravity.app', fakeAsar);
+    engine.cleanupMacWatcherSync(session);
+    const stateKey = require('node:crypto').createHash('sha256').update('/Applications/Antigravity.app').digest('hex');
+    assert.equal(fs.existsSync(path.join(kept, '.watcher-state', stateKey + '.json')), true, '仍持有鎖：照常寫入');
+    assert.equal(fs.existsSync(path.join(lost, '.watcher-state', stateKey + '.json')), false, '失去鎖：不寫收據');
+    assert.deepEqual(result, { written: [kept], lost: [lost] });
+    assert.ok(warnings.some(w => w.includes(lost) && w.includes('未寫入')), '回報略過的執行目錄');
+    assert.equal(fs.readFileSync(path.join(lost, '.watcher-state', 'run.lock', 'token'), 'utf8'), 'watcher-took-over', '不碰接手者的鎖');
+});
+
+test('the installer replaces a runtime receipt that was swapped for a link instead of writing through it', { skip: process.platform === 'win32' }, t => {
+    const engine = require('../localization_engine');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ag-mac-sync-link-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const rtDir = path.join(root, 'runtime');
+    fs.mkdirSync(rtDir);
+    const fakeAsar = path.join(root, 'app.asar');
+    fs.writeFileSync(fakeAsar, 'new-asar-bytes');
+    const session = engine.prepareMacWatcherSync({ sourceDir: repo, runtimes: [{ kind: 'user', runtimeDir: rtDir }] });
+    // 使用者把收據換成指向系統檔案的連結：寫入必須取代連結本身
+    const victim = path.join(root, 'victim.conf');
+    fs.writeFileSync(victim, 'system');
+    const stateKey = require('node:crypto').createHash('sha256').update('/Applications/Antigravity.app').digest('hex');
+    const receipt = path.join(rtDir, '.watcher-state', stateKey + '.json');
+    fs.symlinkSync(victim, receipt);
+    t.mock.method(console, 'log', () => {});
+    engine.commitMacWatcherSync(session, '/Applications/Antigravity.app', fakeAsar);
+    engine.cleanupMacWatcherSync(session);
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'system', '連結指向的檔案不得被改寫');
+    assert.equal(fs.lstatSync(receipt).isFile(), true);
+    assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).output, require('node:crypto').createHash('sha256').update('new-asar-bytes').digest('hex'));
+});
+
+test('as root, syncing user runtimes never writes through links planted in them', { skip: process.platform === 'win32' }, t => {
+    const engine = require('../localization_engine');
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-mac-sync-root-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const victimFile = path.join(root, 'victim.conf');
+    const victimDir = path.join(root, 'system-dir');
+    fs.writeFileSync(victimFile, 'system');
+    fs.mkdirSync(victimDir);
+    // fileLink：執行檔被換成連結；stateLink：.watcher-state 被換成連結；dirLink：整個執行目錄是連結
+    const fileLink = path.join(root, 'file-link');
+    const stateLink = path.join(root, 'state-link');
+    const dirLink = path.join(root, 'dir-link');
+    fs.mkdirSync(fileLink);
+    fs.mkdirSync(stateLink);
+    fs.symlinkSync(victimFile, path.join(fileLink, 'auto_localize_watcher.js'));
+    fs.symlinkSync(victimDir, path.join(stateLink, '.watcher-state'));
+    fs.symlinkSync(victimDir, dirLink);
+    const warnings = [];
+    t.mock.method(console, 'warn', message => warnings.push(String(message)));
+    // careful：root 執行時的預設，測試以目前使用者模擬
+    const session = engine.prepareMacWatcherSync({
+        sourceDir: repo, careful: true,
+        runtimes: ['file-link', 'state-link', 'dir-link'].map(name => ({ kind: 'user', runtimeDir: path.join(root, name) }))
+    });
+    engine.cleanupMacWatcherSync(session);
+    assert.equal(fs.readFileSync(victimFile, 'utf8'), 'system', '連結指向的檔案不得被改寫');
+    assert.deepEqual(fs.readdirSync(victimDir), [], '連結指向的目錄裡不得建立任何項目');
+    assert.deepEqual(session.synced, [fileLink]);
+    const synced = path.join(fileLink, 'auto_localize_watcher.js');
+    assert.equal(fs.lstatSync(synced).isFile(), true, '執行檔換成一般檔案');
+    assert.equal(fs.readFileSync(synced, 'utf8'), fs.readFileSync(path.join(repo, 'auto_localize_watcher.js'), 'utf8'));
+    assert.ok(warnings.some(w => w.includes(stateLink)) && warnings.some(w => w.includes(dirLink)), '回報略過的執行目錄');
+});
+
+test('as root, the installer lock is never created through a state directory swapped for a link after it was checked', { skip: process.platform === 'win32' }, t => {
+    const engine = require('../localization_engine');
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-mac-sync-parent-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const rtDir = path.join(root, 'runtime');
+    const victimDir = path.join(root, 'system-dir');
+    fs.mkdirSync(rtDir);
+    fs.mkdirSync(victimDir);
+    const stateDir = path.join(rtDir, '.watcher-state');
+    const lockPath = path.join(stateDir, 'run.lock');
+    const mkdir = fs.mkdirSync;
+    t.after(() => { fs.mkdirSync = mkdir; });
+    fs.mkdirSync = (target, ...rest) => {
+        if (target === lockPath && !fs.lstatSync(stateDir).isSymbolicLink()) {
+            fs.renameSync(stateDir, stateDir + '.orig');
+            fs.symlinkSync(victimDir, stateDir);
+        }
+        return mkdir(target, ...rest);
+    };
+    t.mock.method(console, 'warn', () => {});
+    const session = engine.prepareMacWatcherSync({ sourceDir: repo, careful: true, runtimes: [{ kind: 'user', runtimeDir: rtDir }] });
+    fs.mkdirSync = mkdir;
+    engine.cleanupMacWatcherSync(session);
+    assert.deepEqual(session.synced, [], '鎖建到別處：不算取得鎖，不同步');
+    const planted = path.join(victimDir, 'run.lock');
+    assert.deepEqual(fs.existsSync(planted) ? fs.readdirSync(planted) : [], [], '不得在連結指向的目錄裡寫入 pid、token');
+});
+
+test('as root, the receipt is written only inside the state directory checked during sync', { skip: process.platform === 'win32' }, t => {
+    const engine = require('../localization_engine');
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-mac-sync-receipt-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const rtDir = path.join(root, 'runtime');
+    fs.mkdirSync(rtDir);
+    const fakeAsar = path.join(root, 'app.asar');
+    fs.writeFileSync(fakeAsar, 'new-asar-bytes');
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const session = engine.prepareMacWatcherSync({ sourceDir: repo, careful: true, runtimes: [{ kind: 'user', runtimeDir: rtDir }] });
+    assert.deepEqual(session.synced, [rtDir]);
+    // 安裝期間，.watcher-state 被換成連結；連結指向的目錄還放了一份安裝器的鎖，讓鎖看起來仍在
+    const stateDir = path.join(rtDir, '.watcher-state');
+    const victimDir = path.join(root, 'system-dir');
+    fs.renameSync(stateDir, stateDir + '.orig');
+    fs.mkdirSync(path.join(victimDir, 'run.lock'), { recursive: true });
+    for (const name of ['pid', 'token']) {
+        fs.copyFileSync(path.join(stateDir + '.orig', 'run.lock', name), path.join(victimDir, 'run.lock', name));
+    }
+    fs.symlinkSync(victimDir, stateDir);
+    const result = engine.commitMacWatcherSync(session, '/Applications/Antigravity.app', fakeAsar);
+    fs.unlinkSync(stateDir);
+    fs.renameSync(stateDir + '.orig', stateDir);
+    engine.cleanupMacWatcherSync(session);
+    assert.deepEqual(fs.readdirSync(victimDir), ['run.lock'], '連結指向的目錄裡不得寫入收據');
+    assert.deepEqual(result.written, []);
+});
+
+test('as root, the installer deletes the user\'s Electron caches as that user, not as root', { skip: process.platform === 'win32' }, t => {
+    const engine = require('../localization_engine');
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-mac-cache-root-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const support = path.join(root, 'Antigravity');
+    fs.mkdirSync(path.join(support, 'Cache'), { recursive: true });
+    t.mock.method(console, 'log', () => {});
+    const self = { uid: process.getuid(), gid: process.getgid() };
+    if (self.uid !== 0) {
+        // 一般使用者無法切換成其他身分：刪除改以指定的身分執行，所以這次刪不掉
+        engine.cleanElectronCache([support], { asUser: { uid: self.uid + 1, gid: self.gid } });
+        assert.equal(fs.existsSync(path.join(support, 'Cache')), true, '不是以目前程序的身分刪除');
+    }
+    engine.cleanElectronCache([support], { asUser: self });
+    assert.equal(fs.existsSync(path.join(support, 'Cache')), false);
+});
+
 test('metadata stamp, macOS runtime sync with lock, and Windows task path re-registration prevent watcher rollback', t => {
     const engine = require('../localization_engine');
     const js = engine.generateJs();

@@ -10,7 +10,7 @@
 
 👉 **[上游簡體中文專案 (Upstream Project)](https://github.com/qqxpee/antigravity2-cn)**
 
-目前套件版本：**3.8.1**。適配 Antigravity **v2.35.1**；台灣用語與背景守護由本分支持續維護。
+目前套件版本：**3.8.2**。適配 Antigravity **v2.35.1**；台灣用語與背景守護由本分支持續維護。
 
 ---
 

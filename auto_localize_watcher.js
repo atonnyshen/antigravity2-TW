@@ -164,35 +164,121 @@ function setModeNoFollow(target, mode) {
     try { fs.chmodSync(target, mode); return true; } catch { return false; }
 }
 
-// root 建立的檔案要交給誰：明確指定的非 root 擁有者，否則沿用上層目錄的擁有者
-function nonRootOwner(dir, targetUid, targetGid) {
-    let uid = targetUid;
-    let gid = targetGid;
-    if (uid == null || uid === 0) {
-        try {
-            const parentStat = fs.statSync(dir);
-            uid = parentStat.uid;
-            gid = parentStat.gid;
-        } catch {
-            return null;
-        }
-    }
-    return uid != null && uid !== 0 ? { uid, gid } : null;
+// root 建立的檔案要交給誰：上層目錄屬於一般使用者時才交出（明確指定的非 root 擁有者優先，否則沿用上層目錄的擁有者）。
+// 上層目錄屬於 root（系統層守護的執行目錄）時一律留給 root：交給使用者後，使用者就能替換其中的鎖、暫存目錄與狀態檔，
+// 把 root 之後的寫入、搬移與刪除導向系統檔案
+// 以 root 執行時就是 root；測試以一般使用者身分模擬 root 的分支
+function selfOwner() {
+    return { uid: process.getuid(), gid: process.getgid() };
 }
 
-function ensureAccessibleDir(dir, targetUid, targetGid) {
+function nonRootOwner(dir, targetUid, targetGid) {
+    let parentStat;
+    try {
+        parentStat = fs.statSync(dir);
+    } catch {
+        return null;
+    }
+    if (parentStat.uid === selfOwner().uid) return null;
+    if (targetUid != null && targetUid !== 0) return { uid: targetUid, gid: targetGid };
+    return { uid: parentStat.uid, gid: parentStat.gid };
+}
+
+function ensureAccessibleDir(dir, targetUid, targetGid, { asRoot = ROOT } = {}) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
-    if (!ROOT) {
+    if (!asRoot) {
         try { fs.chmodSync(dir, 0o755); } catch {}
         return dir;
     }
     const owner = nonRootOwner(path.dirname(dir), targetUid, targetGid);
-    const own = owner ? { uid: owner.uid, gid: owner.gid } : {};
-    if (!setOwnerNoFollow(dir, { ...own, mode: 0o755, allowDir: true }) || !owner) return dir;
+    // 系統層守護的狀態目錄：v3.8.1 與更早版本每次執行都把目錄與第一層項目交給 App 的擁有者，這裡收回給 root
+    const own = owner ? { uid: owner.uid, gid: owner.gid } : selfOwner();
+    if (!setOwnerNoFollow(dir, { ...own, mode: 0o755, allowDir: true })) return dir;
     forEachChildNoFollow(dir, name => {
-        setOwnerNoFollow(name, { ...own, allowDir: true, mode: st => (st.isDirectory() ? 0o755 : 0o644) });
+        setOwnerNoFollow(name, {
+            ...own, allowDir: true,
+            mode: st => (st.isDirectory() ? 0o755 : (owner ? 0o644 : st.mode & 0o644))
+        });
     });
     return dir;
+}
+
+// 狀態檔先寫入唯一名稱的暫存檔（wx：同名項目已存在就失敗，不跟隨預先放好的連結）再改名取代。
+// v3.8.1 與更早版本固定寫入 <雜湊>.json.tmp：狀態目錄屬於使用者時，預先放好的同名連結會讓 root 改寫連結指向的檔案
+function writeStateFile(stateDir, statePath, record, targetUid, targetGid, { asRoot = ROOT } = {}) {
+    const temp = statePath + '.' + process.pid + '.' + crypto.randomBytes(5).toString('hex') + '.tmp';
+    const owner = asRoot ? nonRootOwner(stateDir, targetUid, targetGid) : null;
+    try {
+        fs.writeFileSync(temp, JSON.stringify(record) + '\n', { flag: 'wx', mode: 0o644 });
+        if (owner) setOwnerNoFollow(temp, owner);
+        fs.renameSync(temp, statePath);
+    } finally {
+        try { fs.rmSync(temp, { force: true }); } catch {}
+    }
+}
+
+// root 刪除暫存目錄交給 /bin/rm：fts 依實體路徑走訪、進入子目錄前核對目錄身分，不跟隨連結。
+// fs.rmSync 在部分 Node 版本以路徑逐層遞迴，刪除途中子目錄被換成連結時，會刪到連結指向的檔案
+function removeTree(target, { asRoot = ROOT } = {}) {
+    if (asRoot) {
+        execFileSync('/bin/rm', ['-rf', '--', target], { stdio: 'ignore' });
+        return;
+    }
+    fs.rmSync(target, { recursive: true, force: true });
+}
+
+// root 建立替換用暫存目錄的位置。App 的 Resources 屬於 App 的擁有者：使用者可以把 root 在其中建立的暫存目錄
+// 換成連結，讓 root 寫入並交出擁有者的檔案落到系統目錄。root 改用 root 擁有的狀態目錄
+// （原子交換要求同一個檔案系統，不同時沿用 Resources）
+function replacementBase(asarPath, stateDir, { asRoot = ROOT } = {}) {
+    const resources = path.dirname(asarPath);
+    if (!asRoot) return resources;
+    try {
+        const st = fs.lstatSync(stateDir);
+        if (st.isDirectory() && st.uid === selfOwner().uid && (st.mode & 0o022) === 0 &&
+            st.dev === fs.statSync(resources).dev) return stateDir;
+    } catch {}
+    return resources;
+}
+
+// 被強制結束（SIGKILL、斷電）的守護程序來不及執行 finally，會在狀態目錄留下 stage-*（內含整份 app.asar，
+// 可達數十 MB），之後也沒有程序清理。每次執行開始時清掉不屬於執行中程序的暫存目錄：
+// 名稱帶有建立者程序編號（v3.8.2 起）且該程序已結束的立即清除；舊版建立、名稱沒有程序編號的，超過一小時未變動才清除；
+// 建立者看似仍在執行（可能是程序編號被重用）時，超過一天才清除。建置與簽章各有數分鐘的逾時，
+// 執行中的暫存目錄不會存在這麼久。只處理一般目錄，連結與其他檔案不碰
+const STAGE_ORPHAN_MS = 60 * 60 * 1000;
+const STAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+function cleanStaleStageDirs(stateDir, { now = Date.now(), remove = removeTree } = {}) {
+    const removed = [];
+    let names;
+    try {
+        names = fs.readdirSync(stateDir);
+    } catch {
+        return removed;
+    }
+    for (const name of names.sort()) {
+        const match = /^stage-(?:(\d+)-)?[A-Za-z0-9]{6}$/.exec(name);
+        if (!match) continue;
+        const full = path.join(stateDir, name);
+        let st;
+        try {
+            st = fs.lstatSync(full);
+        } catch {
+            continue;
+        }
+        if (!st.isDirectory()) continue;
+        const age = now - st.mtimeMs;
+        const pid = match[1] ? Number(match[1]) : null;
+        const ownerAlive = pid !== null && pid !== process.pid && runLock.pidAlive(pid);
+        const stale = pid === null ? age > STAGE_ORPHAN_MS : (!ownerAlive || age > STAGE_MAX_AGE_MS);
+        if (!stale) continue;
+        try {
+            remove(full);
+            removed.push(name);
+        } catch {}
+    }
+    if (removed.length) log('已清除中斷執行留下的暫存目錄：' + removed.join('、'));
+    return removed;
 }
 
 // 鎖的判斷與回收在 src/run_lock.js，與安裝器共用同一套格式
@@ -201,16 +287,21 @@ function acquireLock(lockPath, targetUid, targetGid, options = {}) {
     return runLock.acquire(lockPath, { ...options, owner });
 }
 
-function cleanElectronCache(targetUid) {
+// root 以 App 擁有者的身分刪除快取：家目錄裡的每一層路徑都由使用者控制，以 root 刪除可能被連結導向系統目錄。
+// 測試可以用 appSupportDirs 與 asUser 指定位置與身分
+function cleanElectronCache(targetUid, targetGid, { appSupportDirs: customDirs = null, asUser = null } = {}) {
     try {
         const appSupportDirs = [];
-        if (IS_MAC) {
+        if (Array.isArray(customDirs)) {
+            appSupportDirs.push(...customDirs);
+        } else if (IS_MAC) {
             let home = os.homedir();
             if (ROOT && targetUid && targetUid !== 0) {
                 try {
                     const uEntry = execFileSync('/usr/bin/id', ['-un', String(targetUid)], { encoding: 'utf8' }).trim();
                     if (uEntry) home = path.join('/Users', uEntry);
                 } catch {}
+                if (targetGid != null && !asUser) asUser = { uid: targetUid, gid: targetGid };
             }
             appSupportDirs.push(
                 path.join(home, 'Library', 'Application Support', 'Antigravity'),
@@ -240,7 +331,13 @@ function cleanElectronCache(targetUid) {
                     if (entry.isDirectory()) {
                         const full = path.join(dir, entry.name);
                         if (toDeleteNames.has(entry.name)) {
-                            try { fs.rmSync(full, { recursive: true, force: true }); } catch {}
+                            try {
+                                if (asUser) {
+                                    execFileSync('/bin/rm', ['-rf', '--', full], { uid: asUser.uid, gid: asUser.gid, stdio: 'ignore' });
+                                } else {
+                                    fs.rmSync(full, { recursive: true, force: true });
+                                }
+                            } catch {}
                         } else if (entry.name === 'Partitions' || entry.name.startsWith('hub-browser') || entry.name === 'Service Worker') {
                             purgeDir(full, depth + 1);
                         }
@@ -414,7 +511,8 @@ function getLocalPackageVersion(baseDir = DIR) {
 
 function ensureRegularTarget(file) {
     // Refuse symlink destinations before privileged backup/replacement.
-    const parentDir = path.dirname(file);
+    // 相對名稱（root 在核對過的 Resources 目錄內交換時）以目前工作目錄解析後再比對
+    const parentDir = path.dirname(path.resolve(file));
     if (fs.existsSync(parentDir) && fs.realpathSync(parentDir) !== parentDir) {
         throw new Error('拒絕經由符號連結修改應用程式資源目錄。');
     }
@@ -432,8 +530,20 @@ function notifyMacUser(title, message) {
     } catch {}
 }
 
-function safeReplaceFile(src, dst, mode, uid, gid, { atomicRequired = false } = {}) {
+function safeReplaceFile(src, dst, mode, uid, gid, { atomicRequired = false, expectedDir = null } = {}) {
     stripQuarantine(src);
+    if (expectedDir) {
+        // root 把檔案搬進使用者擁有的 Resources：在開始時核對過的同一個目錄內以相對名稱改名、設定擁有者，
+        // App 或 Contents 在途中被換成連結時，檔案不會落到連結指向的目錄。失敗就回報，不退回複製寫入
+        inResources(dst, expectedDir, () => {
+            const name = path.basename(dst);
+            fs.renameSync(src, name);
+            stripQuarantine(name);
+            const own = uid != null && gid != null ? { uid, gid } : {};
+            setOwnerNoFollow(name, { ...own, mode: mode != null ? mode & 0o777 : undefined });
+        });
+        return;
+    }
     stripQuarantine(dst);
     try {
         fs.renameSync(src, dst);
@@ -512,6 +622,21 @@ function fsyncDirectory(dir) {
     if (process.platform === 'win32') return;
     const fd = fs.openSync(dir, 'r');
     try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+}
+
+// root 在 Resources 裡改名或交換正式檔案時，先切換到開始時核對過的同一個 Resources 目錄，再以相對名稱操作
+function inResources(file, resourcesStat, fn) {
+    return runLock.inDirNoFollow(path.dirname(file),
+        st => st.dev === resourcesStat.dev && st.ino === resourcesStat.ino, fn);
+}
+
+// 原子交換以 App 的正式檔案為對象時，改在核對過的 Resources 目錄內以相對名稱交換：
+// 交換前後 App 或 Contents 被換成連結，也不會把繁中檔案換進其他 App 的目錄
+function exchangeInResources(exchange, asarPath, resourcesStat) {
+    return (candidate, live, previousPath) => {
+        if (live !== asarPath) return exchange(candidate, live, previousPath);
+        return inResources(asarPath, resourcesStat, () => exchange(candidate, path.basename(live), previousPath));
+    };
 }
 
 // Replace the live archive AND retain the exact displaced archive. Merely
@@ -682,8 +807,9 @@ function resumePendingAsarRecovery(appInfo, stateDir, exchange = exchangeAsar) {
                 throw new Error('正式 ASAR 已被其他程序更新，停止套用舊復原檔，需要人工核對。');
             }
             const sourceStat = fs.statSync(asarPath);
+            if (ROOT) exchange = exchangeInResources(exchange, asarPath, fs.statSync(path.dirname(asarPath)));
             // The replacement must be on the same filesystem as the live ASAR.
-            stageDir = fs.mkdtempSync(path.join(path.dirname(asarPath), '.autolocalize-'));
+            stageDir = fs.mkdtempSync(path.join(replacementBase(asarPath, stateDir), '.autolocalize-'));
             const candidate = path.join(stageDir, 'app.asar');
             fs.writeFileSync(candidate, bytes, { flag: 'wx', mode: sourceStat.mode & 0o777 });
             fsyncFile(candidate);
@@ -708,13 +834,13 @@ function resumePendingAsarRecovery(appInfo, stateDir, exchange = exchangeAsar) {
         }
         fs.unlinkSync(receipt);
         fsyncDirectory(stateDir);
-        try { fs.rmSync(recoveryDir, { recursive: true, force: true }); }
+        try { removeTree(recoveryDir); }
         catch (cleanupError) { log('已完成復原，舊復原副本待清理：' + cleanupError.message); }
         log('ASAR 已恢復至已驗證的版本，重新執行繁體中文套用。');
         return true;
     } finally {
         if (stageDir && !retainStage) {
-            try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch {}
+            try { removeTree(stageDir); } catch {}
         }
         release();
     }
@@ -750,9 +876,13 @@ function checkAndLocalizeApp(appInfo, {
 } = {}) {
     const { appPath, asarPath } = appInfo;
     ensureRegularTarget(asarPath);
+    // root 之後搬進或換入 Resources 的檔案，都要落在這裡記下的同一個目錄
+    const resourcesStat = ROOT ? fs.statSync(path.dirname(asarPath)) : null;
+    if (resourcesStat) exchange = exchangeInResources(exchange, asarPath, resourcesStat);
     wait(asarPath);
     const currentStat = fs.statSync(asarPath);
     ensureAccessibleDir(stateDir, currentStat.uid, currentStat.gid);
+    cleanStaleStageDirs(stateDir);
     const resumed = resumePendingAsarRecovery(appInfo, stateDir, exchange);
     if (resumed === 'locked') {
         log('另有守護程序正在恢復 ASAR，略過本輪。');
@@ -783,14 +913,12 @@ function checkAndLocalizeApp(appInfo, {
         previous.output !== originalHash;
     if (localized && (higherEngineVersion || externalSameVersion)) {
         try {
-            const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
-            fs.writeFileSync(stateTmp, JSON.stringify({
+            writeStateFile(stateDir, statePath, {
                 recipe,
                 output: originalHash,
                 skippedHigherVersion: targetMeta.version,
                 updatedAt: new Date().toISOString()
-            }) + '\n');
-            safeReplaceFile(stateTmp, statePath, 0o644, sourceStat.uid, sourceStat.gid);
+            }, sourceStat.uid, sourceStat.gid);
         } catch {}
         log(`目標 app.asar 來自外部同版或較新的引擎 (v${targetMeta.version})，主動保留以防回滾。`);
         return false;
@@ -804,7 +932,7 @@ function checkAndLocalizeApp(appInfo, {
     let resultHash;
     let retainReplacementDir = false;
     try {
-        stageDir = fs.mkdtempSync(path.join(stateDir, 'stage-'));
+        stageDir = fs.mkdtempSync(path.join(stateDir, `stage-${process.pid}-`));
         const stageAsar = path.join(stageDir, 'app.asar');
         fs.writeFileSync(stageAsar, original, { flag: 'wx' });
         const unpacked = asarPath + '.unpacked';
@@ -828,9 +956,10 @@ function checkAndLocalizeApp(appInfo, {
             ensureRegularTarget(asarPath + '.bak');
         }
 
-        // Try creating replacementDir in Resources dir; if denied by macOS EPERM, fall back to stateDir or os.tmpdir()
+        // Try creating replacementDir in Resources dir (root: the root-owned stateDir, see replacementBase);
+        // if denied by macOS EPERM, fall back to stateDir or os.tmpdir()
         try {
-            replacementDir = fs.mkdtempSync(path.join(path.dirname(asarPath), '.autolocalize-'));
+            replacementDir = fs.mkdtempSync(path.join(replacementBase(asarPath, stateDir), '.autolocalize-'));
         } catch (dirErr) {
             try {
                 replacementDir = fs.mkdtempSync(path.join(stateDir, '.autolocalize-'));
@@ -854,7 +983,7 @@ function checkAndLocalizeApp(appInfo, {
                 fsyncFile(backup);
                 if (ROOT) setOwnerNoFollow(backup, { uid: sourceStat.uid, gid: sourceStat.gid });
                 safeReplaceFile(backup, asarPath + '.bak', sourceStat.mode, sourceStat.uid, sourceStat.gid,
-                    { atomicRequired: true });
+                    { atomicRequired: true, expectedDir: resourcesStat });
             }
             if (digest(fs.readFileSync(asarPath + '.bak')) !== originalHash) {
                 throw new Error('官方 app.asar 備份驗證失敗，拒絕修改正式檔案。');
@@ -888,7 +1017,7 @@ function checkAndLocalizeApp(appInfo, {
         // removing it after sign() would invalidate macOS sealed resources.
         if (replacementDir) {
             try {
-                fs.rmSync(replacementDir, { recursive: true, force: true });
+                removeTree(replacementDir);
                 replacementDir = null;
             } catch {}
         }
@@ -896,16 +1025,9 @@ function checkAndLocalizeApp(appInfo, {
         if (digest(fs.readFileSync(asarPath)) !== resultHash) {
             throw new Error('簽署期間官方 app.asar 已更新，保留較新檔案並取消本輪收據。');
         }
-        const stateTmp = path.join(stateDir, digest(appPath) + '.json.tmp');
-        fs.writeFileSync(stateTmp, JSON.stringify({ recipe, output: digest(result), updatedAt: new Date().toISOString() }) + '\n');
-        if (ROOT) {
-            try {
-                const parentStat = fs.statSync(path.dirname(stateTmp));
-                if (parentStat.uid !== 0) setOwnerNoFollow(stateTmp, { uid: parentStat.uid, gid: parentStat.gid });
-            } catch {}
-        }
-        safeReplaceFile(stateTmp, statePath, 0o644, sourceStat.uid, sourceStat.gid);
-        cleanElectronCache(sourceStat ? sourceStat.uid : null);
+        writeStateFile(stateDir, statePath, { recipe, output: digest(result), updatedAt: new Date().toISOString() },
+            sourceStat.uid, sourceStat.gid);
+        cleanElectronCache(sourceStat ? sourceStat.uid : null, sourceStat ? sourceStat.gid : null);
         log('繁中套件已套用並驗證；已開啟的視窗須重新啟動後載入。');
         return true;
     } catch (error) {
@@ -918,7 +1040,7 @@ function checkAndLocalizeApp(appInfo, {
                 let createdRollbackDir = false;
                 if (!rollbackDir) {
                     try {
-                        rollbackDir = fs.mkdtempSync(path.join(path.dirname(asarPath), '.autolocalize-rb-'));
+                        rollbackDir = fs.mkdtempSync(path.join(replacementBase(asarPath, stateDir), '.autolocalize-rb-'));
                         createdRollbackDir = true;
                     } catch {
                         rollbackDir = stageDir;
@@ -939,7 +1061,7 @@ function checkAndLocalizeApp(appInfo, {
                 }
                 fsyncDirectory(path.dirname(asarPath));
                 if (createdRollbackDir) {
-                    try { fs.rmSync(rollbackDir, { recursive: true, force: true }); } catch {}
+                    try { removeTree(rollbackDir); } catch {}
                 }
                 sign(appPath, sourceStat);
                 log('套用未通過，已還原原始 app.asar。');
@@ -979,10 +1101,10 @@ function checkAndLocalizeApp(appInfo, {
         throw error;
     } finally {
         if (stageDir) {
-            try { fs.rmSync(stageDir, { recursive: true, force: true }); } catch {}
+            try { removeTree(stageDir); } catch {}
         }
         if (replacementDir && !retainReplacementDir) {
-            try { fs.rmSync(replacementDir, { recursive: true, force: true }); } catch {}
+            try { removeTree(replacementDir); } catch {}
         }
         release();
     }
@@ -1373,5 +1495,10 @@ module.exports = {
     compareVersions,
     extractLocalizationMeta,
     getLocalPackageVersion,
-    refreshTranslationsAndReapply
+    refreshTranslationsAndReapply,
+    cleanStaleStageDirs,
+    cleanElectronCache,
+    writeStateFile,
+    replacementBase,
+    exchangeInResources
 };

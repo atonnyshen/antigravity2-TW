@@ -523,7 +523,16 @@ function runCommandSync(cmd) {
     }
 }
 
-function cleanElectronCache(customAppSupportDirs) {
+// 經 sudo 以 root 執行時，改以原本的使用者身分刪除家目錄裡的快取：家目錄裡的每一層路徑都由使用者控制，
+// 以 root 刪除可能被連結導向系統目錄。asUser 可明確指定（{ uid, gid }），測試以目前使用者模擬
+function sudoInvoker() {
+    const uid = Number(process.env.SUDO_UID);
+    const gid = Number(process.env.SUDO_GID);
+    if (!isRootProcess() || !Number.isInteger(uid) || uid <= 0 || !Number.isInteger(gid) || gid < 0) return null;
+    return { uid, gid };
+}
+
+function cleanElectronCache(customAppSupportDirs, { asUser = Array.isArray(customAppSupportDirs) ? null : sudoInvoker() } = {}) {
     let appSupportDirs = Array.isArray(customAppSupportDirs) ? customAppSupportDirs : [];
     if (!Array.isArray(customAppSupportDirs)) {
         if (process.platform === 'darwin') {
@@ -564,7 +573,11 @@ function cleanElectronCache(customAppSupportDirs) {
                     const full = path.join(dir, entry.name);
                     if (toDeleteNames.has(entry.name)) {
                         try {
-                            fs.rmSync(full, { recursive: true, force: true });
+                            if (asUser) {
+                                child_process.execFileSync('/bin/rm', ['-rf', '--', full], { uid: asUser.uid, gid: asUser.gid, stdio: 'ignore' });
+                            } else {
+                                fs.rmSync(full, { recursive: true, force: true });
+                            }
                             cleanedCount++;
                         } catch (e) {}
                     } else if (
@@ -783,19 +796,113 @@ function copyDirTree(src, dest) {
     }
 }
 
-// 與守護程式共用 src/run_lock.js 的鎖格式與回收規則，避免兩邊對鎖的解讀不同而同時取得
-function acquireWatcherLockSync(lockPath, waitMs = 4000) {
-    const deadline = Date.now() + waitMs;
-    let owner = null;
-    if (typeof process.getuid === 'function' && process.getuid() === 0) {
+const RUNTIME_FILES = ['auto_localize_watcher.js', 'localization_engine.js', 'package.json', 'package-lock.json'];
+const RUNTIME_FOLDERS = ['dicts', 'dicts_tw', 'rules', 'src', 'scripts'];
+
+function isRootProcess() {
+    return typeof process.getuid === 'function' && process.getuid() === 0;
+}
+
+// root 同步守護程式的執行目錄。使用者層的執行目錄位於使用者家目錄，路徑上的每一層都可能被使用者換成連結：
+// 先以不跟隨連結的方式確認執行目錄，切換進去後一律以相對名稱複製、刪除與建立子目錄，
+// 新建的項目交給執行目錄的擁有者。目錄在途中被換成連結時，寫入與刪除仍落在原本的目錄裡，
+// 不會改寫、刪除或交出連結指向的系統檔案；確認不了就放棄同步
+function inspectRuntimeDir(rtDir) {
+    const st = fs.lstatSync(rtDir);
+    if (!st.isDirectory()) throw new Error('不是一般目錄');
+    return { st, owner: st.uid !== 0 ? { uid: st.uid, gid: st.gid } : null };
+}
+
+function inRuntimeDir(rtDir, rt, fn) {
+    return runLock.inDirNoFollow(rtDir, st => st.dev === rt.st.dev && st.ino === rt.st.ino && st.uid === rt.st.uid, fn);
+}
+
+// 在目前工作目錄建立（或沿用）子目錄並交給 owner；同名項目是連結時丟出錯誤。
+// root 擁有的執行目錄（owner 為 null）裡的子目錄收回給 root：v3.8.1 與更早版本的系統層守護會把 .watcher-state 交給 App 的擁有者
+function ensureChildDir(name, owner) {
+    try {
+        fs.mkdirSync(name, { mode: 0o755 });
+    } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+    }
+    return runLock.inDirNoFollow(name, () => true, fd => {
+        const target = owner || (isRootProcess() ? { uid: 0, gid: 0 } : null);
+        if (target) fs.fchownSync(fd, target.uid, target.gid);
+        return fs.fstatSync(fd);
+    });
+}
+
+// 複製到目前工作目錄：先寫入唯一名稱的暫存檔再改名取代，同名項目是連結時只會取代連結本身
+function copyFileRelative(src, name, owner) {
+    const temp = `.${name}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+    // 與 copyFileSync 一樣沿用來源的權限（auto_localize_watcher.js 為 755）
+    const mode = fs.statSync(src).mode & 0o755;
+    try {
+        const fd = fs.openSync(temp, 'wx', mode);
         try {
-            const parentStat = fs.statSync(path.dirname(lockPath));
+            fs.writeSync(fd, fs.readFileSync(src));
+            fs.fchmodSync(fd, mode);
+            if (owner) fs.fchownSync(fd, owner.uid, owner.gid);
+        } finally {
+            fs.closeSync(fd);
+        }
+        fs.renameSync(temp, name);
+    } catch (error) {
+        try { fs.unlinkSync(temp); } catch {}
+        throw error;
+    }
+}
+
+function copyTreeRelative(srcDir, owner) {
+    const uid = owner ? owner.uid : 0;
+    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+        const src = path.join(srcDir, entry.name);
+        if (entry.isDirectory()) {
+            ensureChildDir(entry.name, owner);
+            runLock.inDirNoFollow(entry.name, st => st.uid === uid, () => copyTreeRelative(src, owner));
+        } else if (entry.isFile()) {
+            copyFileRelative(src, entry.name, owner);
+        }
+    }
+}
+
+function syncRuntimeCarefully(sourceDir, rtDir, rt) {
+    const uid = rt.owner ? rt.owner.uid : 0;
+    inRuntimeDir(rtDir, rt, () => {
+        for (const file of RUNTIME_FILES) {
+            const src = path.join(sourceDir, file);
+            if (fs.existsSync(src)) copyFileRelative(src, file, rt.owner);
+        }
+        for (const folder of RUNTIME_FOLDERS) {
+            const src = path.join(sourceDir, folder);
+            if (!fs.existsSync(src)) continue;
+            // 子程序沿用目前已確認的工作目錄，以相對名稱刪除；fts 依實體路徑走訪，不跟隨連結
+            child_process.execFileSync('/bin/rm', ['-rf', '--', folder], { stdio: 'ignore' });
+            ensureChildDir(folder, rt.owner);
+            runLock.inDirNoFollow(folder, st => st.uid === uid, () => copyTreeRelative(src, rt.owner));
+        }
+    });
+}
+
+// 與守護程式共用 src/run_lock.js 的鎖格式與回收規則，避免兩邊對鎖的解讀不同而同時取得
+// owner、parent 由呼叫端核對執行目錄後指定（root 同步使用者的執行目錄時）；未指定時沿用上層目錄的擁有者
+function acquireWatcherLockSync(lockPath, waitMs = 4000, { owner = undefined, parent = null } = {}) {
+    const deadline = Date.now() + waitMs;
+    const given = owner !== undefined;
+    if (!given) owner = null;
+    if (!given && isRootProcess()) {
+        // 上層目錄被換成連結時，不在連結指向的位置建立鎖
+        try {
+            const parentStat = fs.lstatSync(path.dirname(lockPath));
+            if (!parentStat.isDirectory()) return null;
             if (parentStat.uid !== 0) owner = { uid: parentStat.uid, gid: parentStat.gid };
-        } catch {}
+        } catch {
+            return null;
+        }
     }
     while (true) {
         let release;
-        try { release = runLock.acquire(lockPath, { owner }); } catch { return null; }
+        try { release = runLock.acquire(lockPath, { owner, parent }); } catch { return null; }
         if (release) return release;
         if (Date.now() >= deadline) return null;
         sleepSync(150);
@@ -826,11 +933,25 @@ function discoverMacWatcherRuntimes({
 
 function prepareMacWatcherSync({
     sourceDir = __dirname,
-    runtimes = discoverMacWatcherRuntimes()
+    runtimes = discoverMacWatcherRuntimes(),
+    careful = isRootProcess()
 } = {}) {
-    const session = { synced: [], locks: [], unwritableSystem: false };
+    const session = { synced: [], locks: [], lockOf: new Map(), rtOf: new Map(), unwritableSystem: false };
     if (!fs.existsSync(path.join(sourceDir, 'auto_localize_watcher.js'))) return session;
+    try {
+        syncRuntimes(session, sourceDir, runtimes, careful);
+    } catch (error) {
+        // 同步途中出錯時呼叫端拿不到 session：先釋放已取得的鎖再回報
+        cleanupMacWatcherSync(session);
+        throw error;
+    }
+    if (session.unwritableSystem) {
+        console.warn("[警告] 检测到系统级背景守护 (LaunchDaemon) 无写入权限，请执行 sudo bash ./install_macos_autowatcher.sh --daemon 同步更新，以免旧版守护回滚 app.asar。");
+    }
+    return session;
+}
 
+function syncRuntimes(session, sourceDir, runtimes, careful) {
     for (const item of runtimes) {
         const rtDir = item.runtimeDir;
         try {
@@ -839,27 +960,44 @@ function prepareMacWatcherSync({
             if (item.kind === 'system') session.unwritableSystem = true;
             continue;
         }
-        const stateDir = path.join(rtDir, '.watcher-state');
-        fs.mkdirSync(stateDir, { recursive: true, mode: 0o755 });
-        const release = acquireWatcherLockSync(path.join(stateDir, 'run.lock'));
+        let rt = null;
+        if (careful) {
+            try {
+                rt = inspectRuntimeDir(rtDir);
+                rt.stateStat = inRuntimeDir(rtDir, rt, () => ensureChildDir('.watcher-state', rt.owner));
+            } catch (error) {
+                console.warn(`[守護程序] ${rtDir} 不是可安全寫入的一般目錄，略過本次同步：${error.message}`);
+                continue;
+            }
+        } else {
+            fs.mkdirSync(path.join(rtDir, '.watcher-state'), { recursive: true, mode: 0o755 });
+        }
+        const release = acquireWatcherLockSync(path.join(rtDir, '.watcher-state', 'run.lock'), undefined,
+            rt ? { owner: rt.owner, parent: rt.stateStat } : {});
         if (!release) {
             console.warn(`[守護程序] ${rtDir} 正在執行，未取得排他鎖。略過本次同步，避免覆寫執行中的守護程序。`);
             continue;
         }
         session.locks.push(release);
+        session.lockOf.set(rtDir, release);
+        if (rt) session.rtOf.set(rtDir, rt);
 
-        for (const file of ['auto_localize_watcher.js', 'localization_engine.js', 'package.json', 'package-lock.json']) {
-            const srcFile = path.join(sourceDir, file);
-            if (fs.existsSync(srcFile)) {
-                fs.copyFileSync(srcFile, path.join(rtDir, file));
+        if (careful) {
+            syncRuntimeCarefully(sourceDir, rtDir, rt);
+        } else {
+            for (const file of RUNTIME_FILES) {
+                const srcFile = path.join(sourceDir, file);
+                if (fs.existsSync(srcFile)) {
+                    fs.copyFileSync(srcFile, path.join(rtDir, file));
+                }
             }
-        }
-        for (const folder of ['dicts', 'dicts_tw', 'rules', 'src', 'scripts']) {
-            const srcFolder = path.join(sourceDir, folder);
-            const dstFolder = path.join(rtDir, folder);
-            if (fs.existsSync(srcFolder)) {
-                fs.rmSync(dstFolder, { recursive: true, force: true });
-                copyDirTree(srcFolder, dstFolder);
+            for (const folder of RUNTIME_FOLDERS) {
+                const srcFolder = path.join(sourceDir, folder);
+                const dstFolder = path.join(rtDir, folder);
+                if (fs.existsSync(srcFolder)) {
+                    fs.rmSync(dstFolder, { recursive: true, force: true });
+                    copyDirTree(srcFolder, dstFolder);
+                }
             }
         }
         try {
@@ -875,33 +1013,69 @@ function prepareMacWatcherSync({
         } catch {}
         session.synced.push(rtDir);
     }
-    if (session.unwritableSystem) {
-        console.warn("[警告] 检测到系统级背景守护 (LaunchDaemon) 无写入权限，请执行 sudo bash ./install_macos_autowatcher.sh --daemon 同步更新，以免旧版守护回滚 app.asar。");
-    }
-    return session;
 }
 
+// 先寫入同一目錄裡唯一名稱的暫存檔（wx：已有同名項目就失敗，不跟隨連結），再改名取代。
+// root 寫入使用者的執行目錄時，目標若被換成連結，改名只會取代連結本身，不會寫進連結指向的檔案
+// owner 只能用在已核對身分的目錄（以相對名稱寫入）：上層目錄可被使用者替換時，交出擁有者會讓使用者擁有落在系統目錄裡的檔案
+function writeFileReplacing(file, content, owner = null) {
+    const temp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+    try {
+        const fd = fs.openSync(temp, 'wx', 0o644);
+        try {
+            fs.writeSync(fd, content);
+            if (owner) fs.fchownSync(fd, owner.uid, owner.gid);
+        } finally {
+            fs.closeSync(fd);
+        }
+        fs.renameSync(temp, file);
+    } catch (error) {
+        try { fs.unlinkSync(temp); } catch {}
+        throw error;
+    }
+}
+
+// 安裝期間守護程式可能判定安裝器的鎖已殘留而接手（例如重新簽章或系統睡眠讓心跳停止超過 30 分鐘）。
+// 寫入收據前逐一確認鎖仍屬於自己；失去鎖的執行目錄不寫收據，避免以本次快照蓋過接手者的結果，
+// 下次排程會重新比對。回傳已寫入與略過的執行目錄
 function commitMacWatcherSync(session, macAppBundle, asarPath) {
-    if (!session || !session.synced || session.synced.length === 0) return;
+    const result = { written: [], lost: [] };
+    if (!session || !session.synced || session.synced.length === 0) return result;
     const asarHash = crypto.createHash('sha256').update(fs.readFileSync(asarPath)).digest('hex');
     const appKey = crypto.createHash('sha256').update(macAppBundle).digest('hex');
     for (const rtDir of session.synced) {
+        const release = session.lockOf instanceof Map ? session.lockOf.get(rtDir) : null;
+        if (!release || typeof release.held !== 'function' || !release.held()) {
+            console.warn(`[守護程序] ${rtDir} 的排他鎖已由其他程序接手，未寫入狀態收據；下次排程會重新檢查。`);
+            result.lost.push(rtDir);
+            continue;
+        }
         try {
             const stateDir = path.join(rtDir, '.watcher-state');
-            fs.mkdirSync(stateDir, { recursive: true, mode: 0o755 });
             const recipe = computeDirRecipeHash(rtDir);
-            const statePath = path.join(stateDir, appKey + '.json');
-            fs.writeFileSync(statePath, JSON.stringify({
+            const content = JSON.stringify({
                 recipe,
                 output: asarHash,
                 version: getPackageVersion(),
                 updatedAt: new Date().toISOString()
-            }) + '\n');
+            }) + '\n';
+            const rt = session.rtOf instanceof Map ? session.rtOf.get(rtDir) : null;
+            if (rt) {
+                // root：在同步時核對過的執行目錄與狀態目錄裡，以相對名稱寫入並交給執行目錄的擁有者
+                const uid = rt.owner ? rt.owner.uid : 0;
+                inRuntimeDir(rtDir, rt, () => runLock.inDirNoFollow('.watcher-state', st => st.uid === uid,
+                    () => writeFileReplacing(appKey + '.json', content, rt.owner)));
+            } else {
+                fs.mkdirSync(stateDir, { recursive: true, mode: 0o755 });
+                writeFileReplacing(path.join(stateDir, appKey + '.json'), content);
+            }
+            result.written.push(rtDir);
         } catch {}
     }
-    if (session.synced.length > 0) {
+    if (result.written.length > 0) {
         console.log("[任务] 已同步更新 macOS 背景守护快照并刷新状态，避免旧版回滚。");
     }
+    return result;
 }
 
 function cleanupMacWatcherSync(session) {

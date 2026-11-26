@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { checkAndLocalizeApp, exchangeAsar, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir, recipeHash, rotateLogs, setOwnerNoFollow, forEachChildNoFollow } = require('../auto_localize_watcher');
+const { checkAndLocalizeApp, exchangeAsar, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir, recipeHash, rotateLogs, setOwnerNoFollow, forEachChildNoFollow, cleanStaleStageDirs, cleanElectronCache, writeStateFile, replacementBase, exchangeInResources } = require('../auto_localize_watcher');
 const runLock = require('../src/run_lock');
 const { acquireWatcherLockSync } = require('../localization_engine');
 
@@ -783,6 +783,93 @@ test('reclaiming a stale lock never deletes a newer lock that another process cr
     newer();
 });
 
+test('two reclaimers racing over the same stale lock never leave two holders, even when a third process grabs the lock in between', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-two-reclaimers-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const lockDir = path.join(root, 'run.lock');
+    // 殘留鎖 L0：持有程序已結束（以不存在的程序編號模擬）
+    const deadPid = 2147483000;
+    fs.mkdirSync(lockDir);
+    fs.writeFileSync(path.join(lockDir, 'pid'), String(deadPid));
+    fs.writeFileSync(path.join(lockDir, 'token'), 'stale-L0');
+    const kill = process.kill;
+    const rename = fs.renameSync;
+    t.after(() => { process.kill = kill; fs.renameSync = rename; });
+    const holders = {};
+    const attempt = name => { holders[name] = runLock.acquire(lockDir, { heartbeatMs: 0 }); };
+    // 回收者 B 確認 L0 的持有程序已結束之後暫停；回收者 A 這時完成回收並建立新鎖 L1
+    let paused = false;
+    process.kill = (pid, signal) => {
+        if (pid === deadPid) {
+            if (!paused) { paused = true; attempt('A'); }
+            const error = new Error('kill ESRCH');
+            error.code = 'ESRCH';
+            throw error;
+        }
+        return kill.call(process, pid, signal);
+    };
+    // B 恢復後若照它看到的 L0 去回收、把 L1 移開，第三個程序 C 就在空檔取得鎖
+    fs.renameSync = (from, to) => {
+        rename(from, to);
+        if (from === lockDir && holders.A && !('C' in holders)) attempt('C');
+    };
+    attempt('B');
+    if (!('C' in holders)) attempt('C');
+    process.kill = kill;
+    fs.renameSync = rename;
+    assert.equal(typeof holders.A, 'function', 'A 回收殘留鎖後取得新鎖');
+    assert.deepEqual(Object.keys(holders).filter(name => holders[name]), ['A'], '同一時間只能有一個程序取得鎖');
+    assert.equal(holders.A.held(), true, 'A 的鎖不得被 B 刪掉');
+    holders.A();
+    assert.deepEqual(fs.readdirSync(root), [], '釋放後不留下鎖、guard 或移開用的暫存目錄');
+});
+
+test('a guard left by a process killed mid-removal blocks removal briefly, then is cleared so the stale lock can still be reclaimed', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-guard-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const lockDir = path.join(root, 'run.lock');
+    fs.mkdirSync(lockDir);
+    fs.writeFileSync(path.join(lockDir, 'token'), 'stale-L0');
+    const past = new Date(Date.now() - 31 * 60 * 1000);
+    fs.utimesSync(path.join(lockDir, 'token'), past, past);
+    fs.writeFileSync(path.join(lockDir, 'pid'), String(process.pid));
+    fs.mkdirSync(lockDir + '.guard');
+    // 另一個程序正在 guard 內：不刪，等不到就放棄
+    assert.equal(runLock.removeIfMatches(lockDir, () => true), false);
+    assert.equal(fs.existsSync(lockDir), true);
+    // guard 停留超過上限：持有者在刪除途中被強制結束，清掉 guard 後照常回收
+    const longAgo = new Date(Date.now() - runLock.GUARD_STALE_MS - 1000);
+    fs.utimesSync(lockDir + '.guard', longAgo, longAgo);
+    const release = runLock.acquire(lockDir, { heartbeatMs: 0 });
+    assert.equal(typeof release, 'function');
+    release();
+    assert.deepEqual(fs.readdirSync(root), []);
+});
+
+test('root handing a lock to the user never writes the lock files through a lock directory swapped for a link', { skip: process.platform === 'win32' }, t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-swap-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const lockDir = path.join(root, 'run.lock');
+    // victim：root 擁有的系統目錄（例如 /etc/paths.d）；使用者在鎖目錄建立後立刻把它換成指向 victim 的連結
+    const victim = path.join(root, 'victim');
+    fs.mkdirSync(victim);
+    const mkdir = fs.mkdirSync;
+    t.after(() => { fs.mkdirSync = mkdir; });
+    fs.mkdirSync = (target, ...rest) => {
+        const result = mkdir(target, ...rest);
+        if (target === lockDir) {
+            fs.renameSync(lockDir, lockDir + '.moved');
+            fs.symlinkSync(victim, lockDir);
+        }
+        return result;
+    };
+    const owner = { uid: process.getuid(), gid: process.getgid() };
+    const release = runLock.acquire(lockDir, { heartbeatMs: 0, owner });
+    fs.mkdirSync = mkdir;
+    assert.equal(release, null, '鎖目錄已被換掉：不算取得鎖');
+    assert.deepEqual(fs.readdirSync(victim), [], '不得在連結指向的目錄裡建立 pid、token');
+});
+
 test('ownership changes never follow links: symlinks and hard links are skipped, and a directory swapped for a link mid-way still resolves inside the original directory', { skip: process.platform === 'win32' }, t => {
     const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-nofollow-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -839,4 +926,147 @@ test('rotateLogs still rotates when a crashed run left the rotation lock behind 
     rotateLogs([log], 32);
     assert.equal(fs.readFileSync(log + '.1', 'utf8'), 'x'.repeat(64));
     assert.equal(fs.existsSync(lockDir), false);
+});
+
+test('the state receipt is written through a fresh temporary file, never through a link planted at the old fixed temporary name', { skip: process.platform === 'win32' }, t => {
+    const f = fixture(t);
+    fs.mkdirSync(f.stateDir, { recursive: true });
+    const victim = path.join(path.dirname(f.stateDir), 'victim.conf');
+    fs.writeFileSync(victim, 'system');
+    const statePath = path.join(f.stateDir, digest(f.appInfo.appPath) + '.json');
+    // v3.8.1 與更早版本固定寫入 <雜湊>.json.tmp：預先放好的同名連結會讓 root 改寫連結指向的檔案
+    fs.symlinkSync(victim, statePath + '.tmp');
+    assert.equal(f.run(), true);
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'system', '連結指向的檔案不得被改寫');
+    assert.equal(fs.lstatSync(statePath).isFile(), true, '收據是一般檔案');
+    assert.equal(JSON.parse(fs.readFileSync(statePath, 'utf8')).output, digest(fs.readFileSync(f.asarPath)));
+});
+
+test('as root, a state directory inside a root-owned runtime stays with root and is taken back from the app owner', { skip: process.platform === 'win32' }, t => {
+    // 以目前使用者模擬 root：執行目錄屬於目前程序，App 的擁有者是另一個使用者
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-root-state-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const stateDir = path.join(root, '.watcher-state');
+    fs.mkdirSync(stateDir, { mode: 0o700 });
+    const receipt = path.join(stateDir, 'receipt.json');
+    fs.writeFileSync(receipt, '{}');
+    fs.chmodSync(receipt, 0o666);
+    const appOwner = { uid: process.getuid() + 1, gid: process.getgid() + 1 };
+    const calls = [];
+    const fchown = fs.fchownSync;
+    fs.fchownSync = (fd, uid, gid) => { calls.push(uid); return fchown(fd, uid, gid); };
+    t.after(() => { fs.fchownSync = fchown; });
+    ensureAccessibleDir(stateDir, appOwner.uid, appOwner.gid, { asRoot: true });
+    writeStateFile(stateDir, path.join(stateDir, 'state.json'), { ok: true }, appOwner.uid, appOwner.gid, { asRoot: true });
+    fs.fchownSync = fchown;
+    assert.ok(calls.length > 0, '收回目錄與第一層項目的擁有者');
+    assert.deepEqual([...new Set(calls)], [process.getuid()], '不得交給 App 的擁有者');
+    assert.equal(fs.statSync(stateDir).mode & 0o777, 0o755);
+    assert.equal(fs.statSync(receipt).mode & 0o777, 0o644, '收回時移除其他人的寫入權限');
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(stateDir, 'state.json'), 'utf8')), { ok: true });
+});
+
+test('as root, replacement files are staged in the root-owned state directory, not in the app\'s user-owned Resources', { skip: process.platform === 'win32' }, t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-root-base-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const resources = path.join(root, 'Resources');
+    const stateDir = path.join(root, 'state');
+    fs.mkdirSync(resources);
+    fs.mkdirSync(stateDir, { mode: 0o755 });
+    fs.chmodSync(stateDir, 0o755);
+    const asarPath = path.join(resources, 'app.asar');
+    assert.equal(replacementBase(asarPath, stateDir, { asRoot: true }), stateDir);
+    assert.equal(replacementBase(asarPath, stateDir, { asRoot: false }), resources, '一般使用者照舊使用 Resources');
+    fs.chmodSync(stateDir, 0o777);
+    assert.equal(replacementBase(asarPath, stateDir, { asRoot: true }), resources, '狀態目錄可被其他人寫入時不使用');
+});
+
+test('as root, the backup and the live archive are moved only inside the Resources directory checked at the start, even after the app folder is swapped for a link', { skip: process.platform === 'win32' }, t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-root-resources-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const app = path.join(root, 'App');
+    const resources = path.join(app, 'Resources');
+    const otherResources = path.join(root, 'Other', 'Resources');
+    fs.mkdirSync(resources, { recursive: true });
+    fs.mkdirSync(otherResources, { recursive: true });
+    const asarPath = path.join(resources, 'app.asar');
+    fs.writeFileSync(asarPath, 'official');
+    fs.writeFileSync(path.join(otherResources, 'app.asar'), 'other-app');
+    const resourcesStat = fs.statSync(resources);
+    const candidate = path.join(root, 'candidate.asar');
+    const backup = path.join(root, 'official.bak');
+    fs.writeFileSync(candidate, 'translated');
+    fs.writeFileSync(backup, 'official');
+    // 核對之後，App 被換成指向另一個 App 的連結
+    fs.renameSync(app, app + '.orig');
+    fs.symlinkSync(path.join(root, 'Other'), app);
+    const cwd = process.cwd();
+    assert.throws(() => safeReplaceFile(backup, asarPath + '.bak', 0o644, null, null,
+        { atomicRequired: true, expectedDir: resourcesStat }), { code: 'ELOCKMOVED' });
+    const swap = exchangeInResources(exchangeAsar, asarPath, resourcesStat);
+    assert.throws(() => swap(candidate, asarPath, path.join(root, 'previous.asar')), { code: 'ELOCKMOVED' });
+    assert.equal(process.cwd(), cwd);
+    assert.deepEqual(fs.readdirSync(otherResources), ['app.asar'], '不得把備份搬進另一個 App');
+    assert.equal(fs.readFileSync(path.join(otherResources, 'app.asar'), 'utf8'), 'other-app', '不得換掉另一個 App 的檔案');
+    // 沒有被換掉時照常在原目錄完成
+    fs.unlinkSync(app);
+    fs.renameSync(app + '.orig', app);
+    safeReplaceFile(backup, asarPath + '.bak', 0o644, null, null, { atomicRequired: true, expectedDir: resourcesStat });
+    assert.equal(swap(candidate, asarPath, path.join(root, 'previous.asar')), candidate);
+    assert.equal(fs.readFileSync(asarPath, 'utf8'), 'translated');
+    assert.equal(fs.readFileSync(asarPath + '.bak', 'utf8'), 'official');
+    assert.equal(fs.readFileSync(candidate, 'utf8'), 'official');
+    assert.equal(process.cwd(), cwd);
+});
+
+test('as root, Electron caches in the app owner\'s home are deleted as that user, not as root', { skip: process.platform === 'win32' }, t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-root-cache-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    // 舊版忽略指定的位置、改用家目錄：把 HOME 指到暫存目錄，避免動到本機真正的快取
+    const home = process.env.HOME;
+    process.env.HOME = path.join(root, 'home');
+    t.after(() => { process.env.HOME = home; });
+    const support = path.join(root, 'Antigravity');
+    fs.mkdirSync(path.join(support, 'Cache'), { recursive: true });
+    fs.mkdirSync(path.join(support, 'Partitions', 'hub-browser-1', 'GPUCache'), { recursive: true });
+    const self = { uid: process.getuid(), gid: process.getgid() };
+    if (self.uid !== 0) {
+        // 一般使用者無法切換成其他身分：刪除改以指定的身分執行，所以這次刪不掉
+        cleanElectronCache(null, null, { appSupportDirs: [support], asUser: { uid: self.uid + 1, gid: self.gid } });
+        assert.equal(fs.existsSync(path.join(support, 'Cache')), true, '不是以目前程序的身分刪除');
+    }
+    cleanElectronCache(null, null, { appSupportDirs: [support], asUser: self });
+    assert.equal(fs.existsSync(path.join(support, 'Cache')), false);
+    assert.equal(fs.existsSync(path.join(support, 'Partitions', 'hub-browser-1', 'GPUCache')), false);
+    assert.equal(fs.existsSync(path.join(support, 'Partitions', 'hub-browser-1')), true, '只刪快取目錄');
+});
+
+test('stage directories left by a killed watcher are cleared on the next run, while stages that may still be in use are kept', { skip: process.platform === 'win32' }, t => {
+    const f = fixture(t);
+    fs.mkdirSync(f.stateDir, { recursive: true });
+    const hours = n => new Date(Date.now() - n * 60 * 60 * 1000);
+    const stage = (name, age, content = 'app') => {
+        const dir = path.join(f.stateDir, name);
+        fs.mkdirSync(dir);
+        fs.writeFileSync(path.join(dir, 'app.asar'), content);
+        if (age) fs.utimesSync(dir, hours(age), hours(age));
+        return dir;
+    };
+    stage('stage-BQ1sZu', 2);                         // v3.8.1 命名、兩小時前中斷：清除
+    stage('stage-Ab12Cd', 0);                         // v3.8.1 命名、剛建立，可能是升級當下仍在執行的舊版：保留
+    stage('stage-2147483000-Zz9Yy8', 0);              // 建立者已結束：清除
+    stage(`stage-${process.ppid}-Qq1Ww2`, 0);         // 建立者仍在執行：保留
+    stage(`stage-${process.ppid}-Rr7Tt8`, 25);        // 程序編號可能已被重用、超過一天：清除
+    const recovery = stage('recovery-Kk3Jj4', 48);    // 復原副本不是暫存目錄：保留
+    const outside = path.join(path.dirname(f.stateDir), 'outside');
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'keep'), 'keep');
+    fs.symlinkSync(outside, path.join(f.stateDir, 'stage-Ln5Mm6'));   // 連結：不碰
+    assert.equal(f.run(), true);
+    assert.deepEqual(fs.readdirSync(f.stateDir).filter(name => name.startsWith('stage-')).sort(),
+        ['stage-Ab12Cd', 'stage-Ln5Mm6', `stage-${process.ppid}-Qq1Ww2`].sort());
+    assert.equal(fs.existsSync(recovery), true);
+    assert.equal(fs.readFileSync(path.join(outside, 'keep'), 'utf8'), 'keep');
+    // 本輪自己的暫存目錄帶有程序編號，完成後照常刪除
+    assert.deepEqual(cleanStaleStageDirs(f.stateDir), []);
 });
