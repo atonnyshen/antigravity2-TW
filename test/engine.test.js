@@ -1336,6 +1336,143 @@ test('CJK gap collapse is undone when React reuses neighbor text nodes, and nest
     counter.close();
 });
 
+test('CJK gap handling follows node removal, deep inline edits, author whitespace, reused separators and streaming neighbors', async () => {
+    const { JSDOM } = require('jsdom');
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only' });
+    const win = dom.window;
+    const doc = win.document;
+    const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
+    win.eval(generateJs());
+    win.__agCnRuntimeStart();
+    const add = html => { const el = doc.createElement('div'); el.innerHTML = html; doc.body.append(el); return el; };
+
+    const removal = add('<span>Settings<!----> <!----><b>Help</b>Bob</span>');
+    const deep = add('<span>Settings<!----> <!----><a><span><span><span>Help</span></span></span></a></span>');
+    const author = add('<span style="white-space:pre-wrap">甲<!----> <!---->乙</span>');
+    const sep = add('<span>Settings<!----> <!---->Help</span>');
+    const stream = doc.createTextNode('測試');
+    const host = doc.createElement('div');
+    host.setAttribute('data-testid', 'planner-response-text');
+    const section = doc.createElement('section');
+    for (let i = 0; i < 1200; i++) { const s = doc.createElement('span'); s.textContent = 'abcdefghij'; section.append(s); }
+    host.append(stream, section);
+    const box = doc.createElement('div');
+    box.append('甲', ' ', host);
+    doc.body.append(box);
+    await pause();
+    assert.equal(removal.textContent, '設定說明Bob');
+    assert.equal(deep.textContent, '設定說明');
+    // 兩側都不是這裡翻譯出來的中文（作者刻意留的空白、使用者或 AI 的內容）：不動
+    assert.equal(author.textContent, '甲 乙');
+
+    // React 只刪除節點（addedNodes 為空）：刪除位置兩側重新判斷，空白還原
+    removal.querySelector('b').remove();
+    // 四層行內標記裡的文字換成英文：外層的空白也要還原
+    deep.querySelector('a span span span').firstChild.data = 'Bob';
+    await pause();
+    assert.equal(removal.textContent, '設定 Bob');
+    assert.equal(deep.textContent, '設定 Bob');
+
+    // 收掉的空白被 React 改成分隔字再清空：舊紀錄作廢，之後不得「還原」出已刪掉的空白
+    const sepSpan = sep.firstChild;
+    const gap = Array.from(sepSpan.childNodes).find(n => n.nodeType === win.Node.TEXT_NODE && n.data === '');
+    gap.data = '/';
+    await pause();
+    gap.data = '';
+    await pause();
+    sepSpan.firstChild.data = 'Alice';
+    sepSpan.lastChild.data = 'Bob';
+    await pause();
+    assert.equal(sep.textContent, 'AliceBob');
+
+    // 串流中的 AI 回覆緊鄰空白：判斷空白時不讀整段回覆，也不收掉兩側都未經翻譯的空白
+    const desc = Object.getOwnPropertyDescriptor(win.Node.prototype, 'textContent');
+    let hostReads = 0;
+    Object.defineProperty(host, 'textContent', { configurable: true, get() { hostReads++; return desc.get.call(this); } });
+    for (let i = 0; i < 3; i++) { stream.data = '測試' + i; await pause(); }
+    delete host.textContent;
+    assert.equal(hostReads, 0);
+    assert.ok(box.textContent.startsWith('甲 測試2'), box.textContent.slice(0, 8));
+    win.close();
+});
+
+test('icon fallbacks clean up after the icon class is removed and keep accessible names; attribute rules and source ellipsis survive', async () => {
+    const { JSDOM } = require('jsdom');
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only' });
+    const win = dom.window;
+    const doc = win.document;
+    const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
+    win.eval(generateJs());
+    win.__agCnRuntimeStart();
+    const add = html => { const el = doc.createElement('div'); el.innerHTML = html; doc.body.append(el); return el; };
+
+    const icon = add('<span class="google-symbols">comment</span>');
+    const buttons = add('<button><span class="google-symbols">comment</span></button><button><span class="google-symbols" aria-hidden="true">comment</span></button>');
+    const labels = add('<button aria-label="Label for Foo">a</button><button aria-label="Open the Swarm UI">b</button><button aria-label="Open Settings">c</button>');
+    const ellipsis = add('<span>Show 3 more results…</span><button title="Show 3 more…">x</button>');
+    await pause();
+
+    // React 重用圖示的文字節點、拿掉圖示 class 並改成一般文字：補畫的 SVG 要移除
+    const iconSpan = icon.firstChild;
+    assert.equal(iconSpan.querySelectorAll('svg').length, 1);
+    iconSpan.className = '';
+    Array.from(iconSpan.childNodes).find(n => n.nodeType === win.Node.TEXT_NODE).data = 'Help';
+    await pause();
+    assert.equal(iconSpan.querySelectorAll('svg').length, 0);
+    assert.equal(iconSpan.textContent, '說明');
+
+    // 按鈕只靠圖示名稱提供無障礙名稱：清空文字後由 SVG 帶著名稱；宿主已隱藏時 SVG 也隱藏
+    const [named, hidden] = buttons.querySelectorAll('svg');
+    assert.equal(named.getAttribute('role'), 'img');
+    assert.equal(named.getAttribute('aria-label'), '評論');
+    assert.equal(hidden.getAttribute('aria-hidden'), 'true');
+    assert.equal(hidden.hasAttribute('aria-label'), false);
+
+    // 屬性：既有規則照常生效；代入的片段是完整英文片語時保留原文，不拼成中英夾雜
+    const [labelFor, swarm, open] = labels.querySelectorAll('button');
+    assert.equal(labelFor.getAttribute('aria-label'), 'Foo 的標籤');
+    assert.equal(swarm.getAttribute('aria-label'), 'Open the Swarm UI');
+    assert.equal(open.getAttribute('aria-label'), '開啟設定');
+
+    // 原文用單一字元的「…」時，譯文也用「…」
+    assert.equal(ellipsis.querySelector('span').textContent, '顯示另外 3 個結果…');
+    assert.equal(ellipsis.querySelector('button').getAttribute('title'), '顯示另外 3 個…');
+    win.close();
+});
+
+test('dictionary fragments drop built-in edge spaces next to Chinese names and restore them when React swaps the name', async () => {
+    const { JSDOM } = require('jsdom');
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only' });
+    const win = dom.window;
+    const doc = win.document;
+    const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
+    win.eval(generateJs());
+    win.__agCnRuntimeStart();
+    // v2.35.1 宣告權限對話框的實際切法：每段字串是獨立文字節點，名稱是第 2 個節點
+    const sentence = name => {
+        const p = doc.createElement('p');
+        for (const t of ['Agents created by ', name, ' run in a dedicated', ' ', 'workspace', ' with its own permissions, which you can change anytime in the ', 'workspace', ' settings page.']) p.append(t);
+        doc.body.append(p);
+        return p;
+    };
+    const tail = '建立的代理執行於專用的工作區中並擁有獨立權限，您可以隨時在工作區設定頁面中變更。';
+    const cjk = sentence('自動化任務');
+    const latin = sentence('Foo Plugin');
+    // 名稱本身在走訪較後面才被翻成中文：走訪結束後重新判斷
+    const translatedLater = sentence('Settings');
+    await pause();
+    assert.equal(cjk.textContent, '由自動化任務' + tail);
+    assert.equal(latin.textContent, '由 Foo Plugin ' + tail);
+    assert.equal(translatedLater.textContent, '由設定' + tail);
+
+    cjk.childNodes[1].data = 'Foo Plugin';
+    latin.childNodes[1].data = '我的外掛';
+    await pause();
+    assert.equal(cjk.textContent, '由 Foo Plugin ' + tail);
+    assert.equal(latin.textContent, '由我的外掛' + tail);
+    win.close();
+});
+
 test('v2.35.1 split-node sentences, Show N more variants, attribute phrases and CJK gap spacing localize cleanly', () => {
     const { JSDOM } = require('jsdom');
     const js = generateJs();
@@ -1415,7 +1552,8 @@ test('v2.35.1 split-node sentences, Show N more variants, attribute phrases and 
     assert.equal(tx('5 tools · sign in for more'), '5 個工具 · 登入以取得更多');
     assert.equal(tx('See go/sidecars: https://example.com/x'), '請參閱 go/sidecars：https://example.com/x');
     assert.equal(tx('Starting...'), '正在啟動...');
-    assert.equal(text('starting'), '正在啟動...');
+    // 原文用單一字元的「…」：譯文跟著原文，不換成「...」
+    assert.equal(text('starting'), '正在啟動…');
     assert.equal(tx('Loading bundle...'), '正在載入外掛程式套件...');
     assert.equal(tx('See more'), '顯示更多');
     assert.equal(tx('See less'), '顯示較少');

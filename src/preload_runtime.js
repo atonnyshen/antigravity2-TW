@@ -1723,11 +1723,18 @@
         return null;
     }
 
+    // 規則代入的片段以冠詞／介系詞開頭時（Open the Swarm UI、Add to chat input），那是完整的英文片語，
+    // 只換掉動詞會變成「開啟 the Swarm UI」這種中英夾雜：跳過這條規則，都不適用就保留原文
+    const ATTR_PHRASE_LEAD = /^(?:the|a|an|to|into|in|on|from|with|for|this|that|your|my|all|as|at|by|of)\s/i;
     function translateAttrDynamic(t) {
-        // 「動詞＋冠詞／介系詞」開頭的是完整英文片語（Open the Swarm UI、Add to chat input），
-        // 只換掉動詞會變成「開啟 the Swarm UI」這種中英夾雜，寧可保留原文
-        if (/^[A-Za-z]+\s+(?:the|a|an|to|into|in|on|from|with|for|this|that|your|my|all|as|at|by|of)\s/i.test(t)) return null;
-        return matchRuleList(JSON_ATTR_DYNAMIC_RULES, t);
+        if (!t || t.length > 1000) return null;
+        for (const [regex, replacer] of JSON_ATTR_DYNAMIC_RULES) {
+            const match = t.match(regex);
+            if (!match) continue;
+            if (match.slice(1).some(g => g && ATTR_PHRASE_LEAD.test(g))) continue;
+            return replacer(match, ...match.slice(1));
+        }
+        return null;
     }
 
     function translateExactOrDynamic(t) {
@@ -2122,17 +2129,26 @@
         return replaced ? out + text.slice(pos) : null;
     }
 
-    // React 會把相鄰字串之間的 " " 拆成獨立文字節點；兩側譯成中文後收掉這個空白（中文字之間不留空格）。
-    // 收合可逆：React 之後重用兩側節點換成英文時還原空白。判斷只讀目前的 DOM、不在判斷時翻譯鄰近節點
-    // （否則巢狀結構每一層都會把子樹多走一遍）；鄰近節點翻完後，由父元素走訪結束或 refreshGapsAround 重新判斷。
+    // React 會把相鄰字串之間的 " " 拆成獨立文字節點；兩側都是中文、且至少一側是這裡翻譯出來的中文時，
+    // 收掉這個空白（中文字之間不留空格）；兩側原本就是中文（例如使用者內容）時不動。收合可逆：React 之後
+    // 重用兩側節點換成英文時還原空白。判斷只讀目前的 DOM、不在判斷時翻譯鄰近節點；鄰近節點翻完後，
+    // 由父元素走訪結束、節點新增或刪除、文字變動時重新判斷。
     const CJK_TAIL = /[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]$/;
     const CJK_HEAD = /^[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]/;
     const collapsedGaps = new WeakMap();
-    function gapNeighborText(n) {
-        if (!n) return null;
-        if (n.nodeType === Node.TEXT_NODE) return n.nodeValue || '';
-        // 只看行內小元素（<strong>、連結按鈕），避免對大型容器計算 textContent
-        if (n.nodeType === Node.ELEMENT_NODE && n.childElementCount <= 2) return n.textContent || '';
+    // 鄰近節點靠空白那一側的文字節點：元素只往下找行內小元素（每層至多兩個子元素、最多 GAP_EDGE_DEPTH 層），
+    // 不讀大型容器的 textContent；超出範圍時回傳 GAP_UNKNOWN（不收合）。refreshGapsAround 往上找同樣的層數，範圍一致
+    const GAP_EDGE_DEPTH = 4;
+    const GAP_UNKNOWN = {};
+    function gapEdgeTextNode(n, fromEnd, depth = 0) {
+        if (!n || n.nodeType === Node.COMMENT_NODE) return null;
+        if (n.nodeType === Node.TEXT_NODE) return n.nodeValue ? n : null;
+        if (n.nodeType !== Node.ELEMENT_NODE || depth >= GAP_EDGE_DEPTH || n.childElementCount > 2) return GAP_UNKNOWN;
+        const kids = n.childNodes;
+        for (let k = 0; k < kids.length; k++) {
+            const found = gapEdgeTextNode(kids[fromEnd ? kids.length - 1 - k : k], fromEnd, depth + 1);
+            if (found) return found;
+        }
         return null;
     }
     function isGapFiller(n) {
@@ -2148,15 +2164,16 @@
             if (prev.nodeType === Node.TEXT_NODE) skippedText = true;
             prev = prev.previousSibling;
         }
-        const before = gapNeighborText(prev);
-        if (!before || !CJK_TAIL.test(before)) return false;
         let next = gap.nextSibling;
         while (next && next.nodeType === Node.COMMENT_NODE) next = next.nextSibling;
-        const after = gapNeighborText(next);
-        if (!after) return false;
+        if (!prev || !next) return false;
         // 兩側都是元素（例如並排的兩個連結或按鈕）時，這個空白是分隔用的，保留
         if (!skippedText && prev.nodeType !== Node.TEXT_NODE && next.nodeType !== Node.TEXT_NODE) return false;
-        return CJK_HEAD.test(after);
+        const before = gapEdgeTextNode(prev, true);
+        const after = gapEdgeTextNode(next, false);
+        if (!before || !after || before === GAP_UNKNOWN || after === GAP_UNKNOWN) return false;
+        if (!CJK_TAIL.test(before.nodeValue) || !CJK_HEAD.test(after.nodeValue)) return false;
+        return translatedValues.get(before) === before.nodeValue || translatedValues.get(after) === after.nodeValue;
     }
     function refreshCjkGap(gap) {
         if (cjkGapShouldCollapse(gap)) {
@@ -2172,18 +2189,71 @@
             gap.nodeValue = original;
         }
     }
-    // 節點新增或文字變動後，重新判斷它兩側的空白；所在元素是行內小元素時，連同元素兩側一起判斷（最多三層）
+    // 節點新增或文字變動後，重新判斷它兩側的空白；所在元素是行內小元素時，連同元素兩側一起判斷（層數同 GAP_EDGE_DEPTH）
     function refreshGapsAround(node) {
         let n = node;
-        for (let depth = 0; n && depth < 3; depth++) {
+        for (let depth = 0; n && depth <= GAP_EDGE_DEPTH; depth++) {
             for (const dir of ['previousSibling', 'nextSibling']) {
                 let s = n[dir];
                 while (s && s.nodeType === Node.COMMENT_NODE) s = s[dir];
-                if (isCjkGap(s) && !isCodeOrEditor(s)) refreshCjkGap(s);
+                if (isCjkGap(s)) {
+                    if (!isCodeOrEditor(s)) refreshCjkGap(s);
+                } else if (s && edgeSpacedBase.has(s)) {
+                    refreshEdgeSpaces(s);
+                }
             }
             const parent = n.parentElement;
             if (!parent || parent.childElementCount > 2) break;
             n = parent;
+        }
+    }
+    // 只刪除節點時 addedNodes 是空的：重新判斷刪除位置兩側的空白
+    function refreshGapsAtRemoval(m) {
+        for (const s of [m.previousSibling, m.nextSibling]) {
+            if (isCjkGap(s)) {
+                if (!isCodeOrEditor(s)) refreshCjkGap(s);
+            } else if (s) {
+                if (edgeSpacedBase.has(s)) refreshEdgeSpaces(s);
+                refreshGapsAround(s);
+            }
+        }
+        refreshGapsAround(m.target);
+    }
+    // norm() 會先把「…」換成「...」再查詞典與規則；原文用「…」時，譯文結尾也用「…」
+    function keepSourceEllipsis(source, out) {
+        if (typeof out !== 'string' || typeof source !== 'string' || !/…\s*$/.test(source)) return out;
+        return out.replace(/\.\.\.(\s*)$/, '…$1');
+    }
+    // 譯文片段自帶的前後半形空白是替英文名稱與數字留的（「由 Foo 建立」）；緊鄰的文字是中文時拿掉
+    // （「由我的外掛建立」，中文字之間不留空格）。原始譯文記在 edgeSpacedBase，鄰近內容改變時依目前的 DOM 重新判斷，
+    // 找鄰近文字的範圍與空白收合相同（gapEdgeTextNode）
+    const edgeSpacedBase = new WeakMap();
+    function adjacentEdgeText(node, dir) {
+        let s = node[dir];
+        while (isGapFiller(s)) s = s[dir];
+        if (!s) return null;
+        const edge = gapEdgeTextNode(s, dir === 'previousSibling');
+        return edge && edge !== GAP_UNKNOWN ? edge.nodeValue : null;
+    }
+    function adaptEdgeSpaces(node, base) {
+        let out = base;
+        if (out.length > 1 && out.charAt(0) === ' ') {
+            const before = adjacentEdgeText(node, 'previousSibling');
+            if (before && CJK_TAIL.test(before)) out = out.slice(1);
+        }
+        if (out.length > 1 && out.charAt(out.length - 1) === ' ') {
+            const after = adjacentEdgeText(node, 'nextSibling');
+            if (after && CJK_HEAD.test(after)) out = out.slice(0, -1);
+        }
+        return out;
+    }
+    function refreshEdgeSpaces(node) {
+        const base = edgeSpacedBase.get(node);
+        if (!base || translatedValues.get(node) !== node.nodeValue) return;
+        const out = adaptEdgeSpaces(node, base);
+        if (out !== node.nodeValue) {
+            translatedValues.set(node, out);
+            node.nodeValue = out;
         }
     }
 
@@ -2233,6 +2303,7 @@
                         if (!newAttr && inSwarmEl) {
                             newAttr = translateSwarmComposite(v);
                         }
+                        newAttr = keepSourceEllipsis(v, newAttr);
                         if (newAttr && newAttr !== v) {
                             node.setAttribute(attr, newAttr);
                             if (attr === 'placeholder' && 'placeholder' in node) {
@@ -2351,12 +2422,15 @@
                 // 子節點都翻完後再判斷其間的空白：走訪到空白時，它後面的節點還沒翻譯
                 for (const child of node.childNodes) {
                     if (isCjkGap(child)) refreshCjkGap(child);
+                    else if (edgeSpacedBase.has(child)) refreshEdgeSpaces(child);
                 }
 
             } else if (node.nodeType === Node.TEXT_NODE) {
                 if (isCodeOrEditor(node)) return;
 
                 let originalVal = node.nodeValue;
+                // 收合過的空白被 React 改成別的內容（換了分隔字或清空後再寫入），不再當作可還原的空白
+                if (originalVal && collapsedGaps.has(node)) collapsedGaps.delete(node);
                 if (originalVal === ' ') {
                     refreshCjkGap(node);
                     return;
@@ -2433,6 +2507,11 @@
                 const iconHost = node.parentElement && typeof node.parentElement.matches === 'function' && node.parentElement.matches(ICON_FONT_SELECTOR)
                     ? node.parentElement
                     : null;
+                if (!iconHost) {
+                    // React 重用圖示的文字節點並拿掉圖示 class 時，移除先前補畫在它前面的 SVG
+                    const staleIcon = node.previousSibling;
+                    if (staleIcon && staleIcon.nodeType === Node.ELEMENT_NODE && staleIcon.hasAttribute('data-ag-icon-fallback')) staleIcon.remove();
+                }
                 if (iconHost) {
                     const oldSvg = Array.from(iconHost.children || []).find(c => c.hasAttribute && c.hasAttribute('data-ag-icon-fallback'));
                     if (oldSvg && oldSvg.getAttribute('data-ag-icon-fallback') !== valNorm) oldSvg.remove();
@@ -2456,6 +2535,13 @@
                         svg.setAttribute('stroke-linejoin', 'round');
                         svg.setAttribute('class', 'shrink-0');
                         svg.setAttribute('style', 'display:inline-block;vertical-align:middle');
+                        // 圖示名稱原本是無障礙名稱的一部分（宿主未隱藏、也沒另給名稱時）；清空文字後改由 SVG 帶著同一名稱
+                        if (iconHost.getAttribute('aria-hidden') === 'true' || iconHost.hasAttribute('aria-label') || iconHost.hasAttribute('aria-labelledby')) {
+                            svg.setAttribute('aria-hidden', 'true');
+                        } else {
+                            svg.setAttribute('role', 'img');
+                            svg.setAttribute('aria-label', valNorm);
+                        }
                         for (const d of paths) {
                             const pSvg = document.createElementNS(svgNs, 'path');
                             pSvg.setAttribute('d', d);
@@ -2539,6 +2625,13 @@
                     }
                 }
 
+                newVal = keepSourceEllipsis(originalVal, newVal);
+                if (newVal !== originalVal && newVal.length > 1 && (newVal.charAt(0) === ' ' || newVal.charAt(newVal.length - 1) === ' ')) {
+                    edgeSpacedBase.set(node, newVal);
+                    newVal = adaptEdgeSpaces(node, newVal);
+                } else {
+                    edgeSpacedBase.delete(node);
+                }
                 if (newVal !== originalVal) {
                     translatedValues.set(node, newVal);
                     node.nodeValue = newVal;
@@ -2552,6 +2645,7 @@
     const observer = typeof MutationObserver === 'function' ? new MutationObserver(mutations => {
         for (const m of mutations) {
             if (m.type === 'childList') {
+                if (m.removedNodes && m.removedNodes.length > 0) refreshGapsAtRemoval(m);
                 for (const n of m.addedNodes) {
                     translateNode(n);
                     refreshGapsAround(n);
