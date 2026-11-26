@@ -1240,7 +1240,8 @@ test('v2.35.1 icon-font ligature fallbacks render SVG, stay untranslated, and pe
     const commentIcon = doc.querySelector('#menu-comment .google-symbols');
     assert.equal(commentIcon.textContent, '');
     assert.equal(commentIcon.querySelector('svg').getAttribute('data-ag-icon-fallback'), 'comment');
-    assert.equal(commentIcon.querySelector('svg').getAttribute('width'), '18');
+    // 寬高跟隨宿主字級（1em），rem 等非 px 單位也不會算錯
+    assert.equal(commentIcon.querySelector('svg').getAttribute('width'), '1em');
     assert.notEqual(doc.querySelector('#menu-comment span:last-child').textContent, 'Comment on Selection');
     for (const [id, name] of [['icon-quote', 'format_quote'], ['icon-shield', 'laptop_shield'], ['icon-restore', 'restore_page']]) {
         const el = doc.getElementById(id);
@@ -1264,6 +1265,75 @@ test('v2.35.1 icon-font ligature fallbacks render SVG, stay untranslated, and pe
     translateNode(quote);
     assert.equal(quote.querySelectorAll('svg').length, 1);
     assert.equal(quote.querySelector('svg').getAttribute('data-ag-icon-fallback'), 'comment');
+
+    // 同一文字節點：未知圖示 → 需要 SVG 的圖示 → 未知圖示，換回來時不得殘留舊 SVG
+    const unknown = doc.getElementById('icon-unknown');
+    const unknownText = unknown.firstChild;
+    unknownText.nodeValue = 'comment';
+    translateNode(unknown);
+    assert.equal(unknown.querySelectorAll('svg').length, 1);
+    unknownText.nodeValue = 'settings';
+    translateNode(unknown);
+    assert.equal(unknown.querySelectorAll('svg').length, 0);
+    assert.equal(unknown.textContent, 'settings');
+});
+
+test('CJK gap collapse is undone when React reuses neighbor text nodes, and nested markup is walked once', async () => {
+    const { JSDOM } = require('jsdom');
+    const js = generateJs();
+    const dom = new JSDOM('<!doctype html><html><body></body></html>', { runScripts: 'outside-only' });
+    const win = dom.window;
+    const doc = win.document;
+    const pause = () => new Promise(resolve => setImmediate(resolve));
+    win.eval(js);
+    win.__agCnRuntimeStart();
+
+    const pair = doc.createElement('span');
+    pair.append('Settings', ' ', 'Help');
+    doc.body.append(pair);
+    const sendNow = doc.createElement('span');
+    sendNow.innerHTML = 'Messages now send immediately. Configure in<!----> <span class="whitespace-nowrap"><button>settings</button>.</span>';
+    doc.body.append(sendNow);
+    await pause();
+    assert.equal(pair.textContent, '設定說明');
+    assert.equal(sendNow.textContent, '訊息現已改為立即傳送。可在設定中調整。');
+
+    // React 重用同一批文字節點換成英文：收掉的空白要還原（含空白後面是行內元素的情況）
+    pair.firstChild.data = 'Alice';
+    pair.lastChild.data = 'Bob';
+    sendNow.querySelector('button').firstChild.data = 'Foo';
+    await pause();
+    await pause();
+    assert.equal(pair.textContent, 'Alice Bob');
+    assert.ok(sendNow.textContent.includes('可在 Foo'), sendNow.textContent);
+
+    // 換回可翻譯的文字時再次收合
+    pair.firstChild.data = 'Settings';
+    pair.lastChild.data = 'Help';
+    await pause();
+    await pause();
+    assert.equal(pair.textContent, '設定說明');
+    win.close();
+
+    // 判斷空白時不翻譯鄰近子樹：巢狀結構每個節點只走訪一次（修正前每多一層呼叫次數加倍）
+    const counter = new JSDOM('<body></body>').window;
+    const prefix = js.slice(0, js.indexOf('    const observer ='))
+        .replace('function translateNode(node) {', 'function translateNode(node) {globalThis.calls++;');
+    const context = { Node: counter.Node, document: counter.document, console, calls: 0 };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    let nested = counter.document.createElement('span');
+    nested.append('X');
+    const depth = 12;
+    for (let i = 0; i < depth; i++) {
+        const parent = counter.document.createElement('span');
+        parent.append('X甲', ' ', nested);
+        nested = parent;
+    }
+    counter.document.body.append(nested);
+    context.hooks.translateNode(nested);
+    const nodes = 3 * depth + 2;
+    assert.ok(context.calls <= 2 * nodes, `translateNode called ${context.calls} times for ${nodes} nodes`);
+    counter.close();
 });
 
 test('v2.35.1 split-node sentences, Show N more variants, attribute phrases and CJK gap spacing localize cleanly', () => {

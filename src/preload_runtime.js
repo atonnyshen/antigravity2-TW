@@ -2122,9 +2122,12 @@
         return replaced ? out + text.slice(pos) : null;
     }
 
-    // React 會把相鄰字串之間的 " " 拆成獨立文字節點；兩側譯成中文後收掉這個空白（中文字之間不留空格）
+    // React 會把相鄰字串之間的 " " 拆成獨立文字節點；兩側譯成中文後收掉這個空白（中文字之間不留空格）。
+    // 收合可逆：React 之後重用兩側節點換成英文時還原空白。判斷只讀目前的 DOM、不在判斷時翻譯鄰近節點
+    // （否則巢狀結構每一層都會把子樹多走一遍）；鄰近節點翻完後，由父元素走訪結束或 refreshGapsAround 重新判斷。
     const CJK_TAIL = /[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]$/;
     const CJK_HEAD = /^[\u3400-\u9fff\u3000-\u303f\uff00-\uffef]/;
+    const collapsedGaps = new WeakMap();
     function gapNeighborText(n) {
         if (!n) return null;
         if (n.nodeType === Node.TEXT_NODE) return n.nodeValue || '';
@@ -2135,24 +2138,52 @@
     function isGapFiller(n) {
         return n && (n.nodeType === Node.COMMENT_NODE || (n.nodeType === Node.TEXT_NODE && !n.nodeValue));
     }
-    function collapseCjkGap(node) {
-        let prev = node.previousSibling;
+    function isCjkGap(n) {
+        return !!n && n.nodeType === Node.TEXT_NODE && (n.nodeValue === ' ' || (n.nodeValue === '' && collapsedGaps.has(n)));
+    }
+    function cjkGapShouldCollapse(gap) {
+        let prev = gap.previousSibling;
         let skippedText = false;
         while (isGapFiller(prev)) {
             if (prev.nodeType === Node.TEXT_NODE) skippedText = true;
             prev = prev.previousSibling;
         }
         const before = gapNeighborText(prev);
-        if (!before || !CJK_TAIL.test(before)) return;
-        let next = node.nextSibling;
+        if (!before || !CJK_TAIL.test(before)) return false;
+        let next = gap.nextSibling;
         while (next && next.nodeType === Node.COMMENT_NODE) next = next.nextSibling;
-        if (!next || gapNeighborText(next) === null) return;
+        const after = gapNeighborText(next);
+        if (!after) return false;
         // 兩側都是元素（例如並排的兩個連結或按鈕）時，這個空白是分隔用的，保留
-        if (!skippedText && prev.nodeType !== Node.TEXT_NODE && next.nodeType !== Node.TEXT_NODE) return;
-        translateNode(next);
-        if (CJK_HEAD.test(gapNeighborText(next) || '')) {
-            translatedValues.set(node, '');
-            node.nodeValue = '';
+        if (!skippedText && prev.nodeType !== Node.TEXT_NODE && next.nodeType !== Node.TEXT_NODE) return false;
+        return CJK_HEAD.test(after);
+    }
+    function refreshCjkGap(gap) {
+        if (cjkGapShouldCollapse(gap)) {
+            if (gap.nodeValue) {
+                collapsedGaps.set(gap, gap.nodeValue);
+                translatedValues.set(gap, '');
+                gap.nodeValue = '';
+            }
+        } else if (!gap.nodeValue && collapsedGaps.has(gap)) {
+            const original = collapsedGaps.get(gap);
+            collapsedGaps.delete(gap);
+            translatedValues.delete(gap);
+            gap.nodeValue = original;
+        }
+    }
+    // 節點新增或文字變動後，重新判斷它兩側的空白；所在元素是行內小元素時，連同元素兩側一起判斷（最多三層）
+    function refreshGapsAround(node) {
+        let n = node;
+        for (let depth = 0; n && depth < 3; depth++) {
+            for (const dir of ['previousSibling', 'nextSibling']) {
+                let s = n[dir];
+                while (s && s.nodeType === Node.COMMENT_NODE) s = s[dir];
+                if (isCjkGap(s) && !isCodeOrEditor(s)) refreshCjkGap(s);
+            }
+            const parent = n.parentElement;
+            if (!parent || parent.childElementCount > 2) break;
+            n = parent;
         }
     }
 
@@ -2317,13 +2348,17 @@
                     translateNode(node.shadowRoot);
                 }
                 for (const child of node.childNodes) translateNode(child);
+                // 子節點都翻完後再判斷其間的空白：走訪到空白時，它後面的節點還沒翻譯
+                for (const child of node.childNodes) {
+                    if (isCjkGap(child)) refreshCjkGap(child);
+                }
 
             } else if (node.nodeType === Node.TEXT_NODE) {
                 if (isCodeOrEditor(node)) return;
 
                 let originalVal = node.nodeValue;
                 if (originalVal === ' ') {
-                    collapseCjkGap(node);
+                    refreshCjkGap(node);
                     return;
                 }
                 if (!originalVal || originalVal.trim().length < 1) return;
@@ -2407,12 +2442,12 @@
                         return;
                     }
                     if (!oldSvg || oldSvg.getAttribute('data-ag-icon-fallback') !== valNorm) {
-                        const px = String(parseFloat(iconHost.style?.fontSize) || 16);
                         const svgNs = 'http://www.w3.org/2000/svg';
                         const svg = document.createElementNS(svgNs, 'svg');
                         svg.setAttribute('data-ag-icon-fallback', valNorm);
-                        svg.setAttribute('width', px);
-                        svg.setAttribute('height', px);
+                        // 1em 跟隨圖示宿主的字級（px、rem 或繼承值都適用），與字型圖示原本的大小一致
+                        svg.setAttribute('width', '1em');
+                        svg.setAttribute('height', '1em');
                         svg.setAttribute('viewBox', '0 0 24 24');
                         svg.setAttribute('fill', 'none');
                         svg.setAttribute('stroke', 'currentColor');
@@ -2428,6 +2463,8 @@
                         }
                         iconHost.insertBefore(svg, node);
                     }
+                    // 同一文字節點之後換回不需 SVG 的圖示名稱時，不能被「未翻譯」快取提早擋下而留著舊 SVG
+                    unchangedTextValues.delete(node);
                     translatedValues.set(node, '');
                     node.nodeValue = '';
                     return;
@@ -2517,6 +2554,7 @@
             if (m.type === 'childList') {
                 for (const n of m.addedNodes) {
                     translateNode(n);
+                    refreshGapsAround(n);
                     if (n && n.nodeType === Node.ELEMENT_NODE && !n.shadowRoot && typeof queueMicrotask === 'function') {
                         queueMicrotask(() => {
                             try {
@@ -2530,6 +2568,7 @@
                 }
             } else if (m.type === 'characterData') {
                 translateNode(m.target);
+                refreshGapsAround(m.target);
             } else if (m.type === 'attributes') {
                 translateNode(m.target);
                 if (m.attributeName === 'aria-label' || m.attributeName === 'aria-labelledby') {
