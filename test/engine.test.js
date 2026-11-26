@@ -1216,6 +1216,24 @@ test('v2.35.1 Inbox Mode, Dictation, Plugins, Quota, Countdown and JSX split-nod
 
 
 
+test('short dictionary words stay in English when written in lowercase (identifiers, status values), and still translate when capitalized', () => {
+    const { JSDOM } = require('jsdom');
+    const js = generateJs();
+    const words = ['applied', 'chosen', 'failed', 'move', 'never', 'resolve', 'self'];
+    const dom = new JSDOM(`<!doctype html><html><body>
+        ${words.map(w => `<span id="lc-${w}">${w}</span>`).join('')}
+        <span id="tc-move">Move</span><span id="tc-failed">Failed</span>
+    </body></html>`, { runScripts: 'outside-only' });
+    const prefix = js.slice(0, js.indexOf('    const observer ='));
+    const context = { Node: dom.window.Node, document: dom.window.document, console };
+    vm.runInNewContext(prefix + '\n globalThis.hooks = { translateNode }; })();', context);
+    const doc = dom.window.document;
+    context.hooks.translateNode(doc.body);
+    for (const w of words) assert.equal(doc.getElementById(`lc-${w}`).textContent, w, w);
+    assert.equal(doc.getElementById('tc-move').textContent, '移動');
+    assert.equal(doc.getElementById('tc-failed').textContent, '失敗');
+});
+
 test('v2.35.1 icon-font ligature fallbacks render SVG, stay untranslated, and permission pill uses short labels', () => {
     const { JSDOM } = require('jsdom');
     const js = generateJs();

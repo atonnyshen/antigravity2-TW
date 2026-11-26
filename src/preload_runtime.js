@@ -27,7 +27,9 @@
         'low', 'medium', 'high', 'extra', 'max', 'thinking effort',
         'apply', 'create', 'hide', 'show', 'remove', 'replace', 'verify', 'block',
         'folder', 'repository', 'error', 'other', 'environment', 'before', 'after',
-        'added', 'approved', 'protocol', 'variables', 'website', 'design'
+        'added', 'approved', 'protocol', 'variables', 'website', 'design',
+        // 與上游同步（合併 #68 時補入）：這些短詞的大寫詞條不另建小寫對應，小寫的識別字與狀態值維持原文
+        'applied', 'chosen', 'failed', 'move', 'never', 'resolve', 'self'
     ], RULE_PROTECTED.lowerWordsExclude);
     for (const [k, v] of map.entries()) {
         const lowerK = k.toLowerCase();

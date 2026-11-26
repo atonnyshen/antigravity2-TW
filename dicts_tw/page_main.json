@@ -3999,5 +3999,17 @@
   "Waiting for the agents' windows...": "正在等待代理視窗…",
   "What should this agent accomplish?": "此代理應完成什麼任務？",
   "Working Section": "進行中區塊",
-  "Your agent's ability to execute commands is also controlled by enterprise security policies.": "您的代理執行指令的能力同時受企業安全原則控制。"
+  "Your agent's ability to execute commands is also controlled by enterprise security policies.": "您的代理執行指令的能力同時受企業安全原則控制。",
+  "Leaving Soon": "即將停用",
+  "Use Hydrogen for better quality with lower quota usage.": "改用 Hydrogen 可提升品質，並減少配額用量。",
+  "Model cannot be changed while the agent is running": "代理執行時無法變更模型",
+  "Permissions cannot be changed while the agent is running": "代理執行時無法變更權限",
+  "Cannot start best-of-N mode while the agent is running": "代理執行時無法啟動 Best-of-N 模式",
+  "Cannot start best-of-N mode: some subagents are still running.": "無法啟動 Best-of-N 模式：仍有子代理在執行中。",
+  "Cannot start best-of-N mode: background tasks are still running.": "無法啟動 Best-of-N 模式：仍有背景工作在執行中。",
+  "The Orchestrator's own planner": "Orchestrator 內建的規劃器",
+  "Not PII/NTK": "非 PII / 機密資料",
+  "Do not use for PII/NTK data.": "請勿用於個人隱私 PII / 機密資料。",
+  "Send a message in the main conversation first to start a side question": "請先在主對話中傳送訊息，才能發起側邊提問",
+  "For your hardest, long-horizon tasks": "適用於最困難、需長時間進行的任務"
 }

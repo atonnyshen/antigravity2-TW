@@ -11,7 +11,8 @@
       "low", "medium", "high", "extra", "max", "thinking effort",
       "apply", "create", "hide", "show", "remove", "replace", "verify", "block",
       "folder", "repository", "error", "other", "environment", "before", "after",
-      "added", "approved", "protocol", "variables", "website", "design"
+      "added", "approved", "protocol", "variables", "website", "design",
+      "applied", "chosen", "failed", "move", "never", "resolve", "self"
     ],
     "modelEffortLabels": [
       "Low",

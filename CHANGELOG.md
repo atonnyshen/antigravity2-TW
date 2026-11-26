@@ -25,6 +25,7 @@
   - 修正錯字與誤譯：「復製圖片」改為「複製圖片」、「結束登入」改為「登出」、「Side Question Selection」改為「針對選取內容側邊提問」；「Loading Antigravity」改回「正在載入 Antigravity」，保留品牌名（體例 4.3）。
   - 外掛與功能名稱保留原文（上游 #63）：`Chief of Staff`、`Concierge`、`Data Agent Kit`、`Google Workspace`、`Google Developer Knowledge` 不再翻譯，句中的名稱也一併保留（如「已傳送給 Chief of Staff」）。簡中字典原本把兩處 Chief of Staff 誤用為 Concierge 的譯名「语音助手」，一併修正。
   - `scripts/compare_dicts.js` 新增重複鍵檢查：`JSON.parse` 遇到重複鍵只保留最後一個值，先寫的譯文會無聲失效。檢查逐字元掃描，單行 JSON 也查得到。
+  - 與上游同步：補上 13 條由伺服器提供的模型說明與狀態提示（如「Leaving Soon」「代理執行時無法變更模型」「Cannot start best-of-N mode: …」、帳戶方案限額說明），沿用本專案體例，Best-of-N 保留原文。`applied`、`chosen`、`failed`、`move`、`never`、`resolve`、`self` 七個短詞的小寫寫法不再翻譯，避免識別字與狀態值被譯成中文；開頭大寫時照常翻譯。
 - **背景守護與還原捷徑**：
   - `auto_localize_watcher.js` 在日誌超過 5 MB 時改名保留一份舊檔（`autolocalize.log.1`），避免每 5 分鐘一次的檢查讓日誌無限增長；排程與手動執行同時輪替時以鎖確保只改名一次，不會蓋掉完整的舊日誌。持鎖的處理程序中途結束時，殘留的鎖會在逾時後回收，輪替不會因此停擺。
   - `點兩下還原官方英文.command` 補上 Homebrew 的 `node` 路徑，避免提權後找不到 `node`。

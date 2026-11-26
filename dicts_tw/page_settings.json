@@ -580,5 +580,6 @@
   "Manage your keybinding scheme and customize shortcuts in VS Code.": "在 VS Code 中管理按鍵對應設定與自訂快速鍵。",
   "Pick one of these themes under Preset in Settings > Appearance.": "請至「設定 > 外觀」的「預設風格」中選擇其中一種佈景主題。",
   "Only this conversation uses this preset.": "僅此對話使用此預設風格。",
-  "Default (Mendel)": "預設 (Mendel)"
+  "Default (Mendel)": "預設 (Mendel)",
+  "Free users and Google AI Plus users receive the minimum base limits on Antigravity. You can upgrade to Google AI Pro or above to receive higher rate limits.": "免費使用者與 Google AI Plus 使用者在 Antigravity 上享有最低的基本限額。升級至 Google AI Pro 以上方案，即可取得更高的速率限制。"
 }
