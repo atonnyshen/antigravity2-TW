@@ -1,6 +1,5 @@
 #!/bin/bash
 cd "$(dirname "$0")"
-export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 # 檢查系統管理員權限，若非 root 則自動透過 sudo 提權
 if [ "$EUID" -ne 0 ]; then
@@ -8,8 +7,15 @@ if [ "$EUID" -ne 0 ]; then
     echo " 提示：macOS 修改應用程式（/Applications）需要管理員權限"
     echo " 請在下方輸入您的電腦開機密碼（輸入時畫面不會顯示密碼，直接按 Enter）："
     echo "======================================================"
-    exec sudo env "PATH=$PATH" bash "$0" "$@"
+    # 提權後的 PATH 只放系統目錄與 node 所在目錄（系統目錄優先），不把使用者整條 PATH 交給 root，
+    # 以免可寫目錄裡被替換的 bash 或其他程式以 root 身分執行
+    USER_NODE="$(export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; command -v node || true)"
+    ROOT_PATH="/usr/bin:/bin:/usr/sbin:/sbin"
+    if [ -n "$USER_NODE" ]; then ROOT_PATH="$ROOT_PATH:$(dirname "$USER_NODE")"; fi
+    exec sudo env "PATH=$ROOT_PATH" /bin/bash "$0" "$@"
 fi
+# 直接以 root 執行時也找得到 Homebrew 的 node；系統目錄排在前面
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 
 TARGET_USER="${SUDO_USER:-$USER}"
 USER_HOME=$(/usr/bin/dscl . -read "/Users/$TARGET_USER" NFSHomeDirectory 2>/dev/null | /usr/bin/sed 's/^NFSHomeDirectory: //' || eval echo "~$TARGET_USER")

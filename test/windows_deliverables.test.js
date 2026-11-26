@@ -487,3 +487,35 @@ test('v2.33.0 remoteManager, wizardHtml, SVG-only loadingOverlay, and runtime br
     assert.ok(rmPatchedTw.includes("'代理或任務' : '代理、任務或終端機'"));
     assert.ok(rmPatchedTw.includes('要在 ${entry.label} 上完成此次登入嗎？'));
 });
+
+test('macOS elevation hands root only the system directories (first) and the Node.js directory, and calls bash by absolute path', { skip: process.platform === 'win32' || (typeof process.getuid === 'function' && process.getuid() === 0) }, t => {
+    const unixScripts = fs.readdirSync(repo).filter(f => f.endsWith('.command') || f.endsWith('.sh'));
+    for (const file of unixScripts) {
+        const text = fs.readFileSync(path.join(repo, file), 'utf8');
+        assert.doesNotMatch(text, /PATH=\$PATH/, `${file} 不得把使用者的 PATH 交給 root`);
+        const elevations = text.split('\n').filter(line => /^\s*exec sudo\b/.test(line));
+        for (const line of elevations) {
+            assert.match(line, /^\s*exec sudo env "PATH=\$ROOT_PATH" \/bin\/bash /, `${file}: ${line.trim()}`);
+        }
+        if (elevations.length > 0) {
+            assert.match(text, /ROOT_PATH="\/usr\/bin:\/bin:\/usr\/sbin:\/sbin/, `${file} 的 ROOT_PATH 必須以系統目錄開頭`);
+        }
+    }
+    // 行為：以假的 sudo 攔截參數；使用者 PATH 裡排在前面的可寫目錄不得出現在交給 root 的 PATH
+    const shim = fs.mkdtempSync(path.join(os.tmpdir(), 'ag2tw-sudo-'));
+    t.after(() => fs.rmSync(shim, { recursive: true, force: true }));
+    fs.writeFileSync(path.join(shim, 'sudo'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o755 });
+    for (const file of ['點兩下安裝繁體中文.command', '點兩下還原官方英文.command']) {
+        const run = spawnSync('/bin/bash', [path.join(repo, file)], {
+            encoding: 'utf8', input: '', timeout: 20000,
+            env: { ...process.env, PATH: shim + path.delimiter + process.env.PATH }
+        });
+        const args = run.stdout.split('\n');
+        const pathArg = args.find(a => a.startsWith('PATH='));
+        assert.ok(pathArg, `${file} 沒有以 sudo env PATH=… 提權：${run.stdout}${run.stderr}`);
+        const dirs = pathArg.slice('PATH='.length).split(':');
+        assert.deepEqual(dirs.slice(0, 4), ['/usr/bin', '/bin', '/usr/sbin', '/sbin']);
+        assert.equal(dirs.includes(shim), false);
+        assert.equal(args[args.indexOf(pathArg) + 1], '/bin/bash');
+    }
+});

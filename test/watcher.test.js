@@ -652,3 +652,24 @@ test('rotateLogs keeps one previous log once the size limit is exceeded and leav
     assert.equal(fs.readFileSync(small, 'utf8'), 'ok');
     assert.equal(fs.existsSync(small + '.1'), false);
 });
+
+test('rotateLogs re-checks the size under a lock, so a run that saw a stale size cannot rename a freshly recreated log over the previous one', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-watcher-race-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const log = path.join(root, 'race.log');
+    // 另一個程序剛完成輪替：.1 是完整的舊日誌，原位置是重建後的小日誌
+    fs.writeFileSync(log + '.1', 'x'.repeat(64));
+    fs.writeFileSync(log, 'fresh');
+    // 這個程序在對方輪替前就看到超限：第一次 stat 回報舊的大小
+    const realStat = fs.statSync;
+    let stale = true;
+    t.mock.method(fs, 'statSync', function (target, ...rest) {
+        if (stale && target === log) { stale = false; return { size: 64 }; }
+        return realStat.call(this, target, ...rest);
+    });
+    rotateLogs([log], 32);
+    t.mock.restoreAll();
+    assert.equal(fs.readFileSync(log + '.1', 'utf8'), 'x'.repeat(64));
+    assert.equal(fs.readFileSync(log, 'utf8'), 'fresh');
+    assert.equal(fs.existsSync(log + '.rotate.lock'), false);
+});

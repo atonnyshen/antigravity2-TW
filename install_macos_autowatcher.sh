@@ -61,6 +61,8 @@ if [ -z "$NODE_BIN" ]; then
     echo "請先安裝 Node.js 22.12+ (可透過 nodejs.org 官方套件或 brew install node)。" >&2
     exit 1
 fi
+# 提權後的 PATH 只放系統目錄（優先）與找到的 node 所在目錄，不把使用者整條 PATH 交給 root
+ROOT_PATH="/usr/bin:/bin:/usr/sbin:/sbin:$(dirname "$NODE_BIN")"
 
 LABEL="com.antigravity.autolocalize"
 SYSTEM_PLIST="/Library/LaunchDaemons/$LABEL.plist"
@@ -95,14 +97,14 @@ else
             IS_DAEMON=0
         else
             echo "偵測到目標應用程式需要管理員權限，嘗試提權..."
-            exec sudo /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
+            exec sudo env "PATH=$ROOT_PATH" /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
         fi
     fi
 fi
 
 if [ "$IS_DAEMON" -eq 1 ] && [ "$EUID" -ne 0 ]; then
     echo "以管理員認證安裝系統服務..."
-    exec sudo /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
+    exec sudo env "PATH=$ROOT_PATH" /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
 fi
 
 if [ "$IS_DAEMON" -eq 1 ]; then

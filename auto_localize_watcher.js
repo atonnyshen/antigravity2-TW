@@ -77,7 +77,16 @@ function watcherLogPaths() {
 function rotateLogs(candidates = watcherLogPaths(), limit = LOG_ROTATE_BYTES) {
     for (const lp of candidates) {
         try {
-            if (fs.statSync(lp).size > limit) fs.renameSync(lp, lp + '.1');
+            if (fs.statSync(lp).size <= limit) continue;
+            // 排程與手動執行可能同時看到日誌超限：只讓拿到輪替鎖的程序改名，並在鎖內重新確認大小，
+            // 避免後到的程序把剛重建的小日誌改名，蓋掉完整的舊日誌
+            const release = acquireLock(lp + '.rotate.lock');
+            if (!release) continue;
+            try {
+                if (fs.statSync(lp).size > limit) fs.renameSync(lp, lp + '.1');
+            } finally {
+                release();
+            }
         } catch {}
     }
 }

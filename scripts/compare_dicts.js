@@ -104,15 +104,36 @@ function validateTraditionalText(tcVal, label) {
     return ok;
 }
 
+// 逐字元掃描 JSON：同一層物件內的鍵重複就列出（不假設每行一個鍵）
 function findDuplicateKeys(rawText) {
-    const seen = new Set();
     const duplicates = [];
-    for (const line of rawText.split('\n')) {
-        const m = line.match(/^\s*("(?:[^"\\]|\\.)*")\s*:/);
-        if (!m) continue;
-        const key = JSON.parse(m[1]);
-        if (seen.has(key)) duplicates.push(key);
-        else seen.add(key);
+    const stack = [];
+    let expectKey = false;
+    for (let i = 0; i < rawText.length; i++) {
+        const ch = rawText[i];
+        if (ch === '"') {
+            let j = i + 1;
+            while (j < rawText.length && rawText[j] !== '"') j += rawText[j] === '\\' ? 2 : 1;
+            if (expectKey) {
+                const key = JSON.parse(rawText.slice(i, j + 1));
+                const seen = stack[stack.length - 1];
+                if (seen.has(key)) duplicates.push(key);
+                else seen.add(key);
+                expectKey = false;
+            }
+            i = j;
+        } else if (ch === '{') {
+            stack.push(new Set());
+            expectKey = true;
+        } else if (ch === '[') {
+            stack.push(null);
+            expectKey = false;
+        } else if (ch === '}' || ch === ']') {
+            stack.pop();
+            expectKey = false;
+        } else if (ch === ',') {
+            expectKey = stack[stack.length - 1] instanceof Set;
+        }
     }
     return duplicates;
 }

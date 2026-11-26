@@ -23,6 +23,7 @@ proxy_config/
 # Runtime / Build artifacts
 .watcher-state/
 autolocalize.log
+autolocalize.log.*
 build_app/
 dist/
 *.zip

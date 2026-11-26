@@ -280,5 +280,11 @@ test('compareDicts rejects a dictionary key defined twice because JSON.parse sil
     assert.equal(compareDicts(tmpSc, tmpTw), true);
     fs.writeFileSync(path.join(tmpTw, 'test.json'), '{\n  "Open": "開啟",\n  "Close": "關閉",\n  "Open": "打開"\n}\n', 'utf8');
     assert.equal(compareDicts(tmpSc, tmpTw), false);
+    // 合法的單行 JSON：同一行出現兩個相同的鍵也要抓到；同一行不重複時不誤報
+    fs.writeFileSync(path.join(tmpTw, 'test.json'), '{"Open":"開啟","Close":"關閉"}\n', 'utf8');
+    assert.equal(compareDicts(tmpSc, tmpTw), true);
+    // 重複的值用合法譯文，確保失敗只來自重複鍵（「打開」本身就會被禁用詞檢查擋下）
+    fs.writeFileSync(path.join(tmpTw, 'test.json'), '{"Open":"開啟","Close":"關閉","Open":"開啟"}\n', 'utf8');
+    assert.equal(compareDicts(tmpSc, tmpTw), false);
 });
 
