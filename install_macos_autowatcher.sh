@@ -1,5 +1,8 @@
 #!/bin/bash
 set -euo pipefail
+# 以 root 執行時，先把 PATH 換成系統目錄再執行任何指令：傳入的 PATH 可能把使用者可寫目錄排在前面，
+# 讓同名的 dirname 等程式以 root 身分執行。傳入的 PATH 只留著找 node
+if [ "$EUID" -eq 0 ]; then INCOMING_PATH="${INCOMING_PATH:-$PATH}"; export PATH="/usr/bin:/bin:/usr/sbin:/sbin"; fi
 
 if [ "$(uname -s)" != Darwin ]; then
     echo "此安裝程式僅適用 macOS。" >&2
@@ -40,7 +43,7 @@ NODE_BIN=""
 CANDIDATES=(
     "/usr/local/bin/node"
     "/opt/homebrew/bin/node"
-    "$(command -v node 2>/dev/null || true)"
+    "$(export PATH="${INCOMING_PATH:-$PATH}"; command -v node 2>/dev/null || true)"
 )
 for prev_node in /Library/Application\ Support/Antigravity2TW/runtime.*/node; do
     if [ -x "$prev_node" ]; then

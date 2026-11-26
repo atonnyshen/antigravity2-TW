@@ -6,6 +6,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
+const runLock = require('./src/run_lock');
 
 const DIR = __dirname;
 const IS_MAC = process.platform === 'darwin';
@@ -81,7 +82,7 @@ function rotateLogs(candidates = watcherLogPaths(), limit = LOG_ROTATE_BYTES) {
             // 排程與手動執行可能同時看到日誌超限：只讓拿到輪替鎖的程序改名，並在鎖內重新確認大小，
             // 避免後到的程序把剛重建的小日誌改名，蓋掉完整的舊日誌
             // 改名只需幾毫秒：輪替鎖持有超過一分鐘就視為殘留
-            const release = acquireLock(lp + '.rotate.lock', undefined, undefined, { maxAgeMs: 60 * 1000 });
+            const release = acquireLock(lp + '.rotate.lock', undefined, undefined, { staleMs: 60 * 1000 });
             if (!release) continue;
             try {
                 if (fs.statSync(lp).size > limit) fs.renameSync(lp, lp + '.1');
@@ -113,116 +114,91 @@ function waitForStableFile(file, { interval = 1000, timeout = 30000, samples = 3
     throw new Error('app.asar 尚未穩定，等待下次排程重試。');
 }
 
+// root 變更擁有者與權限時，先以不跟隨連結的方式開啟，再透過檔案代碼修改；多重硬連結的檔案略過，
+// 目錄只在 allowDir 時處理。使用者可寫的目錄（.watcher-state、App 資源目錄）裡被放入連結時，
+// 不會把連結指向的系統檔案或執行期模組交給使用者
+function setOwnerNoFollow(target, { uid, gid, mode, allowDir = false } = {}) {
+    const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
+    let fd;
+    try { fd = fs.openSync(target, flags); } catch { return false; }
+    try {
+        const st = fs.fstatSync(fd);
+        if (st.isFile() ? st.nlink !== 1 : !(allowDir && st.isDirectory())) return false;
+        if (uid != null && gid != null) fs.fchownSync(fd, uid, gid);
+        const wanted = typeof mode === 'function' ? mode(st) : mode;
+        if (wanted != null) fs.fchmodSync(fd, wanted);
+        return true;
+    } catch {
+        return false;
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
+// 逐一處理目錄裡的項目：先以不跟隨連結的方式開啟目錄，切換工作目錄後確認仍是同一個目錄，再把單層的相對名稱交給 fn。
+// 目錄在檢查之後被換成連結時，相對名稱仍落在原本那個目錄裡，不會被導向執行目錄等 root 擁有的位置
+function forEachChildNoFollow(dir, fn) {
+    const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_DIRECTORY || 0);
+    let dirFd;
+    try { dirFd = fs.openSync(dir, flags); } catch { return false; }
+    let previous;
+    try { previous = process.cwd(); } catch { fs.closeSync(dirFd); return false; }
+    try {
+        const expected = fs.fstatSync(dirFd);
+        process.chdir(dir);
+        const here = fs.statSync('.');
+        if (here.dev !== expected.dev || here.ino !== expected.ino) return false;
+        for (const name of fs.readdirSync('.')) fn(name);
+        return true;
+    } catch {
+        return false;
+    } finally {
+        try { process.chdir(previous); } catch {}
+        fs.closeSync(dirFd);
+    }
+}
+
+// 只改權限：以 root 執行時同樣不跟隨連結
+function setModeNoFollow(target, mode) {
+    if (ROOT) return setOwnerNoFollow(target, { mode });
+    try { fs.chmodSync(target, mode); return true; } catch { return false; }
+}
+
+// root 建立的檔案要交給誰：明確指定的非 root 擁有者，否則沿用上層目錄的擁有者
+function nonRootOwner(dir, targetUid, targetGid) {
+    let uid = targetUid;
+    let gid = targetGid;
+    if (uid == null || uid === 0) {
+        try {
+            const parentStat = fs.statSync(dir);
+            uid = parentStat.uid;
+            gid = parentStat.gid;
+        } catch {
+            return null;
+        }
+    }
+    return uid != null && uid !== 0 ? { uid, gid } : null;
+}
+
 function ensureAccessibleDir(dir, targetUid, targetGid) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
-    try { fs.chmodSync(dir, 0o755); } catch {}
-    if (ROOT) {
-        try {
-            let uid = targetUid;
-            let gid = targetGid;
-            if (uid == null || uid === 0) {
-                const parentStat = fs.statSync(path.dirname(dir));
-                if (parentStat.uid !== 0) {
-                    uid = parentStat.uid;
-                    gid = parentStat.gid;
-                }
-            }
-            if (uid != null && uid !== 0) {
-                fs.chownSync(dir, uid, gid);
-                try {
-                    for (const f of fs.readdirSync(dir)) {
-                        const fp = path.join(dir, f);
-                        try {
-                            fs.chownSync(fp, uid, gid);
-                            const st = fs.lstatSync(fp);
-                            fs.chmodSync(fp, st.isDirectory() ? 0o755 : 0o644);
-                        } catch {}
-                    }
-                } catch {}
-            }
-        } catch {}
+    if (!ROOT) {
+        try { fs.chmodSync(dir, 0o755); } catch {}
+        return dir;
     }
+    const owner = nonRootOwner(path.dirname(dir), targetUid, targetGid);
+    const own = owner ? { uid: owner.uid, gid: owner.gid } : {};
+    if (!setOwnerNoFollow(dir, { ...own, mode: 0o755, allowDir: true }) || !owner) return dir;
+    forEachChildNoFollow(dir, name => {
+        setOwnerNoFollow(name, { ...own, allowDir: true, mode: st => (st.isDirectory() ? 0o755 : 0o644) });
+    });
     return dir;
 }
 
-// 鎖的持有上限：超過就視為殘留。持有者當掉後，記錄的程序編號可能被其他長駐程序重用，只看程序是否存在會讓鎖永遠清不掉
-const LOCK_MAX_AGE_MS = 30 * 60 * 1000;
-function readLockOwner(lockPath) {
-    try { return fs.readFileSync(path.join(lockPath, 'pid'), 'utf8'); } catch { return null; }
-}
-
-function acquireLock(lockPath, targetUid, targetGid, { maxAgeMs = LOCK_MAX_AGE_MS } = {}) {
-    try {
-        fs.mkdirSync(lockPath, { mode: 0o755 });
-        if (ROOT) {
-            try {
-                let uid = targetUid;
-                let gid = targetGid;
-                if (uid == null || uid === 0) {
-                    const parentStat = fs.statSync(path.dirname(lockPath));
-                    if (parentStat.uid !== 0) {
-                        uid = parentStat.uid;
-                        gid = parentStat.gid;
-                    }
-                }
-                if (uid != null && uid !== 0) fs.chownSync(lockPath, uid, gid);
-            } catch {}
-        }
-    } catch (error) {
-        if (error.code === 'EACCES') {
-            try { fs.chmodSync(lockPath, 0o755); } catch {}
-        }
-        if (error.code !== 'EEXIST') throw error;
-        const stat = fs.lstatSync(lockPath);
-        if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('鎖定路徑不是一般目錄。');
-        const owner = readLockOwner(lockPath);
-        const pid = owner === null ? NaN : Number(owner.split(':')[0]);
-        const age = Date.now() - stat.mtimeMs;
-        if (Number.isInteger(pid) && pid > 0) {
-            let alive = true;
-            try { process.kill(pid, 0); } catch (e) { alive = e.code !== 'ESRCH'; }
-            if (alive && age <= maxAgeMs) return null;
-        } else if (age < 30000) {
-            return null;
-        }
-        // 回收前再確認仍是同一把殘留鎖：另一個程序可能已先回收並建立新鎖，不能把它刪掉
-        const current = fs.lstatSync(lockPath, { throwIfNoEntry: false });
-        if (!current) return acquireLock(lockPath, targetUid, targetGid, { maxAgeMs });
-        if (current.ino !== stat.ino || current.mtimeMs !== stat.mtimeMs || readLockOwner(lockPath) !== owner) return null;
-        try {
-            fs.rmSync(lockPath, { recursive: true, force: true });
-        } catch (rmErr) {
-            if (rmErr.code === 'EACCES') {
-                try { fs.chmodSync(lockPath, 0o777); } catch {}
-                fs.rmSync(lockPath, { recursive: true, force: true });
-            } else {
-                throw rmErr;
-            }
-        }
-        return acquireLock(lockPath, targetUid, targetGid, { maxAgeMs });
-    }
-    const pidFile = path.join(lockPath, 'pid');
-    // 程序編號加上隨機碼：釋放時只刪自己這把鎖
-    const token = `${process.pid}:${crypto.randomBytes(8).toString('hex')}`;
-    fs.writeFileSync(pidFile, token, { flag: 'wx' });
-    if (ROOT) {
-        try {
-            let uid = targetUid;
-            let gid = targetGid;
-            if (uid == null || uid === 0) {
-                const parentStat = fs.statSync(path.dirname(lockPath));
-                if (parentStat.uid !== 0) {
-                    uid = parentStat.uid;
-                    gid = parentStat.gid;
-                }
-            }
-            if (uid != null && uid !== 0) fs.chownSync(pidFile, uid, gid);
-        } catch {}
-    }
-    // 這把鎖若曾被判定殘留、由其他程序回收，釋放時不能刪掉對方的新鎖
-    return () => {
-        if (readLockOwner(lockPath) === token) fs.rmSync(lockPath, { recursive: true, force: true });
-    };
+// 鎖的判斷與回收在 src/run_lock.js，與安裝器共用同一套格式
+function acquireLock(lockPath, targetUid, targetGid, options = {}) {
+    const owner = ROOT ? nonRootOwner(path.dirname(lockPath), targetUid, targetGid) : null;
+    return runLock.acquire(lockPath, { ...options, owner });
 }
 
 function cleanElectronCache(targetUid) {
@@ -475,16 +451,14 @@ function safeReplaceFile(src, dst, mode, uid, gid, { atomicRequired = false } = 
             let replaced = false;
             // 1. Try copyFileSync
             try {
-                if (fs.existsSync(dst)) {
-                    try { fs.chmodSync(dst, 0o644); } catch {}
-                }
+                if (fs.existsSync(dst)) setModeNoFollow(dst, 0o644);
                 fs.copyFileSync(src, dst);
                 replaced = true;
             } catch (copyErr) {
                 // 2. Try in-place write via openSync('r+') to avoid copyfile(3) attribute issues without unlinking
                 try {
                     if (fs.existsSync(dst)) {
-                        try { fs.chmodSync(dst, 0o644); } catch {}
+                        setModeNoFollow(dst, 0o644);
                         const fd = fs.openSync(dst, 'r+');
                         try {
                             const buf = fs.readFileSync(src);
@@ -517,11 +491,11 @@ function safeReplaceFile(src, dst, mode, uid, gid, { atomicRequired = false } = 
         }
     }
     stripQuarantine(dst);
-    if (mode != null) {
+    if (ROOT) {
+        const own = uid != null && gid != null ? { uid, gid } : {};
+        setOwnerNoFollow(dst, { ...own, mode: mode != null ? mode & 0o777 : undefined });
+    } else if (mode != null) {
         try { fs.chmodSync(dst, mode & 0o777); } catch {}
-    }
-    if (ROOT && uid != null && gid != null) {
-        try { fs.chownSync(dst, uid, gid); } catch {}
     }
 }
 
@@ -713,9 +687,7 @@ function resumePendingAsarRecovery(appInfo, stateDir, exchange = exchangeAsar) {
             const candidate = path.join(stageDir, 'app.asar');
             fs.writeFileSync(candidate, bytes, { flag: 'wx', mode: sourceStat.mode & 0o777 });
             fsyncFile(candidate);
-            if (ROOT) {
-                try { fs.chownSync(candidate, sourceStat.uid, sourceStat.gid); } catch {}
-            }
+            if (ROOT) setOwnerNoFollow(candidate, { uid: sourceStat.uid, gid: sourceStat.gid });
             try {
                 exchangeCheckedAsar(candidate, asarPath, path.join(stageDir, 'previous.asar'),
                     record.expectedLiveHash, record.recoverHash, exchange);
@@ -763,11 +735,9 @@ function signApp(appPath, sourceStat) {
     if (ROOT && sourceStat && sourceStat.uid !== 0) {
         try {
             const sigDir = path.join(appPath, 'Contents', '_CodeSignature');
-            if (fs.existsSync(sigDir)) {
-                fs.chownSync(sigDir, sourceStat.uid, sourceStat.gid);
-                for (const f of fs.readdirSync(sigDir)) {
-                    fs.chownSync(path.join(sigDir, f), sourceStat.uid, sourceStat.gid);
-                }
+            const own = { uid: sourceStat.uid, gid: sourceStat.gid };
+            if (setOwnerNoFollow(sigDir, { ...own, allowDir: true })) {
+                forEachChildNoFollow(sigDir, name => setOwnerNoFollow(name, own));
             }
         } catch {}
     }
@@ -849,6 +819,10 @@ function checkAndLocalizeApp(appInfo, {
         if (digest(fs.readFileSync(asarPath)) !== originalHash) {
             throw new Error('建置期間官方包已改變，放棄本次產物，等待下次觸發。');
         }
+        // 持有者長時間停擺（例如系統睡眠）時，鎖可能已被判定殘留並由其他程序接手：替換正式檔案前再確認一次
+        if (typeof release.held === 'function' && !release.held()) {
+            throw new Error('執行鎖已由其他守護程序接手，放棄本次產物。');
+        }
         ensureRegularTarget(asarPath);
         if (!localized) {
             ensureRegularTarget(asarPath + '.bak');
@@ -868,9 +842,7 @@ function checkAndLocalizeApp(appInfo, {
         const candidate = path.join(replacementDir, 'app.asar');
         fs.writeFileSync(candidate, result, { mode: sourceStat.mode & 0o777, flag: 'wx' });
         fsyncFile(candidate);
-        if (ROOT) {
-            try { fs.chownSync(candidate, sourceStat.uid, sourceStat.gid); } catch {}
-        }
+        if (ROOT) setOwnerNoFollow(candidate, { uid: sourceStat.uid, gid: sourceStat.gid });
         if (!localized) {
             let needBackup = true;
             if (fs.existsSync(asarPath + '.bak')) {
@@ -880,9 +852,7 @@ function checkAndLocalizeApp(appInfo, {
                 const backup = path.join(replacementDir, 'official.bak');
                 fs.writeFileSync(backup, original, { mode: sourceStat.mode & 0o777, flag: 'wx' });
                 fsyncFile(backup);
-                if (ROOT) {
-                    try { fs.chownSync(backup, sourceStat.uid, sourceStat.gid); } catch {}
-                }
+                if (ROOT) setOwnerNoFollow(backup, { uid: sourceStat.uid, gid: sourceStat.gid });
                 safeReplaceFile(backup, asarPath + '.bak', sourceStat.mode, sourceStat.uid, sourceStat.gid,
                     { atomicRequired: true });
             }
@@ -931,7 +901,7 @@ function checkAndLocalizeApp(appInfo, {
         if (ROOT) {
             try {
                 const parentStat = fs.statSync(path.dirname(stateTmp));
-                if (parentStat.uid !== 0) fs.chownSync(stateTmp, parentStat.uid, parentStat.gid);
+                if (parentStat.uid !== 0) setOwnerNoFollow(stateTmp, { uid: parentStat.uid, gid: parentStat.gid });
             } catch {}
         }
         safeReplaceFile(stateTmp, statePath, 0o644, sourceStat.uid, sourceStat.gid);
@@ -957,9 +927,7 @@ function checkAndLocalizeApp(appInfo, {
                 const rollback = path.join(rollbackDir, 'rollback.asar');
                 fs.writeFileSync(rollback, original, { flag: 'wx', mode: sourceStat.mode & 0o777 });
                 fsyncFile(rollback);
-                if (ROOT) {
-                    try { fs.chownSync(rollback, sourceStat.uid, sourceStat.gid); } catch {}
-                }
+                if (ROOT) setOwnerNoFollow(rollback, { uid: sourceStat.uid, gid: sourceStat.gid });
                 try {
                     exchangeCheckedAsar(rollback, asarPath, path.join(rollbackDir, 'rollback-previous.asar'),
                         resultHash, originalHash, exchange);
@@ -1388,6 +1356,8 @@ module.exports = {
     waitForStableFile,
     rotateLogs,
     acquireLock,
+    setOwnerNoFollow,
+    forEachChildNoFollow,
     isLocalized,
     digest,
     safeReplaceFile,

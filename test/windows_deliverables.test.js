@@ -528,17 +528,48 @@ test('macOS elevation calls sudo, env and bash by absolute path, hands root only
         assert.equal(dirs.includes(shim), false);
         assert.equal(args[args.indexOf(pathArg) + 1], '/bin/bash');
     }
-    // root 階段：不論傳入的 PATH 順序為何，都重建為系統目錄在前、只另加 node 所在目錄
+    // root 階段（含直接以 root 啟動）：傳入的 PATH 只拿來找 node，dirname 等外部程式一律從系統目錄執行；
+    // PATH 重建為系統目錄在前、只另加 node 所在目錄
+    const marker = path.join(shim, 'dirname-ran');
+    fs.writeFileSync(path.join(shim, 'dirname'), `#!/bin/sh\ntouch "${marker}"\n/usr/bin/dirname "$@"\n`, { mode: 0o755 });
     for (const file of ['點兩下安裝繁體中文.command', '點兩下還原官方英文.command']) {
         const text = fs.readFileSync(path.join(repo, file), 'utf8');
-        const snippet = text.slice(text.indexOf('ROOT_NODE="$(command -v node'), text.indexOf('export PATH="/usr/bin:/bin:/usr/sbin:/sbin${ROOT_NODE'));
-        assert.ok(snippet.length > 0, `${file} 缺少 root 階段的 PATH 重建`);
+        const sanitize = text.split('\n').find(line => line.startsWith('if [ "$EUID" -eq 0 ]; then'));
+        assert.ok(sanitize, `${file} 缺少 root 啟動時的 PATH 清理`);
+        const start = text.indexOf('ROOT_NODE="$(');
+        assert.ok(start > 0 && text.includes('export PATH="/usr/bin:/bin:/usr/sbin:/sbin${ROOT_NODE'), `${file} 缺少 root 階段的 PATH 重建`);
         const fakeNodeDir = fs.mkdtempSync(path.join(shim, 'node-'));
         fs.writeFileSync(path.join(fakeNodeDir, 'node'), '#!/bin/sh\n', { mode: 0o755 });
-        const probe = spawnSync('/bin/bash', ['-c', text.slice(text.indexOf('ROOT_NODE="$(command -v node')).split('\n').slice(0, 7).join('\n') + '\necho "$PATH"'], {
+        const probe = spawnSync('/bin/bash', ['-c', `${sanitize.replace('"$EUID"', '0')}\n${text.slice(start).split('\n').slice(0, 7).join('\n')}\necho "$PATH"`], {
             encoding: 'utf8', timeout: 20000,
             env: { ...process.env, PATH: [shim, fakeNodeDir, '/usr/bin', '/bin'].join(path.delimiter) }
         });
         assert.equal(probe.stdout.trim(), `/usr/bin:/bin:/usr/sbin:/sbin:${fakeNodeDir}`, `${file}: ${probe.stderr}`);
+        assert.equal(fs.existsSync(marker), false, `${file} 以 root 執行了傳入 PATH 裡的 dirname`);
+    }
+});
+
+test('every macOS script started directly as root replaces PATH before running any command', { skip: process.platform === 'win32' }, t => {
+    const scripts = ['點兩下安裝繁體中文.command', '點兩下還原官方英文.command', '點兩下安裝macOS背景守護.command',
+        '點兩下卸載macOS背景守護.command', 'install_macos_autowatcher.sh', 'uninstall_macos_autowatcher.sh'];
+    const shim = fs.mkdtempSync(path.join(os.tmpdir(), 'ag2tw-rootpath-'));
+    t.after(() => fs.rmSync(shim, { recursive: true, force: true }));
+    const marker = path.join(shim, 'ran');
+    for (const tool of ['dirname', 'uname', 'id', 'bash']) {
+        fs.writeFileSync(path.join(shim, tool), `#!/bin/sh\ntouch "${marker}"\n`, { mode: 0o755 });
+    }
+    for (const file of scripts) {
+        const lines = fs.readFileSync(path.join(repo, file), 'utf8').split('\n');
+        const at = lines.findIndex(line => line.startsWith('if [ "$EUID" -eq 0 ]; then'));
+        assert.ok(at > 0, `${file} 缺少 root 啟動時的 PATH 清理`);
+        // 清理 PATH 之前只能有 shebang、set 與註解
+        for (const line of lines.slice(0, at)) {
+            assert.match(line, /^(#.*|set -[a-z]+( [a-z]+)*|\s*)$/, `${file} 在清理 PATH 前執行了：${line}`);
+        }
+        const probe = spawnSync('/bin/bash', ['-c', `${lines[at].replace('"$EUID"', '0')}\necho "$PATH"\ndirname /a/b >/dev/null`], {
+            encoding: 'utf8', timeout: 20000, env: { ...process.env, PATH: [shim, '/usr/bin', '/bin'].join(path.delimiter) }
+        });
+        assert.equal(probe.stdout.split('\n')[0], '/usr/bin:/bin:/usr/sbin:/sbin', `${file}: ${probe.stderr}`);
+        assert.equal(fs.existsSync(marker), false, `${file} 以 root 執行了傳入 PATH 裡的程式`);
     }
 });

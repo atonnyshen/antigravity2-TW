@@ -1,4 +1,7 @@
 #!/bin/bash
+# 以 root 執行時，先把 PATH 換成系統目錄再執行任何指令：傳入的 PATH 可能把使用者可寫目錄排在前面，
+# 讓同名的 dirname 等程式以 root 身分執行。傳入的 PATH 只留著找 node
+if [ "$EUID" -eq 0 ]; then INCOMING_PATH="$PATH"; export PATH="/usr/bin:/bin:/usr/sbin:/sbin"; fi
 cd "$(dirname "$0")"
 
 # 檢查系統管理員權限，若非 root 則自動透過 sudo 提權
@@ -16,7 +19,7 @@ if [ "$EUID" -ne 0 ]; then
 fi
 # root 階段的 PATH 一律重建：系統目錄排最前，只另加 node 所在目錄。經由上面提權進來時 PATH 已是這個形式；
 # 直接以 root 執行時，傳入的 PATH 順序不可信，只拿來找 node
-ROOT_NODE="$(command -v node || true)"
+ROOT_NODE="$(export PATH="${INCOMING_PATH:-$PATH}"; command -v node || true)"
 if [ -z "$ROOT_NODE" ]; then
     for cand in /usr/local/bin/node /opt/homebrew/bin/node; do
         if [ -x "$cand" ]; then ROOT_NODE="$cand"; break; fi

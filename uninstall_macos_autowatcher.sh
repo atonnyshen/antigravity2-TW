@@ -1,5 +1,8 @@
 #!/bin/bash
 set -euo pipefail
+# 以 root 執行時，先把 PATH 換成系統目錄再執行任何指令：傳入的 PATH 可能把使用者可寫目錄排在前面，
+# 讓同名的 dirname 等程式以 root 身分執行
+if [ "$EUID" -eq 0 ]; then export PATH="/usr/bin:/bin:/usr/sbin:/sbin"; fi
 LABEL="com.antigravity.autolocalize"
 SYSTEM_PLIST="/Library/LaunchDaemons/$LABEL.plist"
 USER_PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"

@@ -114,7 +114,7 @@ test('existing localization engine loads the active translation snapshot without
         fs.copyFileSync(path.join(repo, name), path.join(root, name));
     }
     fs.mkdirSync(path.join(root, 'src'));
-    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js']) {
+    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js', 'run_lock.js']) {
         fs.copyFileSync(path.join(repo, 'src', name), path.join(root, 'src', name));
     }
     const packVersion = '9.9.9';
@@ -407,7 +407,7 @@ test('data-driven runtime_rules.json updates dynamic rules, scoped terms, and pr
         fs.copyFileSync(path.join(repo, name), path.join(root, name));
     }
     fs.mkdirSync(path.join(root, 'src'));
-    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js']) {
+    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js', 'run_lock.js']) {
         fs.copyFileSync(path.join(repo, 'src', name), path.join(root, 'src', name));
     }
     const packVersion = '9.9.9';
@@ -551,7 +551,7 @@ test('placeholder tokens and end markers in dict/rules cannot corrupt generated 
         fs.copyFileSync(path.join(repo, name), path.join(root, name));
     }
     fs.mkdirSync(path.join(root, 'src'));
-    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js']) {
+    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js', 'run_lock.js']) {
         fs.copyFileSync(path.join(repo, 'src', name), path.join(root, 'src', name));
     }
     fs.cpSync(path.join(repo, 'dicts'), path.join(root, 'dicts'), { recursive: true });
@@ -605,7 +605,7 @@ test('stale older translation packs are ignored on engine upgrade and cleaned on
         fs.copyFileSync(path.join(repo, name), path.join(root, name));
     }
     fs.mkdirSync(path.join(root, 'src'));
-    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js']) {
+    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js', 'run_lock.js']) {
         fs.copyFileSync(path.join(repo, 'src', name), path.join(root, 'src', name));
     }
     fs.cpSync(path.join(repo, 'dicts'), path.join(root, 'dicts'), { recursive: true });
@@ -659,7 +659,7 @@ test('removing protected modelEffortLabel via runtime_rules.json unprotects it a
         fs.copyFileSync(path.join(repo, name), path.join(root, name));
     }
     fs.mkdirSync(path.join(root, 'src'));
-    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js']) {
+    for (const name of ['asar_patcher.js', 'main_patches.js', 'preload_runtime.js', 'rules_schema.js', 'run_lock.js']) {
         fs.copyFileSync(path.join(repo, 'src', name), path.join(root, 'src', name));
     }
     fs.mkdirSync(path.join(root, 'scripts'));

@@ -4,7 +4,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { checkAndLocalizeApp, exchangeAsar, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir, recipeHash, rotateLogs } = require('../auto_localize_watcher');
+const { checkAndLocalizeApp, exchangeAsar, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir, recipeHash, rotateLogs, setOwnerNoFollow, forEachChildNoFollow } = require('../auto_localize_watcher');
+const runLock = require('../src/run_lock');
+const { acquireWatcherLockSync } = require('../localization_engine');
 
 function fixture(t) {
     const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-watcher-'));
@@ -674,22 +676,121 @@ test('rotateLogs re-checks the size under a lock, so a run that saw a stale size
     assert.equal(fs.existsSync(log + '.rotate.lock'), false);
 });
 
-test('acquireLock treats a lock held past the maximum age as stale even when its PID is alive (PID reuse), and release only removes its own lock', t => {
-    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-reuse-'));
+test('a v3.8.0 lock (pid only, no heartbeat) whose PID is alive is honoured for up to two hours, then reclaimed with a digits-only pid file', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-legacy-'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const lockDir = path.join(root, 'run.lock');
     fs.mkdirSync(lockDir);
-    // 持有者當掉後，它的程序編號被另一個長駐程序重用：用本測試程序的編號模擬「程序存在」
+    // v3.8.0 的守護程式或安裝器持有中：只有純數字的 pid 檔、不會心跳。用本測試程序的編號模擬「程序存在」
     fs.writeFileSync(path.join(lockDir, 'pid'), String(process.pid));
-    assert.equal(acquireLock(lockDir), null, '未超過持有上限、程序存在：鎖仍有效');
-    const past = new Date(Date.now() - 2 * 60 * 60 * 1000);
-    fs.utimesSync(lockDir, past, past);
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    fs.utimesSync(lockDir, hourAgo, hourAgo);
+    assert.equal(acquireLock(lockDir), null, '舊版持有者停留一小時（例如慢速下載）仍視為持有中');
+    assert.equal(acquireWatcherLockSync(lockDir, 0), null, '安裝器同樣不得接手');
+    // 超過兩小時：視為殘留（持有者當掉、程序編號被重用）並回收
+    const longAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    fs.utimesSync(lockDir, longAgo, longAgo);
     const release = acquireLock(lockDir);
-    assert.equal(typeof release, 'function', '超過持有上限：視為殘留並回收');
-    // 這把鎖之後被另一個程序判定殘留並接手：原持有者釋放時不得刪掉對方的鎖
-    fs.writeFileSync(path.join(lockDir, 'pid'), '999999999:other');
+    assert.equal(typeof release, 'function');
+    assert.equal(fs.readFileSync(path.join(lockDir, 'pid'), 'utf8'), String(process.pid), 'pid 檔維持純數字，舊版程式也讀得懂');
     release();
-    assert.equal(fs.existsSync(lockDir), true);
+    assert.equal(fs.existsSync(lockDir), false);
+});
+
+test('the watcher and the installer honour each other\'s lock, and a heartbeat keeps a long hold (slow download) from being reclaimed', async t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-shared-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const lockDir = path.join(root, 'run.lock');
+    const watcherRelease = acquireLock(lockDir, undefined, undefined, { heartbeatMs: 25, staleMs: 200 });
+    assert.equal(typeof watcherRelease, 'function');
+    assert.match(fs.readFileSync(path.join(lockDir, 'pid'), 'utf8'), /^\d+$/);
+    assert.equal(acquireWatcherLockSync(lockDir, 0), null, '安裝器讀得懂守護程式的鎖，不會當成殘留刪掉');
+    // 已持有很久（例如以 512 B/s 下載翻譯包）：鎖目錄與心跳時間都過舊，心跳繼續更新後仍視為持有中
+    const longAgo = new Date(Date.now() - 60 * 60 * 1000);
+    fs.utimesSync(lockDir, longAgo, longAgo);
+    fs.utimesSync(path.join(lockDir, 'token'), longAgo, longAgo);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.equal(acquireLock(lockDir, undefined, undefined, { staleMs: 200 }), null, '心跳持續：不因持有時間長而被回收');
+    watcherRelease();
+    assert.equal(fs.existsSync(lockDir), false);
+    const installerRelease = acquireWatcherLockSync(lockDir, 0);
+    assert.equal(typeof installerRelease, 'function');
+    assert.equal(acquireLock(lockDir), null, '安裝器持有中：守護程式不得取得');
+    installerRelease();
+    assert.equal(fs.existsSync(lockDir), false);
+});
+
+test('a lock whose heartbeat stopped is reclaimed even when its PID is alive, and the old holder neither keeps nor removes the new lock', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-reuse-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const lockDir = path.join(root, 'run.lock');
+    const first = acquireLock(lockDir, undefined, undefined, { heartbeatMs: 0 });
+    assert.equal(acquireLock(lockDir), null, '心跳未逾時、程序存在：鎖仍有效');
+    // 持有者卡住，或當掉後程序編號被重用：心跳停了超過十分鐘
+    const past = new Date(Date.now() - 11 * 60 * 1000);
+    fs.utimesSync(path.join(lockDir, 'token'), past, past);
+    const second = acquireLock(lockDir);
+    assert.equal(typeof second, 'function', '心跳停止超過上限：回收');
+    assert.equal(first.held(), false, '原持有者察覺得到鎖已被接手（替換正式檔案前會確認）');
+    first();
+    assert.equal(second.held(), true, '原持有者釋放時不得刪掉接手者的鎖');
+    second();
+    assert.equal(fs.existsSync(lockDir), false);
+});
+
+test('reclaiming a stale lock never deletes a newer lock that another process created in the meantime', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-race-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const lockDir = path.join(root, 'run.lock');
+    // 程序 B 核對過殘留鎖 L0 後暫停；程序 A 此時回收 L0 並建立新鎖 L1
+    const newer = acquireLock(lockDir, undefined, undefined, { heartbeatMs: 0 });
+    const tokenBefore = fs.readFileSync(path.join(lockDir, 'token'), 'utf8');
+    // B 恢復，照它看到的 L0 去回收：移開後發現不是 L0，必須原樣放回
+    assert.equal(runLock.removeIfMatches(lockDir, current => current.token === 'stale-L0'), false);
+    assert.equal(fs.readFileSync(path.join(lockDir, 'token'), 'utf8'), tokenBefore);
+    assert.equal(newer.held(), true);
+    assert.deepEqual(fs.readdirSync(root).filter(name => name !== 'run.lock'), [], '不留下移開用的暫存目錄');
+    newer();
+});
+
+test('ownership changes never follow links: symlinks and hard links are skipped, and a directory swapped for a link mid-way still resolves inside the original directory', { skip: process.platform === 'win32' }, t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-nofollow-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    // owned：使用者可寫的目錄（.watcher-state、App 的 _CodeSignature）；runtime：不可交給使用者的 root 執行目錄
+    const owned = path.join(root, 'owned');
+    const runtime = path.join(root, 'runtime');
+    fs.mkdirSync(owned);
+    fs.mkdirSync(runtime);
+    const moduleFile = path.join(runtime, 'auto_localize_watcher.js');
+    fs.writeFileSync(moduleFile, '//');
+    fs.chmodSync(moduleFile, 0o644);
+    fs.symlinkSync(moduleFile, path.join(owned, 'link.js'));
+    fs.linkSync(moduleFile, path.join(owned, 'hard.js'));
+    assert.equal(setOwnerNoFollow(path.join(owned, 'link.js'), { mode: 0o666 }), false, '連結本身：略過');
+    assert.equal(setOwnerNoFollow(path.join(owned, 'hard.js'), { mode: 0o666 }), false, '硬連結：略過');
+    assert.equal(fs.statSync(moduleFile).mode & 0o777, 0o644);
+    fs.unlinkSync(path.join(owned, 'link.js'));
+    fs.unlinkSync(path.join(owned, 'hard.js'));
+    fs.writeFileSync(path.join(owned, 'CodeResources'), 'sig');
+    fs.chmodSync(path.join(owned, 'CodeResources'), 0o644);
+    fs.writeFileSync(path.join(runtime, 'CodeResources'), 'runtime');
+    fs.chmodSync(path.join(runtime, 'CodeResources'), 0o644);
+    // 逐項處理途中，目錄被換成指向執行目錄的連結
+    const cwd = process.cwd();
+    let swapped = false;
+    const ok = forEachChildNoFollow(owned, name => {
+        if (!swapped) {
+            fs.renameSync(owned, owned + '.orig');
+            fs.symlinkSync(runtime, owned);
+            swapped = true;
+        }
+        setOwnerNoFollow(name, { mode: 0o600 });
+    });
+    assert.equal(ok, true);
+    assert.equal(process.cwd(), cwd, '處理完恢復原本的工作目錄');
+    assert.equal(fs.statSync(path.join(owned + '.orig', 'CodeResources')).mode & 0o777, 0o600, '原目錄裡的檔案照常處理');
+    assert.equal(fs.statSync(path.join(runtime, 'CodeResources')).mode & 0o777, 0o644, '連結指向的目錄不受影響');
+    assert.equal(forEachChildNoFollow(owned, () => assert.fail('不得進入連結指向的目錄')), false);
 });
 
 test('rotateLogs still rotates when a crashed run left the rotation lock behind and its PID was reused', t => {
@@ -700,7 +801,10 @@ test('rotateLogs still rotates when a crashed run left the rotation lock behind 
     const lockDir = log + '.rotate.lock';
     fs.mkdirSync(lockDir);
     fs.writeFileSync(path.join(lockDir, 'pid'), String(process.pid));
+    fs.writeFileSync(path.join(lockDir, 'token'), 'crashed-run');
+    // 輪替鎖的心跳上限是一分鐘：持有者兩分鐘前就停了
     const past = new Date(Date.now() - 2 * 60 * 1000);
+    fs.utimesSync(path.join(lockDir, 'token'), past, past);
     fs.utimesSync(lockDir, past, past);
     rotateLogs([log], 32);
     assert.equal(fs.readFileSync(log + '.1', 'utf8'), 'x'.repeat(64));

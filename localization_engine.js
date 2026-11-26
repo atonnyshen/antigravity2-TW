@@ -6,6 +6,7 @@ const child_process = require('child_process');
 
 const { readAsarLayout, patchAsarArchive, validateAsarCandidate } = require('./src/asar_patcher');
 const { validateRuntimeRulesObject } = require('./src/rules_schema');
+const runLock = require('./src/run_lock');
 const {
     patchPreloadJs,
     patchUtilsJs,
@@ -782,32 +783,22 @@ function copyDirTree(src, dest) {
     }
 }
 
+// 與守護程式共用 src/run_lock.js 的鎖格式與回收規則，避免兩邊對鎖的解讀不同而同時取得
 function acquireWatcherLockSync(lockPath, waitMs = 4000) {
     const deadline = Date.now() + waitMs;
-    while (true) {
+    let owner = null;
+    if (typeof process.getuid === 'function' && process.getuid() === 0) {
         try {
-            fs.mkdirSync(lockPath, { mode: 0o755 });
-            fs.writeFileSync(path.join(lockPath, 'pid'), String(process.pid), { flag: 'wx' });
-            return () => {
-                try { fs.rmSync(lockPath, { recursive: true, force: true }); } catch {}
-            };
-        } catch (err) {
-            if (err.code !== 'EEXIST') return null;
-            let pid;
-            try { pid = Number(fs.readFileSync(path.join(lockPath, 'pid'), 'utf8')); } catch {}
-            let alive = false;
-            if (Number.isInteger(pid) && pid > 0 && pid !== process.pid) {
-                try { process.kill(pid, 0); alive = true; } catch (ke) {
-                    if (ke.code !== 'ESRCH') alive = true;
-                }
-            }
-            if (alive && Date.now() >= deadline) return null;
-            if (!alive) {
-                try { fs.rmSync(lockPath, { recursive: true, force: true }); } catch {}
-                continue;
-            }
-            sleepSync(150);
-        }
+            const parentStat = fs.statSync(path.dirname(lockPath));
+            if (parentStat.uid !== 0) owner = { uid: parentStat.uid, gid: parentStat.gid };
+        } catch {}
+    }
+    while (true) {
+        let release;
+        try { release = runLock.acquire(lockPath, { owner }); } catch { return null; }
+        if (release) return release;
+        if (Date.now() >= deadline) return null;
+        sleepSync(150);
     }
 }
 
@@ -1369,6 +1360,7 @@ if (typeof module !== 'undefined' && module.exports) {
         isRealAppInstallDir,
         discoverMacWatcherRuntimes,
         prepareMacWatcherSync,
+        acquireWatcherLockSync,
         commitMacWatcherSync,
         cleanupMacWatcherSync,
         syncActiveWindowsWatcher
