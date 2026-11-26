@@ -1303,6 +1303,9 @@ test('CJK gap collapse is undone when React reuses neighbor text nodes, and nest
     const win = dom.window;
     const doc = win.document;
     const pause = () => new Promise(resolve => setImmediate(resolve));
+    // 停用啟動後 100 毫秒到 6 秒的多階段全文掃描（本測試已手動啟動執行期）：
+    // 慢機器上掃描落在兩次斷言之間，會改變計數或刻意構造的多文字節點圖示宿主
+    win.setTimeout = () => 0;
     win.eval(js);
     win.__agCnRuntimeStart();
 
@@ -1360,6 +1363,9 @@ test('CJK gap handling follows node removal, deep inline edits, author whitespac
     const win = dom.window;
     const doc = win.document;
     const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
+    // 停用啟動後 100 毫秒到 6 秒的多階段全文掃描（本測試已手動啟動執行期）：
+    // 慢機器上掃描落在兩次斷言之間，會改變計數或刻意構造的多文字節點圖示宿主
+    win.setTimeout = () => 0;
     win.eval(generateJs());
     win.__agCnRuntimeStart();
     const add = html => { const el = doc.createElement('div'); el.innerHTML = html; doc.body.append(el); return el; };
@@ -1420,6 +1426,9 @@ test('icon fallbacks clean up after the icon class is removed and keep accessibl
     const win = dom.window;
     const doc = win.document;
     const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
+    // 停用啟動後 100 毫秒到 6 秒的多階段全文掃描（本測試已手動啟動執行期）：
+    // 慢機器上掃描落在兩次斷言之間，會改變計數或刻意構造的多文字節點圖示宿主
+    win.setTimeout = () => 0;
     win.eval(generateJs());
     win.__agCnRuntimeStart();
     const add = html => { const el = doc.createElement('div'); el.innerHTML = html; doc.body.append(el); return el; };
@@ -1466,6 +1475,9 @@ test('CJK spacing keeps the space beside Latin or symbols, ignores reused nodes,
     const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
     // JSDOM 沒有實作 isContentEditable：照瀏覽器的行為補上，才能測「事後變成可編輯」的段落
     Object.defineProperty(win.HTMLElement.prototype, 'isContentEditable', { configurable: true, get() { return !!this.closest('[contenteditable="true"]'); } });
+    // 停用啟動後 100 毫秒到 6 秒的多階段全文掃描（本測試已手動啟動執行期）：
+    // 慢機器上掃描落在兩次斷言之間，會改變計數或刻意構造的多文字節點圖示宿主
+    win.setTimeout = () => 0;
     win.eval(generateJs());
     win.__agCnRuntimeStart();
     const el = (tag, ...parts) => { const e = doc.createElement(tag); for (const p of parts) e.append(p); return e; };
@@ -1546,6 +1558,9 @@ test('icon fallbacks handle blank text, host label removal and reused text nodes
     const win = dom.window;
     const doc = win.document;
     const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
+    // 停用啟動後 100 毫秒到 6 秒的多階段全文掃描（本測試已手動啟動執行期）：
+    // 慢機器上掃描落在兩次斷言之間，會改變計數或刻意構造的多文字節點圖示宿主
+    win.setTimeout = () => 0;
     win.eval(generateJs());
     win.__agCnRuntimeStart();
     const add = html => { const el = doc.createElement('div'); el.innerHTML = html; doc.body.append(el); return el; };
@@ -1601,6 +1616,9 @@ test('dictionary fragments drop built-in edge spaces next to Chinese names, rest
     const win = dom.window;
     const doc = win.document;
     const pause = async () => { await new Promise(r => setImmediate(r)); await new Promise(r => setImmediate(r)); };
+    // 停用啟動後 100 毫秒到 6 秒的多階段全文掃描（本測試已手動啟動執行期）：
+    // 慢機器上掃描落在兩次斷言之間，會改變計數或刻意構造的多文字節點圖示宿主
+    win.setTimeout = () => 0;
     win.eval(generateJs());
     win.__agCnRuntimeStart();
     // v2.35.1 宣告權限對話框的實際切法：每段字串是獨立文字節點，名稱是第 2 個節點
