@@ -488,34 +488,57 @@ test('v2.33.0 remoteManager, wizardHtml, SVG-only loadingOverlay, and runtime br
     assert.ok(rmPatchedTw.includes('要在 ${entry.label} 上完成此次登入嗎？'));
 });
 
-test('macOS elevation hands root only the system directories (first) and the Node.js directory, and calls bash by absolute path', { skip: process.platform === 'win32' || (typeof process.getuid === 'function' && process.getuid() === 0) }, t => {
+test('macOS elevation calls sudo, env and bash by absolute path, hands root only the system directories (first) and the Node.js directory, and rebuilds PATH in the root phase', { skip: process.platform === 'win32' || (typeof process.getuid === 'function' && process.getuid() === 0) }, t => {
     const unixScripts = fs.readdirSync(repo).filter(f => f.endsWith('.command') || f.endsWith('.sh'));
     for (const file of unixScripts) {
         const text = fs.readFileSync(path.join(repo, file), 'utf8');
         assert.doesNotMatch(text, /PATH=\$PATH/, `${file} 不得把使用者的 PATH 交給 root`);
-        const elevations = text.split('\n').filter(line => /^\s*exec sudo\b/.test(line));
+        assert.doesNotMatch(text, /export PATH="\$PATH:/, `${file} 的 root 階段不得把目錄接在傳入的 PATH 後面`);
+        // 以名稱呼叫 sudo 時會先在使用者 PATH 裡找：可寫目錄裡的同名程式能攔下密碼，或在 PATH 生效前以 root 執行
+        const code = text.split('\n').filter(line => !/^\s*(#|echo\b)/.test(line));
+        for (const line of code) {
+            assert.doesNotMatch(line, /(^|[\s;&|(])sudo\s/, `${file} 以名稱呼叫 sudo：${line.trim()}`);
+        }
+        const elevations = code.filter(line => /^\s*exec \/usr\/bin\/sudo\b/.test(line));
         for (const line of elevations) {
-            assert.match(line, /^\s*exec sudo env "PATH=\$ROOT_PATH" \/bin\/bash /, `${file}: ${line.trim()}`);
+            assert.match(line, /^\s*exec \/usr\/bin\/sudo \/usr\/bin\/env "PATH=\$ROOT_PATH" \/bin\/bash /, `${file}: ${line.trim()}`);
         }
         if (elevations.length > 0) {
             assert.match(text, /ROOT_PATH="\/usr\/bin:\/bin:\/usr\/sbin:\/sbin/, `${file} 的 ROOT_PATH 必須以系統目錄開頭`);
         }
     }
-    // 行為：以假的 sudo 攔截參數；使用者 PATH 裡排在前面的可寫目錄不得出現在交給 root 的 PATH
+    // 行為：複製腳本、把 /usr/bin/sudo 換成攔截參數的假 sudo；使用者 PATH 最前面的可寫目錄不得出現在交給 root 的 PATH
     const shim = fs.mkdtempSync(path.join(os.tmpdir(), 'ag2tw-sudo-'));
     t.after(() => fs.rmSync(shim, { recursive: true, force: true }));
-    fs.writeFileSync(path.join(shim, 'sudo'), '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o755 });
+    const fakeSudo = path.join(shim, 'sudo');
+    fs.writeFileSync(fakeSudo, '#!/bin/sh\nprintf "%s\\n" "$@"\n', { mode: 0o755 });
     for (const file of ['點兩下安裝繁體中文.command', '點兩下還原官方英文.command']) {
-        const run = spawnSync('/bin/bash', [path.join(repo, file)], {
+        const copy = path.join(shim, file);
+        fs.writeFileSync(copy, fs.readFileSync(path.join(repo, file), 'utf8').split('/usr/bin/sudo').join(fakeSudo), { mode: 0o755 });
+        const run = spawnSync('/bin/bash', [copy], {
             encoding: 'utf8', input: '', timeout: 20000,
             env: { ...process.env, PATH: shim + path.delimiter + process.env.PATH }
         });
         const args = run.stdout.split('\n');
         const pathArg = args.find(a => a.startsWith('PATH='));
         assert.ok(pathArg, `${file} 沒有以 sudo env PATH=… 提權：${run.stdout}${run.stderr}`);
+        assert.equal(args[args.indexOf(pathArg) - 1], '/usr/bin/env', `${file} 沒有以 /usr/bin/env 設定 PATH`);
         const dirs = pathArg.slice('PATH='.length).split(':');
         assert.deepEqual(dirs.slice(0, 4), ['/usr/bin', '/bin', '/usr/sbin', '/sbin']);
         assert.equal(dirs.includes(shim), false);
         assert.equal(args[args.indexOf(pathArg) + 1], '/bin/bash');
+    }
+    // root 階段：不論傳入的 PATH 順序為何，都重建為系統目錄在前、只另加 node 所在目錄
+    for (const file of ['點兩下安裝繁體中文.command', '點兩下還原官方英文.command']) {
+        const text = fs.readFileSync(path.join(repo, file), 'utf8');
+        const snippet = text.slice(text.indexOf('ROOT_NODE="$(command -v node'), text.indexOf('export PATH="/usr/bin:/bin:/usr/sbin:/sbin${ROOT_NODE'));
+        assert.ok(snippet.length > 0, `${file} 缺少 root 階段的 PATH 重建`);
+        const fakeNodeDir = fs.mkdtempSync(path.join(shim, 'node-'));
+        fs.writeFileSync(path.join(fakeNodeDir, 'node'), '#!/bin/sh\n', { mode: 0o755 });
+        const probe = spawnSync('/bin/bash', ['-c', text.slice(text.indexOf('ROOT_NODE="$(command -v node')).split('\n').slice(0, 7).join('\n') + '\necho "$PATH"'], {
+            encoding: 'utf8', timeout: 20000,
+            env: { ...process.env, PATH: [shim, fakeNodeDir, '/usr/bin', '/bin'].join(path.delimiter) }
+        });
+        assert.equal(probe.stdout.trim(), `/usr/bin:/bin:/usr/sbin:/sbin:${fakeNodeDir}`, `${file}: ${probe.stderr}`);
     }
 });

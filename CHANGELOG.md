@@ -8,7 +8,7 @@
   - 動態規則模板的中文與填入的中文譯名相鄰時，刪去中間的半形空格（「移至 封存」改為「移至封存」）；填入英文時保留空格。
   - `rules/runtime_rules.json` 新增 7 條動態規則，涵蓋「Show N more subagents」「+N more (Show all)」「Stop N items?」「Relaunch … to finish Screen Recording.」、自動化建立代理的權限提示與「See …: 網址」；工具數量另支援單數「1 tool」與「· sign in for more」後綴。
   - React 拆成多個文字節點的句子改為整句翻譯，包括電腦操作權限引導、自動化排程摘要、自動化代理的權限說明、外掛程式找不到項目與執行中項目的批次選取列；兩側都是中文、且至少一側是本套件翻譯的中文時，收掉夾在中間的空白節點，使用者內容與作者刻意留的空白不動；React 之後重用或刪除節點、把兩側換成英文時，會還原這個空白。
-  - 譯文片段自帶的前後空白原本是替英文名稱留的，緊鄰中文時改為拿掉：外掛或專案名稱是中文時顯示「由我的外掛建立的代理」，不再是「由 我的外掛 建立」；名稱換回英文時恢復空白。
+  - 譯文片段自帶的前後空白原本是替英文名稱留的，緊鄰中文時改為拿掉：外掛或專案名稱是中文時顯示「由我的外掛建立的代理」，不再是「由 我的外掛 建立」；名稱換回英文時恢復空白。名稱由使用者命名，剛好與字典詞條相同（例如名為 Settings 的外掛）也不翻譯；譯文靠空白的一側是英文、數字或符號時保留空白（「遵守 Google 隱私權政策」「設定 - 一般」），可編輯區域的內容不動。
   - 「Show 3 more」不再自行補上「...」，原文用「…」時譯文也用「…」；`Open the Swarm UI`、`Add to chat input` 這類以「動詞＋冠詞／介系詞」開頭的英文片語保留原文，不再只翻動詞而成為「開啟 the Swarm UI」；蜂群分頁標題改為「蜂群」，與關閉鈕一致；歷史對話列的標題比照側邊欄隔離，不經字典翻譯。
 - **主行程補丁補齊 v2.35.1 的改動**：
   - 選單補上 `Reload`、`Force Reload`、`Substitutions`、`Speech` 等 10 個項目。
@@ -26,9 +26,9 @@
   - 外掛與功能名稱保留原文（上游 #63）：`Chief of Staff`、`Concierge`、`Data Agent Kit`、`Google Workspace`、`Google Developer Knowledge` 不再翻譯，句中的名稱也一併保留（如「已傳送給 Chief of Staff」）。簡中字典原本把兩處 Chief of Staff 誤用為 Concierge 的譯名「语音助手」，一併修正。
   - `scripts/compare_dicts.js` 新增重複鍵檢查：`JSON.parse` 遇到重複鍵只保留最後一個值，先寫的譯文會無聲失效。檢查逐字元掃描，單行 JSON 也查得到。
 - **背景守護與還原捷徑**：
-  - `auto_localize_watcher.js` 在日誌超過 5 MB 時改名保留一份舊檔（`autolocalize.log.1`），避免每 5 分鐘一次的檢查讓日誌無限增長；排程與手動執行同時輪替時以鎖確保只改名一次，不會蓋掉完整的舊日誌。
+  - `auto_localize_watcher.js` 在日誌超過 5 MB 時改名保留一份舊檔（`autolocalize.log.1`），避免每 5 分鐘一次的檢查讓日誌無限增長；排程與手動執行同時輪替時以鎖確保只改名一次，不會蓋掉完整的舊日誌。持鎖的處理程序中途結束時，殘留的鎖會在逾時後回收，輪替不會因此停擺。
   - `點兩下還原官方英文.command` 補上 Homebrew 的 `node` 路徑，避免提權後找不到 `node`。
-- **提權安全**：安裝、還原、卸載守護三個點兩下捷徑與 `install_macos_autowatcher.sh` 以 `sudo` 提權時，`PATH` 只放系統目錄（排在前面）與 `node` 所在目錄，`bash` 以絕對路徑 `/bin/bash` 呼叫。原本安裝捷徑把使用者整條 `PATH` 交給 root，排在前面的可寫目錄裡若有同名程式，會以 root 身分執行。
+- **提權安全**：安裝、還原、卸載守護三個點兩下捷徑與 `install_macos_autowatcher.sh` 以 `sudo` 提權時，`PATH` 只放系統目錄（排在前面）與 `node` 所在目錄，`sudo`、`env`、`bash` 都以絕對路徑呼叫；直接以 root 執行捷徑時同樣重建 `PATH`，不沿用傳入的順序。原本安裝捷徑把使用者整條 `PATH` 交給 root，排在前面的可寫目錄裡若有同名程式，會以 root 身分執行。
 - **發布相容性**：
   - 本版修正多數位於 `src/preload_runtime.js` 與主行程補丁，需下載 `v3.8.1` 原始碼重新執行安裝才會完整生效；純翻譯資料包只帶入字典與 `rules/runtime_rules.json`。
 

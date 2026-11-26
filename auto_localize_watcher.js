@@ -80,7 +80,8 @@ function rotateLogs(candidates = watcherLogPaths(), limit = LOG_ROTATE_BYTES) {
             if (fs.statSync(lp).size <= limit) continue;
             // 排程與手動執行可能同時看到日誌超限：只讓拿到輪替鎖的程序改名，並在鎖內重新確認大小，
             // 避免後到的程序把剛重建的小日誌改名，蓋掉完整的舊日誌
-            const release = acquireLock(lp + '.rotate.lock');
+            // 改名只需幾毫秒：輪替鎖持有超過一分鐘就視為殘留
+            const release = acquireLock(lp + '.rotate.lock', undefined, undefined, { maxAgeMs: 60 * 1000 });
             if (!release) continue;
             try {
                 if (fs.statSync(lp).size > limit) fs.renameSync(lp, lp + '.1');
@@ -144,7 +145,13 @@ function ensureAccessibleDir(dir, targetUid, targetGid) {
     return dir;
 }
 
-function acquireLock(lockPath, targetUid, targetGid) {
+// 鎖的持有上限：超過就視為殘留。持有者當掉後，記錄的程序編號可能被其他長駐程序重用，只看程序是否存在會讓鎖永遠清不掉
+const LOCK_MAX_AGE_MS = 30 * 60 * 1000;
+function readLockOwner(lockPath) {
+    try { return fs.readFileSync(path.join(lockPath, 'pid'), 'utf8'); } catch { return null; }
+}
+
+function acquireLock(lockPath, targetUid, targetGid, { maxAgeMs = LOCK_MAX_AGE_MS } = {}) {
     try {
         fs.mkdirSync(lockPath, { mode: 0o755 });
         if (ROOT) {
@@ -168,15 +175,20 @@ function acquireLock(lockPath, targetUid, targetGid) {
         if (error.code !== 'EEXIST') throw error;
         const stat = fs.lstatSync(lockPath);
         if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('鎖定路徑不是一般目錄。');
-        let pid;
-        try { pid = Number(fs.readFileSync(path.join(lockPath, 'pid'), 'utf8')); } catch {}
+        const owner = readLockOwner(lockPath);
+        const pid = owner === null ? NaN : Number(owner.split(':')[0]);
+        const age = Date.now() - stat.mtimeMs;
         if (Number.isInteger(pid) && pid > 0) {
-            try { process.kill(pid, 0); return null; } catch (e) {
-                if (e.code !== 'ESRCH') return null;
-            }
-        } else if (Date.now() - stat.mtimeMs < 30000) {
+            let alive = true;
+            try { process.kill(pid, 0); } catch (e) { alive = e.code !== 'ESRCH'; }
+            if (alive && age <= maxAgeMs) return null;
+        } else if (age < 30000) {
             return null;
         }
+        // 回收前再確認仍是同一把殘留鎖：另一個程序可能已先回收並建立新鎖，不能把它刪掉
+        const current = fs.lstatSync(lockPath, { throwIfNoEntry: false });
+        if (!current) return acquireLock(lockPath, targetUid, targetGid, { maxAgeMs });
+        if (current.ino !== stat.ino || current.mtimeMs !== stat.mtimeMs || readLockOwner(lockPath) !== owner) return null;
         try {
             fs.rmSync(lockPath, { recursive: true, force: true });
         } catch (rmErr) {
@@ -187,10 +199,12 @@ function acquireLock(lockPath, targetUid, targetGid) {
                 throw rmErr;
             }
         }
-        return acquireLock(lockPath, targetUid, targetGid);
+        return acquireLock(lockPath, targetUid, targetGid, { maxAgeMs });
     }
     const pidFile = path.join(lockPath, 'pid');
-    fs.writeFileSync(pidFile, String(process.pid), { flag: 'wx' });
+    // 程序編號加上隨機碼：釋放時只刪自己這把鎖
+    const token = `${process.pid}:${crypto.randomBytes(8).toString('hex')}`;
+    fs.writeFileSync(pidFile, token, { flag: 'wx' });
     if (ROOT) {
         try {
             let uid = targetUid;
@@ -205,7 +219,10 @@ function acquireLock(lockPath, targetUid, targetGid) {
             if (uid != null && uid !== 0) fs.chownSync(pidFile, uid, gid);
         } catch {}
     }
-    return () => fs.rmSync(lockPath, { recursive: true, force: true });
+    // 這把鎖若曾被判定殘留、由其他程序回收，釋放時不能刪掉對方的新鎖
+    return () => {
+        if (readLockOwner(lockPath) === token) fs.rmSync(lockPath, { recursive: true, force: true });
+    };
 }
 
 function cleanElectronCache(targetUid) {

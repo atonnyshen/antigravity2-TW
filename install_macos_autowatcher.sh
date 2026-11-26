@@ -97,14 +97,14 @@ else
             IS_DAEMON=0
         else
             echo "偵測到目標應用程式需要管理員權限，嘗試提權..."
-            exec sudo env "PATH=$ROOT_PATH" /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
+            exec /usr/bin/sudo /usr/bin/env "PATH=$ROOT_PATH" /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
         fi
     fi
 fi
 
 if [ "$IS_DAEMON" -eq 1 ] && [ "$EUID" -ne 0 ]; then
     echo "以管理員認證安裝系統服務..."
-    exec sudo env "PATH=$ROOT_PATH" /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
+    exec /usr/bin/sudo /usr/bin/env "PATH=$ROOT_PATH" /bin/bash "$DIR/install_macos_autowatcher.sh" --daemon
 fi
 
 if [ "$IS_DAEMON" -eq 1 ]; then
@@ -197,8 +197,8 @@ else
     echo "👤 安裝為使用者級 LaunchAgent 守護服務..."
     if [ -f "$SYSTEM_PLIST" ]; then
         echo "⚡ 偵測到舊版系統級 LaunchDaemon ($SYSTEM_PLIST)，正在停止並移除以避免雙服務衝突..."
-        sudo /bin/launchctl bootout "system/$LABEL" 2>/dev/null || true
-        sudo /bin/mv "$SYSTEM_PLIST" "$SYSTEM_PLIST.disabled-$(date +%Y%m%d%H%M%S)"
+        /usr/bin/sudo /bin/launchctl bootout "system/$LABEL" 2>/dev/null || true
+        /usr/bin/sudo /bin/mv "$SYSTEM_PLIST" "$SYSTEM_PLIST.disabled-$(date +%Y%m%d%H%M%S)"
     fi
 
     USER_HOME="$HOME"

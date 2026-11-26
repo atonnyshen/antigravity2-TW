@@ -12,10 +12,17 @@ if [ "$EUID" -ne 0 ]; then
     USER_NODE="$(export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; command -v node || true)"
     ROOT_PATH="/usr/bin:/bin:/usr/sbin:/sbin"
     if [ -n "$USER_NODE" ]; then ROOT_PATH="$ROOT_PATH:$(dirname "$USER_NODE")"; fi
-    exec sudo env "PATH=$ROOT_PATH" /bin/bash "$0" "$@"
+    exec /usr/bin/sudo /usr/bin/env "PATH=$ROOT_PATH" /bin/bash "$0" "$@"
 fi
-# 直接以 root 執行時也找得到 Homebrew 的 node；系統目錄排在前面
-export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+# root 階段的 PATH 一律重建：系統目錄排最前，只另加 node 所在目錄。經由上面提權進來時 PATH 已是這個形式；
+# 直接以 root 執行時，傳入的 PATH 順序不可信，只拿來找 node
+ROOT_NODE="$(command -v node || true)"
+if [ -z "$ROOT_NODE" ]; then
+    for cand in /usr/local/bin/node /opt/homebrew/bin/node; do
+        if [ -x "$cand" ]; then ROOT_NODE="$cand"; break; fi
+    done
+fi
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin${ROOT_NODE:+:$(dirname "$ROOT_NODE")}"
 
 TARGET_USER="${SUDO_USER:-$USER}"
 USER_HOME=$(/usr/bin/dscl . -read "/Users/$TARGET_USER" NFSHomeDirectory 2>/dev/null | /usr/bin/sed 's/^NFSHomeDirectory: //' || eval echo "~$TARGET_USER")
@@ -56,7 +63,7 @@ if [ -f "$SYSTEM_PLIST" ]; then
 elif [ -f "$USER_PLIST" ]; then
     echo ""
     echo "🔄 偵測到本機已啟用使用者級背景守護服務，正在同步升級至最新版以防舊版覆寫..."
-    sudo -u "$TARGET_USER" HOME="$USER_HOME" bash ./install_macos_autowatcher.sh --user && WATCHER_UPDATED=1
+    /usr/bin/sudo -u "$TARGET_USER" HOME="$USER_HOME" /bin/bash ./install_macos_autowatcher.sh --user && WATCHER_UPDATED=1
 fi
 
 echo ""

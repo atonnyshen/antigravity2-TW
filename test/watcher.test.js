@@ -673,3 +673,36 @@ test('rotateLogs re-checks the size under a lock, so a run that saw a stale size
     assert.equal(fs.readFileSync(log, 'utf8'), 'fresh');
     assert.equal(fs.existsSync(log + '.rotate.lock'), false);
 });
+
+test('acquireLock treats a lock held past the maximum age as stale even when its PID is alive (PID reuse), and release only removes its own lock', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-reuse-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const lockDir = path.join(root, 'run.lock');
+    fs.mkdirSync(lockDir);
+    // 持有者當掉後，它的程序編號被另一個長駐程序重用：用本測試程序的編號模擬「程序存在」
+    fs.writeFileSync(path.join(lockDir, 'pid'), String(process.pid));
+    assert.equal(acquireLock(lockDir), null, '未超過持有上限、程序存在：鎖仍有效');
+    const past = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    fs.utimesSync(lockDir, past, past);
+    const release = acquireLock(lockDir);
+    assert.equal(typeof release, 'function', '超過持有上限：視為殘留並回收');
+    // 這把鎖之後被另一個程序判定殘留並接手：原持有者釋放時不得刪掉對方的鎖
+    fs.writeFileSync(path.join(lockDir, 'pid'), '999999999:other');
+    release();
+    assert.equal(fs.existsSync(lockDir), true);
+});
+
+test('rotateLogs still rotates when a crashed run left the rotation lock behind and its PID was reused', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-watcher-stale-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const log = path.join(root, 'stale.log');
+    fs.writeFileSync(log, 'x'.repeat(64));
+    const lockDir = log + '.rotate.lock';
+    fs.mkdirSync(lockDir);
+    fs.writeFileSync(path.join(lockDir, 'pid'), String(process.pid));
+    const past = new Date(Date.now() - 2 * 60 * 1000);
+    fs.utimesSync(lockDir, past, past);
+    rotateLogs([log], 32);
+    assert.equal(fs.readFileSync(log + '.1', 'utf8'), 'x'.repeat(64));
+    assert.equal(fs.existsSync(lockDir), false);
+});
