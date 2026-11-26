@@ -2348,6 +2348,8 @@
     const USER_NAME_SLOTS = [['Agents created by', 'run in a dedicated']];
     function isFragmentNode(n, source) {
         if (!n || n === GAP_UNKNOWN || n.nodeType !== Node.TEXT_NODE || !n.nodeValue) return false;
+        // 片段原文與譯文都很短：鄰居是一長段文字時不必正規化比對
+        if (n.nodeValue.length > 64) return false;
         const v = norm(n.nodeValue);
         if (v === source) return true;
         const tr = map.get(source);
