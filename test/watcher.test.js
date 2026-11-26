@@ -726,14 +726,44 @@ test('a lock whose heartbeat stopped is reclaimed even when its PID is alive, an
     const lockDir = path.join(root, 'run.lock');
     const first = acquireLock(lockDir, undefined, undefined, { heartbeatMs: 0 });
     assert.equal(acquireLock(lockDir), null, '心跳未逾時、程序存在：鎖仍有效');
-    // 持有者卡住，或當掉後程序編號被重用：心跳停了超過十分鐘
-    const past = new Date(Date.now() - 11 * 60 * 1000);
+    // 同步工作或系統睡眠期間心跳暫停：不滿 30 分鐘仍視為持有中
+    const paused = new Date(Date.now() - 29 * 60 * 1000);
+    fs.utimesSync(path.join(lockDir, 'token'), paused, paused);
+    assert.equal(acquireLock(lockDir), null, '心跳暫停 29 分鐘：仍未逾時');
+    assert.equal(first.held(), true);
+    // 持有者卡住，或當掉後程序編號被重用：心跳停了超過 30 分鐘
+    const past = new Date(Date.now() - 31 * 60 * 1000);
     fs.utimesSync(path.join(lockDir, 'token'), past, past);
     const second = acquireLock(lockDir);
     assert.equal(typeof second, 'function', '心跳停止超過上限：回收');
     assert.equal(first.held(), false, '原持有者察覺得到鎖已被接手（替換正式檔案前會確認）');
     first();
     assert.equal(second.held(), true, '原持有者釋放時不得刪掉接手者的鎖');
+    second();
+    assert.equal(fs.existsSync(lockDir), false);
+});
+
+test('a holder whose lock was taken over releases late without moving the new lock, so no third process can slip in', t => {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ag-lock-late-release-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const lockDir = path.join(root, 'run.lock');
+    const first = runLock.acquire(lockDir, { heartbeatMs: 0 });
+    const past = new Date(Date.now() - 31 * 60 * 1000);
+    fs.utimesSync(path.join(lockDir, 'token'), past, past);
+    const second = runLock.acquire(lockDir, { heartbeatMs: 0 });
+    assert.equal(typeof second, 'function');
+    // 舊持有者這時才釋放：若先把接手者的鎖移開再比對，移開的空檔裡第三個程序就能取得鎖
+    const rename = fs.renameSync;
+    t.after(() => { fs.renameSync = rename; });
+    let third = null;
+    fs.renameSync = (from, to) => {
+        rename(from, to);
+        if (from === lockDir && third === null) third = runLock.acquire(lockDir, { heartbeatMs: 0 });
+    };
+    first();
+    fs.renameSync = rename;
+    assert.equal(third, null, '舊持有者釋放時不得移動接手者的鎖');
+    assert.equal(second.held(), true);
     second();
     assert.equal(fs.existsSync(lockDir), false);
 });

@@ -5,13 +5,16 @@
 // - <鎖>/token 放這次取得的隨機識別碼；持有期間定時更新它的時間戳記當作心跳。
 // - 只有在持有程序已不存在、只剩空目錄超過 30 秒，或心跳停止超過 staleMs 時，才視為殘留。
 //   程序存在但心跳停止：程序編號被重用，或持有者已卡住。慢速下載仍會持續心跳，不會被誤判。
-// - 回收與釋放都先把鎖目錄改名移開，確認移走的正是要刪的那一把才刪除；移錯就放回原處，
+// - 回收時先把鎖目錄改名移開，確認移走的正是要刪的那一把才刪除；移錯就放回原處，
 //   避免確認後、刪除前，另一個程序已回收並建立新鎖，結果被按路徑刪掉。
+// - 釋放前先確認鎖仍屬於自己；已被接手就不碰，不把別人的鎖移開（移開的空檔會讓第三個程序取得鎖）。
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const STALE_MS = 10 * 60 * 1000;
+// 同步工作（重新簽章、複製檔案）與系統睡眠期間計時器不會觸發，心跳跟著暫停：
+// 門檻取 30 分鐘，持有者暫停不滿 30 分鐘時不會被接手
+const STALE_MS = 30 * 60 * 1000;
 const HEARTBEAT_MS = 30 * 1000;
 const INCOMPLETE_MS = 30 * 1000;
 // v3.8.0 與更早版本建立的鎖沒有 token，也不會心跳：持有程序還在時從寬認定，只在停留超過這個時間才回收，
@@ -114,6 +117,8 @@ function holdLock(lockPath, token, heartbeatMs) {
     }
     const release = () => {
         if (timer) clearInterval(timer);
+        // 鎖已被回收、換成別人的：不碰
+        if (!held()) return;
         removeIfMatches(lockPath, current => current.token === token);
     };
     release.held = held;
