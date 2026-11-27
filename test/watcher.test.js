@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { checkAndLocalizeApp, exchangeAsar, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir, recipeHash, rotateLogs, setOwnerNoFollow, forEachChildNoFollow, cleanStaleStageDirs, cleanElectronCache, writeStateFile, replacementBase, exchangeInResources } = require('../auto_localize_watcher');
+const { execFileSync, spawnSync } = require('node:child_process');
+const { checkAndLocalizeApp, exchangeAsar, waitForStableFile, acquireLock, digest, safeReplaceFile, ensureAccessibleDir, recipeHash, rotateLogs, setOwnerNoFollow, forEachChildNoFollow, cleanStaleStageDirs, cleanElectronCache, writeStateFile, replacementBase, exchangeInResources, signApp } = require('../auto_localize_watcher');
 const runLock = require('../src/run_lock');
 const { acquireWatcherLockSync } = require('../localization_engine');
 
@@ -1069,4 +1070,69 @@ test('stage directories left by a killed watcher are cleared on the next run, wh
     assert.equal(fs.readFileSync(path.join(outside, 'keep'), 'utf8'), 'keep');
     // 本輪自己的暫存目錄帶有程序編號，完成後照常刪除
     assert.deepEqual(cleanStaleStageDirs(f.stateDir), []);
+});
+
+// v3.8.2：root 守護程式的簽章改以 App 擁有者的身分執行。asRoot 以目前使用者模擬 root 的分支，exec 記錄呼叫而不實際簽章
+function signFixture(t, prefix) {
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), prefix));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const app = path.join(root, 'Antigravity.app');
+    fs.mkdirSync(path.join(app, 'Contents', 'Resources'), { recursive: true });
+    return { root, app };
+}
+
+function quarantined(file) {
+    return spawnSync('/usr/bin/xattr', ['-p', 'com.apple.quarantine', file]).status === 0;
+}
+
+test('as root, signApp runs xattr and codesign as the App owner from inside the App directory', { skip: process.platform !== 'darwin' }, t => {
+    const { app } = signFixture(t, 'ag-sign-owner-');
+    const calls = [];
+    const exec = (file, args, options) => {
+        calls.push({ argv: [file, ...args], uid: options.uid, gid: options.gid, cwd: process.cwd() });
+        return '';
+    };
+    signApp(app, null, { asRoot: true, exec, appStat: fs.lstatSync(app) });
+    assert.deepEqual(calls.map(c => c.argv), [
+        ['/usr/bin/xattr', '-d', '-r', '-s', 'com.apple.quarantine', '.'],
+        ['/usr/bin/codesign', '--force', '--deep', '--sign', '-', '.'],
+        ['/usr/bin/codesign', '--verify', '--deep', '--strict', '.']
+    ]);
+    const uid = fs.statSync(app).uid;
+    const gid = Number(execFileSync('/usr/bin/id', ['-g', String(uid)], { encoding: 'utf8' }).trim());
+    for (const c of calls) {
+        assert.equal(c.cwd, app, '在記下的 App 資料夾裡執行');
+        assert.deepEqual({ uid: c.uid, gid: c.gid }, { uid, gid }, '以 App 擁有者的帳號與主要群組執行，不以 root 執行');
+    }
+});
+
+test('as root, signApp refuses an App directory swapped after it was recorded and leaves the replacement untouched', { skip: process.platform !== 'darwin' }, t => {
+    const { app } = signFixture(t, 'ag-sign-swap-');
+    const appStat = fs.lstatSync(app);
+    // 記下之後，App 資料夾被搬走，原位置換成另一個資料夾
+    fs.renameSync(app, app + '.orig');
+    fs.mkdirSync(path.join(app, 'Contents'), { recursive: true });
+    const marker = path.join(app, 'Contents', 'marker.txt');
+    fs.writeFileSync(marker, 'x');
+    execFileSync('/usr/bin/xattr', ['-w', 'com.apple.quarantine', '0081;00000000;test;', marker]);
+    const calls = [];
+    assert.throws(() => signApp(app, null, { asRoot: true, appStat, exec: (file, args) => { calls.push([file, ...args]); return ''; } }));
+    assert.deepEqual(calls, [], '不對換進來的資料夾執行 xattr 或 codesign');
+    assert.equal(quarantined(marker), true, '換進來的資料夾保持原狀');
+});
+
+test('signApp clears quarantine without following links inside the App to files outside it', { skip: process.platform !== 'darwin' }, t => {
+    const { root, app } = signFixture(t, 'ag-sign-xattr-');
+    const outside = path.join(root, 'outside.txt');
+    const inside = path.join(app, 'Contents', 'Resources', 'inside.txt');
+    for (const file of [outside, inside]) {
+        fs.writeFileSync(file, 'x');
+        execFileSync('/usr/bin/xattr', ['-w', 'com.apple.quarantine', '0081;00000000;test;', file]);
+    }
+    fs.symlinkSync(outside, path.join(app, 'Contents', 'Resources', 'link.txt'));
+    // xattr 實際執行，codesign 略過
+    const exec = (file, args, options) => (file === '/usr/bin/xattr' ? execFileSync(file, args, options) : '');
+    try { signApp(app, null, { asRoot: false, exec }); } catch {}
+    assert.equal(quarantined(inside), false, 'App 裡的檔案清除隔離屬性');
+    assert.equal(quarantined(outside), true, '套件外的檔案保留隔離屬性');
 });

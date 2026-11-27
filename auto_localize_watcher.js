@@ -29,10 +29,12 @@ function stripQuarantine(target) {
     } catch {}
 }
 
-function stripQuarantineRecursive(target) {
+// -s：App 裡的連結只處理連結本身（實測 xattr -r 會跟隨指向檔案的連結，清除套件外那個檔案的屬性）；
+// 套件內連結指向的檔案在走訪實際目錄時照常清除。as 指定執行身分
+function stripQuarantineRecursive(target, as = {}, exec = execFileSync) {
     if (!IS_MAC) return;
     try {
-        execFileSync('/usr/bin/xattr', ['-d', '-r', 'com.apple.quarantine', target], { stdio: 'ignore' });
+        exec('/usr/bin/xattr', ['-d', '-r', '-s', 'com.apple.quarantine', target], { stdio: 'ignore', ...as });
     } catch {}
 }
 
@@ -853,20 +855,43 @@ function buildArchive(stageDir) {
     ], { cwd: DIR, stdio: 'inherit', timeout: 180000 });
 }
 
-function signApp(appPath, sourceStat) {
-    if (!IS_MAC) return;
-    stripQuarantineRecursive(appPath);
-    execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', appPath], { stdio: 'pipe', timeout: 120000 });
-    execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', appPath], { stdio: 'pipe', timeout: 30000 });
-    if (ROOT && sourceStat && sourceStat.uid !== 0) {
-        try {
-            const sigDir = path.join(appPath, 'Contents', '_CodeSignature');
-            const own = { uid: sourceStat.uid, gid: sourceStat.gid };
-            if (setOwnerNoFollow(sigDir, { ...own, allowDir: true })) {
-                forEachChildNoFollow(sigDir, name => setOwnerNoFollow(name, own));
-            }
-        } catch {}
+// 以某個帳號身分執行子程序時的 uid 與該帳號的主要群組。不沿用檔案的群組：/Applications 裡的項目繼承 admin 群組，
+// 擁有者不一定屬於 admin。查不到帳號時回傳 null
+function accountCredentials(uid) {
+    try {
+        const gid = execFileSync('/usr/bin/id', ['-g', String(uid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        return /^\d+$/.test(gid) ? { uid, gid: Number(gid) } : null;
+    } catch {
+        return null;
     }
+}
+
+// root 以 App 擁有者的身分清除隔離屬性與簽章（以暫存複本實測）：codesign 原地改寫各層 _CodeSignature/CodeResources，
+// _CodeSignature 被換成連結時照樣跟隨，把 CodeResources 寫進連結指向的目錄，以 root 執行就能寫進任何目錄。
+// 以擁有者身分執行時，只能寫入擁有者本來就能寫入的位置。執行檔則另建新檔取代，新檔沿用原檔的擁有者與群組；
+// root 擁有的執行檔（以硬連結放入 root 的檔案實測）以擁有者身分照樣能簽，原檔不變，新檔歸擁有者。
+// CodeResources、_CodeSignature 或 MacOS 目錄擁有者不可寫時，擁有者簽章失敗，交由呼叫端還原。
+// appStat 是開始處理時記下的 App 資料夾：以不跟隨連結的方式開啟、核對是同一個資料夾後切換進去，以 . 交給 codesign，
+// 執行身分取自這個資料夾的擁有者（codesign 之後會把 . 換算成絕對路徑，簽章途中被替換時靠的是降低身分）。
+// App 資料夾屬於 root 時照舊以 root 簽章。測試以 asRoot 模擬 root 的分支
+function signApp(appPath, _sourceStat, { asRoot = ROOT, exec = execFileSync, appStat = null } = {}) {
+    if (!IS_MAC) return;
+    const run = (target, as) => {
+        stripQuarantineRecursive(target, as, exec);
+        exec('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', target], { stdio: 'pipe', timeout: 120000, ...as });
+        exec('/usr/bin/codesign', ['--verify', '--deep', '--strict', target], { stdio: 'pipe', timeout: 30000, ...as });
+    };
+    if (!asRoot) return run(appPath, {});
+    let app = null;
+    runLock.inDirNoFollow(appPath, st => {
+        app = st;
+        return !appStat || (st.dev === appStat.dev && st.ino === appStat.ino);
+    }, () => {
+        if (app.uid === 0) return run('.', {});
+        const as = accountCredentials(app.uid);
+        if (!as) throw new Error('查不到 App 擁有者（uid ' + app.uid + '）的帳號，未重新簽章。');
+        return run('.', as);
+    });
 }
 
 function checkAndLocalizeApp(appInfo, {
@@ -876,9 +901,10 @@ function checkAndLocalizeApp(appInfo, {
 } = {}) {
     const { appPath, asarPath } = appInfo;
     ensureRegularTarget(asarPath);
-    // root 之後搬進或換入 Resources 的檔案，都要落在這裡記下的同一個目錄
+    // root 之後搬進或換入 Resources 的檔案，都要落在這裡記下的同一個目錄；簽章對象也要是這裡記下的同一個 App 資料夾
     const resourcesStat = ROOT ? fs.statSync(path.dirname(asarPath)) : null;
     if (resourcesStat) exchange = exchangeInResources(exchange, asarPath, resourcesStat);
+    const appStat = ROOT ? fs.lstatSync(appPath) : null;
     wait(asarPath);
     const currentStat = fs.statSync(asarPath);
     ensureAccessibleDir(stateDir, currentStat.uid, currentStat.gid);
@@ -1021,7 +1047,7 @@ function checkAndLocalizeApp(appInfo, {
                 replacementDir = null;
             } catch {}
         }
-        sign(appPath, sourceStat);
+        sign(appPath, sourceStat, { appStat });
         if (digest(fs.readFileSync(asarPath)) !== resultHash) {
             throw new Error('簽署期間官方 app.asar 已更新，保留較新檔案並取消本輪收據。');
         }
@@ -1063,7 +1089,7 @@ function checkAndLocalizeApp(appInfo, {
                 if (createdRollbackDir) {
                     try { removeTree(rollbackDir); } catch {}
                 }
-                sign(appPath, sourceStat);
+                sign(appPath, sourceStat, { appStat });
                 log('套用未通過，已還原原始 app.asar。');
             } catch (rollbackError) {
                 if (rollbackError.concurrentRecovery) {
@@ -1500,5 +1526,6 @@ module.exports = {
     cleanElectronCache,
     writeStateFile,
     replacementBase,
-    exchangeInResources
+    exchangeInResources,
+    signApp
 };

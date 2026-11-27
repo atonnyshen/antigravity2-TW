@@ -55,7 +55,10 @@ function checkSupportedNodeVersion() {
 }
 
 // macOS 环境下自动补全 PATH，确保 codesign 等工具能被顺利找到
-if (process.platform === 'darwin') {
+// 以 root 執行時不補：這些目錄（家目錄裡的 .local/bin 等、Homebrew 的 /opt/homebrew/bin）可由一般使用者寫入，
+// 排在最前面會讓同名的 pgrep、killall、osascript 等程式以 root 身分執行。一鍵安裝捷徑已把 PATH 排成系統目錄優先，
+// 簽章改用 /usr/bin 下的絕對路徑
+if (process.platform === 'darwin' && !isRootProcess()) {
     let realHome = os.homedir();
     if (process.env.SUDO_USER && process.env.SUDO_USER !== 'root') {
         const sudoHome = path.join('/Users', process.env.SUDO_USER);
@@ -514,15 +517,6 @@ function detectInstallationDir(manualDir) {
     process.exit(1);
 }
 
-function runCommandSync(cmd) {
-    try {
-        const out = child_process.execSync(cmd, { encoding: 'utf-8', stdio: 'pipe', env: { ...process.env } });
-        return { success: true, stdout: out, stderr: '' };
-    } catch (e) {
-        return { success: false, stdout: e.stdout || '', stderr: e.stderr || e.message };
-    }
-}
-
 // 經 sudo 以 root 執行時，改以原本的使用者身分刪除家目錄裡的快取：家目錄裡的每一層路徑都由使用者控制，
 // 以 root 刪除可能被連結導向系統目錄。asUser 可明確指定（{ uid, gid }），測試以目前使用者模擬
 function sudoInvoker() {
@@ -621,8 +615,56 @@ function resolveMacAppBundle(dir) {
     return null;
 }
 
-function resignAppOnMac(anyPath) {
+// ElectronAsarIntegrity 記錄 app.asar 標頭的 SHA-256。回傳更新後的 Info.plist 內容，不需要更新時原樣回傳；
+// readAsar 只在 Info.plist 含有這個項目時才讀取
+function withAsarIntegrity(plistContent, readAsar) {
+    if (!plistContent.includes('ElectronAsarIntegrity')) return plistContent;
+    const integrityRegex = /(<key>ElectronAsarIntegrity<\/key>[\s\S]*?<key>Resources\/app\.asar<\/key>[\s\S]*?<key>hash<\/key>\s*<string>)[a-fA-F0-9]{64}(<\/string>)/;
+    if (!integrityRegex.test(plistContent)) return plistContent;
+    const asarBuf = readAsar();
+    const headerStrSize = asarBuf.readUInt32LE(12);
+    const headerHash = crypto.createHash('sha256').update(asarBuf.subarray(16, 16 + headerStrSize)).digest('hex');
+    return plistContent.replace(integrityRegex, `$1${headerHash}$2`);
+}
+
+// 清除擴充屬性後以 ad-hoc 深度簽章。以 /usr/bin 下的絕對路徑執行、不經 shell，不受 PATH 與路徑裡的引號影響。
+// -s：App 裡的連結只處理連結本身（實測 xattr -r 會跟隨指向檔案的連結，清除套件外那個檔案的屬性）；
+// 套件內連結指向的檔案在走訪實際目錄時照常清除。as 指定執行身分（root 安裝時為 App 的擁有者）
+function signBundle(target, label, { as = {}, exec = child_process.execFileSync } = {}) {
+    try {
+        exec('/usr/bin/xattr', ['-c', '-r', '-s', target], { stdio: 'ignore', ...as });
+    } catch (e) {}
+    console.log(`[签名] 检测到 macOS 平台，正在对应用包进行本地 ad-hoc 深度重签名: ${label} ...`);
+    try {
+        exec('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', target], { encoding: 'utf-8', stdio: 'pipe', ...as });
+        console.log(`[签名] 重新签名成功！`);
+        return true;
+    } catch (e) {
+        console.warn(`[警告] 重新签名失败。可能会导致应用无法打开。详情:\n${e.stderr || e.message}\n${e.stdout || ''}`);
+        return false;
+    }
+}
+
+// 以某個帳號身分執行子程序時的 uid 與該帳號的主要群組。不沿用檔案的群組：/Applications 裡的項目繼承 admin 群組，
+// 擁有者不一定屬於 admin。查不到帳號時回傳 null
+function accountCredentials(uid) {
+    try {
+        const gid = child_process.execFileSync('/usr/bin/id', ['-g', String(uid)], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+        return /^\d+$/.test(gid) ? { uid, gid: Number(gid) } : null;
+    } catch {
+        return null;
+    }
+}
+
+// careful（以 root 執行時的預設，測試以目前使用者模擬）：Info.plist 在開始時核對過的 Contents 裡以不跟隨連結的方式讀取，
+// 再以相對名稱改名取代；簽章對象是核對過的 App 資料夾，切換進去後以 . 傳給 codesign，並以 App 擁有者的身分執行。
+// 以暫存複本實測：codesign 原地改寫各層 _CodeSignature/CodeResources，_CodeSignature 被換成連結時照樣跟隨，
+// 把 CodeResources 寫進連結指向的目錄，以 root 執行就能寫進任何目錄；以擁有者身分執行時，只能寫入擁有者本來就能寫入的位置
+// （codesign 會把 . 換算成絕對路徑，簽章途中被替換時靠的是降低身分）。執行檔另建新檔取代，新檔沿用原檔的擁有者與群組；
+// root 擁有的執行檔以擁有者身分照樣能簽。CodeResources、_CodeSignature 或 MacOS 目錄擁有者不可寫時簽章失敗，由安裝流程還原
+function resignAppOnMac(anyPath, { careful = isRootProcess(), dirs = null, exec = child_process.execFileSync } = {}) {
     if (process.platform !== 'darwin') return true;
+    if (careful) return resignVerifiedApp(anyPath, dirs, exec);
 
     const targetApp = resolveMacAppBundle(anyPath);
     const isRealMacBundle = targetApp && (
@@ -635,36 +677,53 @@ function resignAppOnMac(anyPath) {
             const macAsarPath = path.join(targetApp, 'Contents', 'Resources', 'app.asar');
             if (fs.existsSync(plistPath) && fs.existsSync(macAsarPath)) {
                 const plistContent = fs.readFileSync(plistPath, 'utf-8');
-                if (plistContent.includes('ElectronAsarIntegrity')) {
-                    const asarBuf = fs.readFileSync(macAsarPath);
-                    const headerStrSize = asarBuf.readUInt32LE(12);
-                    const headerHash = crypto.createHash('sha256').update(asarBuf.subarray(16, 16 + headerStrSize)).digest('hex');
-                    const integrityRegex = /(<key>ElectronAsarIntegrity<\/key>[\s\S]*?<key>Resources\/app\.asar<\/key>[\s\S]*?<key>hash<\/key>\s*<string>)[a-fA-F0-9]{64}(<\/string>)/;
-                    if (integrityRegex.test(plistContent)) {
-                        const updatedPlist = plistContent.replace(integrityRegex, `$1${headerHash}$2`);
-                        if (updatedPlist !== plistContent) {
-                            fs.writeFileSync(plistPath, updatedPlist, 'utf-8');
-                            console.log('[签名] 已同步更新 macOS Info.plist 中的 ElectronAsarIntegrity 校验值。');
-                        }
-                    }
+                const updatedPlist = withAsarIntegrity(plistContent, () => fs.readFileSync(macAsarPath));
+                if (updatedPlist !== plistContent) {
+                    fs.writeFileSync(plistPath, updatedPlist, 'utf-8');
+                    console.log('[签名] 已同步更新 macOS Info.plist 中的 ElectronAsarIntegrity 校验值。');
                 }
             }
         } catch (e) {}
-        try {
-            runCommandSync(`xattr -cr "${targetApp}"`);
-        } catch (e) {}
-        console.log(`[签名] 检测到 macOS 平台，正在对应用包进行本地 ad-hoc 深度重签名: ${targetApp} ...`);
-        const signRes = runCommandSync(`codesign --force --deep --sign - "${targetApp}"`);
-        if (signRes.success) {
-            console.log(`[签名] 重新签名成功！`);
-            return true;
-        } else {
-            console.warn(`[警告] 重新签名失败。可能会导致应用无法打开。详情:\n${signRes.stderr}\n${signRes.stdout}`);
-            return false;
-        }
+        return signBundle(targetApp, targetApp, { exec });
     } else {
         console.warn(`[警告] 未能从路径 ${anyPath} 识别到有效的 .app 路径，跳过重新签名。`);
         return true;
+    }
+}
+
+function resignVerifiedApp(anyPath, dirs, exec) {
+    let verified = dirs;
+    try {
+        if (!verified) verified = inspectInstallDirs(anyPath);
+    } catch (error) {
+        console.warn(`[警告] 無法確認 App 目錄，未重新簽章：${error.message}`);
+        return false;
+    }
+    if (!verified.app || !verified.contents) {
+        console.warn(`[警告] 未能从路径 ${anyPath} 识别到有效的 .app 路径，跳过重新签名。`);
+        return true;
+    }
+    try {
+        const plist = inVerifiedDir(verified.contents, () => readRegularNoFollow('Info.plist'));
+        const text = plist.content.toString('utf-8');
+        const updated = withAsarIntegrity(text, () => inVerifiedDir(verified.resources, () => readRegularNoFollow('app.asar').content));
+        if (updated !== text) {
+            inVerifiedDir(verified.contents, () => writeFileReplacing('Info.plist', updated, dirOwner(verified.contents),
+                { mode: plist.st.mode & 0o777, sync: true }));
+            console.log('[签名] 已同步更新 macOS Info.plist 中的 ElectronAsarIntegrity 校验值。');
+        }
+    } catch (e) {}
+    const { uid } = verified.app.st;
+    const as = uid !== 0 ? accountCredentials(uid) : {};
+    if (!as) {
+        console.warn(`[警告] 查不到 App 擁有者（uid ${uid}）的帳號，未重新簽章。`);
+        return false;
+    }
+    try {
+        return inVerifiedDir(verified.app, () => signBundle('.', verified.app.path, { as, exec }));
+    } catch (error) {
+        console.warn(`[警告] App 目錄已被替換，未重新簽章：${error.message}`);
+        return false;
     }
 }
 
@@ -801,6 +860,130 @@ const RUNTIME_FOLDERS = ['dicts', 'dicts_tw', 'rules', 'src', 'scripts'];
 
 function isRootProcess() {
     return typeof process.getuid === 'function' && process.getuid() === 0;
+}
+
+// root 安裝對 App 的檔案操作。一鍵安裝捷徑以 sudo 執行安裝器，App 的資料夾屬於一般使用者，/Applications 也開放管理員群組寫入：
+// 以路徑操作時，路徑上任何一層在途中被換成連結，root 的寫入、改名與刪除都會落到連結指向的位置
+// （例如簽章失敗還原時，把 app.asar 與 Info.plist 寫進其他 root 擁有的 App；經由連結把 Info.plist 寫成系統檔案；
+// 暫存目錄被換成連結後，把暫存檔寫進其他目錄）。root 改為：
+// 開始時確認 Resources、Contents 與 App 資料夾不經連結即可到達並記下身分，之後只在核對過的同一個目錄裡以相對名稱操作；
+// 讀取以不跟隨連結的方式開啟、只接受一般檔案；建置暫存目錄建在 root 擁有、其他使用者無法改名或替換的系統暫存目錄
+const ROOT_STAGING_BASES = process.platform === 'darwin' ? ['/private/var/tmp', '/private/tmp'] : ['/var/tmp', '/tmp'];
+
+function inspectInstallDirs(resourcesDir) {
+    const resources = path.resolve(resourcesDir);
+    if (fs.realpathSync(resources) !== resources) {
+        throw new Error('拒絕經由符號連結修改應用程式資源目錄：' + resources);
+    }
+    const dir = p => {
+        const st = fs.lstatSync(p);
+        if (!st.isDirectory()) throw new Error('不是一般目錄：' + p);
+        return { path: p, st };
+    };
+    const dirs = { resources: dir(resources), contents: null, app: null };
+    const bundle = process.platform === 'darwin' ? resolveMacAppBundle(resources) : null;
+    if (bundle && path.join(bundle, 'Contents') === path.dirname(resources)) {
+        dirs.contents = dir(path.dirname(resources));
+        dirs.app = dir(bundle);
+    }
+    return dirs;
+}
+
+function inVerifiedDir(dir, fn) {
+    return runLock.inDirNoFollow(dir.path, st => st.dev === dir.st.dev && st.ino === dir.st.ino, fn);
+}
+
+// 以不跟隨連結的方式讀取目前工作目錄裡的一般檔案；O_NONBLOCK 讓 FIFO 等特殊檔案不會卡住開啟
+function readRegularNoFollow(name) {
+    const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
+    const fd = fs.openSync(name, flags);
+    try {
+        const st = fs.fstatSync(fd);
+        if (!st.isFile()) throw new Error('拒絕讀取非一般檔案：' + name);
+        return { content: fs.readFileSync(fd), st };
+    } finally {
+        fs.closeSync(fd);
+    }
+}
+
+// root 寫進一般使用者目錄的檔案交給該目錄的擁有者；目錄屬於 root 時留給 root
+function dirOwner(dir) {
+    return dir.st.uid !== 0 ? { uid: dir.st.uid, gid: dir.st.gid } : null;
+}
+
+// 其他使用者無法改名或替換的路徑：從這一層到根目錄，每一層都屬於 root（或目前的使用者），
+// 而且其他人不可寫入，或設有黏著位元（/tmp：其他人不能改名或刪除不屬於自己的項目）
+function isProtectedPath(real) {
+    for (let p = real; ; p = path.dirname(p)) {
+        const st = fs.lstatSync(p);
+        if (!st.isDirectory() || (st.uid !== 0 && st.uid !== process.getuid())) return false;
+        if ((st.mode & 0o022) !== 0 && (st.mode & 0o1000) === 0) return false;
+        if (p === path.dirname(p)) return true;
+    }
+}
+
+function makeRootStagingDir(prefix, bases = ROOT_STAGING_BASES) {
+    for (const base of bases) {
+        try {
+            const real = fs.realpathSync(base);
+            if (isProtectedPath(real)) return fs.mkdtempSync(path.join(real, prefix));
+        } catch {}
+    }
+    throw new Error('找不到 root 專用的暫存目錄（' + bases.join('、') + '），停止寫入 App。');
+}
+
+// install20／restore20 對 App 檔案的操作。一般使用者照舊以路徑操作。careful（以 root 執行時的預設，測試以目前使用者模擬）見上方說明：
+// 寫回 App 時在核對過的 Resources 裡先寫入唯一名稱的暫存檔（wx）再以相對名稱改名取代，交給目錄的擁有者；
+// 改名失敗時不退回以路徑複製（目標被換成連結時，複製會寫進連結指向的檔案）
+function appFileOps(resourcesDir, { careful = isRootProcess(), allowKill = false, stagingBases = ROOT_STAGING_BASES } = {}) {
+    if (!careful) {
+        return {
+            careful: false,
+            dirs: null,
+            exists: name => fs.existsSync(path.join(resourcesDir, name)),
+            read: name => fs.readFileSync(path.join(resourcesDir, name)),
+            copyOut: (name, dest) => fs.copyFileSync(path.join(resourcesDir, name), dest),
+            makeStagingDir: prefix => fs.mkdtempSync(path.join(resourcesDir, prefix)),
+            commit: (src, name) => replaceFileWithRetry(src, path.join(resourcesDir, name), allowKill),
+            remove: name => fs.unlinkSync(path.join(resourcesDir, name)),
+            readPlist: plistPath => (plistPath && fs.existsSync(plistPath) ? fs.readFileSync(plistPath) : null),
+            writePlist: (plistPath, content) => fs.writeFileSync(plistPath, content)
+        };
+    }
+    const dirs = inspectInstallDirs(resourcesDir);
+    const inResources = fn => inVerifiedDir(dirs.resources, fn);
+    let plistMode = 0o644;
+    return {
+        careful: true,
+        dirs,
+        exists: name => inResources(() => {
+            try { fs.lstatSync(name); return true; } catch { return false; }
+        }),
+        read: name => inResources(() => readRegularNoFollow(name).content),
+        copyOut: (name, dest) => {
+            const { content, st } = inResources(() => readRegularNoFollow(name));
+            fs.writeFileSync(dest, content, { flag: 'wx', mode: st.mode & 0o777 });
+        },
+        makeStagingDir: prefix => makeRootStagingDir(prefix, stagingBases),
+        commit: (src, name) => {
+            const content = fs.readFileSync(src);
+            const mode = fs.statSync(src).mode & 0o777;
+            inResources(() => writeFileReplacing(name, content, dirOwner(dirs.resources), { mode, sync: true }));
+        },
+        remove: name => inResources(() => fs.unlinkSync(name)),
+        readPlist: () => {
+            if (!dirs.contents) return null;
+            try {
+                const { content, st } = inVerifiedDir(dirs.contents, () => readRegularNoFollow('Info.plist'));
+                plistMode = st.mode & 0o777;
+                return content;
+            } catch {
+                return null;
+            }
+        },
+        writePlist: (_plistPath, content) => inVerifiedDir(dirs.contents,
+            () => writeFileReplacing('Info.plist', content, dirOwner(dirs.contents), { mode: plistMode, sync: true }))
+    };
 }
 
 // root 同步守護程式的執行目錄。使用者層的執行目錄位於使用者家目錄，路徑上的每一層都可能被使用者換成連結：
@@ -1017,14 +1200,18 @@ function syncRuntimes(session, sourceDir, runtimes, careful) {
 
 // 先寫入同一目錄裡唯一名稱的暫存檔（wx：已有同名項目就失敗，不跟隨連結），再改名取代。
 // root 寫入使用者的執行目錄時，目標若被換成連結，改名只會取代連結本身，不會寫進連結指向的檔案
-// owner 只能用在已核對身分的目錄（以相對名稱寫入）：上層目錄可被使用者替換時，交出擁有者會讓使用者擁有落在系統目錄裡的檔案
-function writeFileReplacing(file, content, owner = null) {
+// owner 只能用在已核對身分的目錄（以相對名稱寫入）：上層目錄可被使用者替換時，交出擁有者會讓使用者擁有落在系統目錄裡的檔案。
+// mode 指定時精確設定權限（不受 umask 影響）；sync 在改名前寫入磁碟（置換 App 檔案時使用）
+function writeFileReplacing(file, content, owner = null, { mode, sync = false } = {}) {
     const temp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+    const data = Buffer.isBuffer(content) ? content : Buffer.from(content);
     try {
-        const fd = fs.openSync(temp, 'wx', 0o644);
+        const fd = fs.openSync(temp, 'wx', mode === undefined ? 0o644 : mode);
         try {
-            fs.writeSync(fd, content);
+            for (let offset = 0; offset < data.length;) offset += fs.writeSync(fd, data, offset, data.length - offset);
+            if (mode !== undefined) fs.fchmodSync(fd, mode);
             if (owner) fs.fchownSync(fd, owner.uid, owner.gid);
+            if (sync) fs.fsyncSync(fd);
         } finally {
             fs.closeSync(fd);
         }
@@ -1129,7 +1316,6 @@ function syncActiveWindowsWatcher(installDir, resourcesDir, {
 
 function install20(resourcesDir, noKill = false, staging = false, options = {}) {
     const asarPath = path.join(resourcesDir, "app.asar");
-    const bakPath = path.join(resourcesDir, "app.asar.bak");
     const resignFn = typeof options.resignFn === 'function' ? options.resignFn : resignAppOnMac;
 
     if (!fs.existsSync(asarPath)) {
@@ -1141,15 +1327,18 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
     let retainRecoveryFiles = false;
     let macWatcherSession = null;
     try {
-        const originalLive = fs.readFileSync(asarPath);
+        // root：建置暫存目錄不放在 Resources，寫回 App 的檔案只在開始時核對過的目錄裡以相對名稱改名（見 appFileOps）
+        const io = appFileOps(resourcesDir, { careful: options.careful, allowKill: !noKill, stagingBases: options.stagingBases });
+        const originalLive = io.read('app.asar');
         const isAlreadyLocalized = originalLive.indexOf(Buffer.from(SIGNATURE_START, "utf8")) !== -1;
 
-        const refreshBackup = !isAlreadyLocalized || !fs.existsSync(bakPath);
-        const sourcePath = isAlreadyLocalized && fs.existsSync(bakPath) ? bakPath : asarPath;
+        const hasBackup = io.exists('app.asar.bak');
+        const refreshBackup = !isAlreadyLocalized || !hasBackup;
+        const sourceName = isAlreadyLocalized && hasBackup ? 'app.asar.bak' : 'app.asar';
 
-        buildDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-localize-'));
+        buildDir = io.makeStagingDir('.antigravity-localize-');
         const sourceArchive = path.join(buildDir, 'source.asar');
-        fs.copyFileSync(sourcePath, sourceArchive);
+        io.copyOut(sourceName, sourceArchive);
         const rollbackArchive = path.join(buildDir, 'previous.asar');
         fs.writeFileSync(rollbackArchive, originalLive);
         const candidatePath = path.join(buildDir, 'candidate.asar');
@@ -1203,24 +1392,24 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
             }
         }
 
-        if (!fs.readFileSync(asarPath).equals(originalLive)) {
+        if (!io.read('app.asar').equals(originalLive)) {
             throw new Error('App changed during localization; please retry after the update completes');
         }
 
         const macBundleForPlist = process.platform === 'darwin' ? resolveMacAppBundle(resourcesDir) : null;
         const plistPath = macBundleForPlist ? path.join(macBundleForPlist, 'Contents', 'Info.plist') : null;
-        const plistBackup = plistPath && fs.existsSync(plistPath) ? fs.readFileSync(plistPath) : null;
+        const plistBackup = io.readPlist(plistPath);
 
         if (process.platform === 'darwin' && !staging && macBundleForPlist && (options.syncWatcher || isRealAppInstallDir(macBundleForPlist))) {
             macWatcherSession = prepareMacWatcherSync();
         }
 
-        replaceFileWithRetry(candidatePath, asarPath, !noKill);
+        io.commit(candidatePath, 'app.asar');
         try {
-            if (refreshBackup) replaceFileWithRetry(sourceArchive, bakPath, !noKill);
+            if (refreshBackup) io.commit(sourceArchive, 'app.asar.bak');
         } catch (error) {
             try {
-                replaceFileWithRetry(rollbackArchive, asarPath, !noKill);
+                io.commit(rollbackArchive, 'app.asar');
             } catch (rollbackError) {
                 retainRecoveryFiles = true;
                 throw new Error(`Backup promotion and rollback failed; original app retained at ${rollbackArchive}: ${rollbackError.message}`);
@@ -1241,15 +1430,15 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
 
         if (!staging) {
             cleanElectronCache();
-            if (!resignFn(resourcesDir)) {
+            if (!resignFn(resourcesDir, { careful: io.careful, dirs: io.dirs })) {
                 let rollbackDir;
                 try {
-                    rollbackDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-rollback-'));
+                    rollbackDir = io.makeStagingDir('.antigravity-rollback-');
                     const rollbackArchiveFile = path.join(rollbackDir, 'previous.asar');
                     fs.writeFileSync(rollbackArchiveFile, originalLive);
-                    replaceFileWithRetry(rollbackArchiveFile, asarPath, !noKill);
-                    if (plistBackup && plistPath) fs.writeFileSync(plistPath, plistBackup);
-                    if (refreshBackup && fs.existsSync(bakPath)) fs.unlinkSync(bakPath);
+                    io.commit(rollbackArchiveFile, 'app.asar');
+                    if (plistBackup && plistPath) io.writePlist(plistPath, plistBackup);
+                    if (refreshBackup && io.exists('app.asar.bak')) io.remove('app.asar.bak');
                 } catch (rollbackError) {
                     if (rollbackDir) {
                         buildDir = rollbackDir;
@@ -1283,7 +1472,6 @@ function install20(resourcesDir, noKill = false, staging = false, options = {}) 
 }
 
 function restore20(resourcesDir, noKill = false, options = {}) {
-    const asarPath = path.join(resourcesDir, "app.asar");
     const bakPath = path.join(resourcesDir, "app.asar.bak");
     const resignFn = typeof options.resignFn === 'function' ? options.resignFn : resignAppOnMac;
 
@@ -1296,16 +1484,18 @@ function restore20(resourcesDir, noKill = false, options = {}) {
     let restoreDir;
     let retainRestoreFiles = false;
     try {
-        restoreDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-restore-'));
+        // root：與 install20 相同，暫存目錄不放在 Resources，寫回 App 時只在核對過的目錄裡以相對名稱改名
+        const io = appFileOps(resourcesDir, { careful: options.careful, allowKill: !noKill, stagingBases: options.stagingBases });
+        restoreDir = io.makeStagingDir('.antigravity-restore-');
         const candidate = path.join(restoreDir, 'app.asar');
-        const previousLive = fs.existsSync(asarPath) ? fs.readFileSync(asarPath) : null;
+        const previousLive = io.exists('app.asar') ? io.read('app.asar') : null;
         const macBundleForPlist = process.platform === 'darwin' ? resolveMacAppBundle(resourcesDir) : null;
         const plistPath = macBundleForPlist ? path.join(macBundleForPlist, 'Contents', 'Info.plist') : null;
-        const plistBackup = plistPath && fs.existsSync(plistPath) ? fs.readFileSync(plistPath) : null;
+        const plistBackup = io.readPlist(plistPath);
 
-        fs.copyFileSync(bakPath, candidate);
+        io.copyOut('app.asar.bak', candidate);
         readAsarLayout(candidate);
-        replaceFileWithRetry(candidate, asarPath, !noKill);
+        io.commit(candidate, 'app.asar');
 
         // Clean restoreDir from Contents/Resources before codesign seals the bundle.
         try {
@@ -1313,16 +1503,16 @@ function restore20(resourcesDir, noKill = false, options = {}) {
             restoreDir = undefined;
         } catch {}
 
-        if (!resignFn(resourcesDir)) {
+        if (!resignFn(resourcesDir, { careful: io.careful, dirs: io.dirs })) {
             let rollbackDir;
             try {
                 if (previousLive) {
-                    rollbackDir = fs.mkdtempSync(path.join(resourcesDir, '.antigravity-restore-rb-'));
+                    rollbackDir = io.makeStagingDir('.antigravity-restore-rb-');
                     const previousBackup = path.join(rollbackDir, 'previous.asar');
                     fs.writeFileSync(previousBackup, previousLive);
-                    replaceFileWithRetry(previousBackup, asarPath, !noKill);
+                    io.commit(previousBackup, 'app.asar');
                 }
-                if (plistBackup && plistPath) fs.writeFileSync(plistPath, plistBackup);
+                if (plistBackup && plistPath) io.writePlist(plistPath, plistBackup);
             } catch (rollbackError) {
                 if (rollbackDir) {
                     restoreDir = rollbackDir;
@@ -1524,6 +1714,7 @@ if (typeof module !== 'undefined' && module.exports) {
         loadRuntimeRules,
         install20,
         restore20,
+        resignAppOnMac,
         detectInstallationDir,
         checkIfAppIsRunning,
         closeAntigravityProcesses,

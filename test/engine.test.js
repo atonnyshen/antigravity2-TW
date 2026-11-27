@@ -2098,3 +2098,187 @@ test('plugin and feature names stay in the original language (upstream #63)', ()
     assert.equal(text('s3'), '歡迎使用 Concierge');
     assert.equal(text('s4'), '歡迎使用您的 Chief of Staff');
 });
+
+// v3.8.2：一鍵安裝捷徑以 sudo 執行安裝器時對 App 的寫入。careful 是 root 執行時的預設，測試以目前使用者模擬；
+// 安裝流程會清除家目錄裡的 Electron 快取，測試把 HOME 指到夾具目錄，不動本機的快取
+const INTEGRITY_PLIST = hash => `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>Antigravity</string>
+<key>ElectronAsarIntegrity</key><dict><key>Resources/app.asar</key><dict>
+<key>algorithm</key><string>SHA256</string><key>hash</key><string>${hash}</string></dict></dict>
+</dict></plist>
+`;
+
+async function fakeMacApp(t, prefix) {
+    const asar = await import('@electron/asar');
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), prefix));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const home = process.env.HOME;
+    process.env.HOME = root;
+    t.after(() => {
+        if (home === undefined) delete process.env.HOME;
+        else process.env.HOME = home;
+    });
+    const source = path.join(root, 'source');
+    const app = path.join(root, 'Antigravity.app');
+    const contents = path.join(app, 'Contents');
+    const resources = path.join(contents, 'Resources');
+    fs.mkdirSync(path.join(source, 'dist'), { recursive: true });
+    fs.mkdirSync(resources, { recursive: true });
+    fs.mkdirSync(path.join(contents, 'MacOS'));
+    fs.writeFileSync(path.join(source, 'dist', 'preload.js'), '// official preload\n');
+    await asar.createPackageWithOptions(source, path.join(resources, 'app.asar'), {});
+    fs.writeFileSync(path.join(contents, 'Info.plist'), INTEGRITY_PLIST('0'.repeat(64)));
+    for (const name of ['log', 'warn', 'error']) t.mock.method(console, name, () => {});
+    return { root, app, contents, resources };
+}
+
+function primaryGid(uid) {
+    return Number(spawnSync('/usr/bin/id', ['-g', String(uid)], { encoding: 'utf8' }).stdout.trim());
+}
+
+test('as root, install20 and restore20 stage nothing inside the App, so a staging directory swapped for a link cannot redirect root writes', { skip: process.platform === 'win32' }, async t => {
+    const { install20, restore20 } = require('../localization_engine');
+    const f = await fakeMacApp(t, 'ag-engine-stage-');
+    // victim：使用者無權寫入的目錄（例如系統目錄），裡面已有與暫存檔同名的檔案
+    const victim = path.join(f.root, 'system-dir');
+    fs.mkdirSync(victim);
+    const planted = ['source.asar', 'previous.asar', 'candidate.asar', 'app.asar'];
+    for (const name of planted) fs.writeFileSync(path.join(victim, name), 'system');
+    // App 裡的項目由使用者控制：安裝器在 App 裡建立的暫存目錄，一建立就被換成指向 victim 的連結
+    const mkdtemp = fs.mkdtempSync;
+    t.after(() => { fs.mkdtempSync = mkdtemp; });
+    const inApp = [];
+    fs.mkdtempSync = (prefix, ...rest) => {
+        const dir = mkdtemp(prefix, ...rest);
+        if (dir.startsWith(f.app + path.sep)) {
+            inApp.push(path.basename(dir).replace(/-[^-]+$/, '-'));
+            fs.renameSync(dir, dir + '.orig');
+            fs.symlinkSync(victim, dir);
+        }
+        return dir;
+    };
+    const options = { careful: true, stagingBases: [f.root] };
+    // 簽章失敗：安裝與還原都會走回滾，再建立一次暫存目錄
+    assert.equal(install20(f.resources, true, false, { ...options, resignFn: () => false }), false);
+    assert.equal(install20(f.resources, true, false, { ...options, resignFn: () => true }), true);
+    assert.equal(restore20(f.resources, true, { ...options, resignFn: () => false }), false);
+    fs.mkdtempSync = mkdtemp;
+    assert.deepEqual(fs.readdirSync(victim).sort(), [...planted].sort(), 'victim 裡的檔案不得被搬走，也不得多出任何項目');
+    for (const name of planted) {
+        assert.equal(fs.readFileSync(path.join(victim, name), 'utf8'), 'system', name + '：不得被 root 覆寫');
+    }
+    assert.deepEqual(inApp, [], '暫存目錄不建在 App 裡');
+});
+
+test('as root, a failed re-sign never rolls back into another App when Contents was swapped for a link during signing', { skip: process.platform === 'win32' }, async t => {
+    const { install20 } = require('../localization_engine');
+    const f = await fakeMacApp(t, 'ag-engine-swap-');
+    // 另一個 App（例如 root 擁有、使用者無權修改的 App）
+    const other = path.join(f.root, 'Other.app', 'Contents');
+    fs.mkdirSync(path.join(other, 'Resources'), { recursive: true });
+    fs.writeFileSync(path.join(other, 'Resources', 'app.asar'), 'other-asar');
+    fs.writeFileSync(path.join(other, 'Info.plist'), 'other-plist');
+    const ok = install20(f.resources, true, false, {
+        careful: true, stagingBases: [f.root],
+        resignFn() {
+            // 簽章期間，Contents 被換成指向另一個 App 的連結，並讓簽章失敗，觸發還原
+            fs.renameSync(f.contents, f.contents + '.orig');
+            fs.symlinkSync(other, f.contents);
+            return false;
+        }
+    });
+    assert.equal(ok, false);
+    assert.equal(fs.readFileSync(path.join(other, 'Resources', 'app.asar'), 'utf8'), 'other-asar', '不得把 app.asar 換進另一個 App');
+    assert.equal(fs.readFileSync(path.join(other, 'Info.plist'), 'utf8'), 'other-plist', '不得改寫另一個 App 的 Info.plist');
+    assert.deepEqual(fs.readdirSync(path.join(other, 'Resources')), ['app.asar'], '不得在另一個 App 裡建立暫存目錄或檔案');
+});
+
+test('as root, install20 refuses to stage in a directory other users can replace and leaves the App unchanged', { skip: process.platform === 'win32' }, async t => {
+    const { install20 } = require('../localization_engine');
+    const f = await fakeMacApp(t, 'ag-engine-unsafe-');
+    const shared = path.join(f.root, 'shared');
+    fs.mkdirSync(shared);
+    fs.chmodSync(shared, 0o777);
+    const before = fs.readFileSync(path.join(f.resources, 'app.asar'));
+    const ok = install20(f.resources, true, false, { careful: true, stagingBases: [shared], resignFn: () => true });
+    assert.equal(ok, false, '找不到安全的暫存目錄時不安裝');
+    assert.deepEqual(fs.readdirSync(shared), [], '不在其他使用者可替換的目錄裡建立暫存目錄');
+    assert.ok(fs.readFileSync(path.join(f.resources, 'app.asar')).equals(before), 'app.asar 保持原樣');
+    assert.equal(fs.existsSync(path.join(f.resources, 'app.asar.bak')), false);
+});
+
+test('as root, a failed re-sign restores Info.plist by replacing it, not by writing through a link planted in its place', { skip: process.platform !== 'darwin' }, async t => {
+    const { install20 } = require('../localization_engine');
+    const f = await fakeMacApp(t, 'ag-engine-plist-');
+    const plist = path.join(f.contents, 'Info.plist');
+    const original = fs.readFileSync(plist, 'utf8');
+    // 連結指向系統目錄裡尚不存在的檔案（例如 /Library/LaunchDaemons 下的新 plist）
+    const daemons = path.join(f.root, 'LaunchDaemons');
+    fs.mkdirSync(daemons);
+    const planted = path.join(daemons, 'evil.plist');
+    const ok = install20(f.resources, true, false, {
+        careful: true, stagingBases: [f.root],
+        resignFn() {
+            // 簽章期間，Info.plist 被換成連結，並讓簽章失敗，觸發還原
+            fs.renameSync(plist, plist + '.orig');
+            fs.symlinkSync(planted, plist);
+            return false;
+        }
+    });
+    assert.equal(ok, false);
+    assert.equal(fs.existsSync(planted), false, '不得經由連結在系統目錄建立檔案');
+    assert.equal(fs.lstatSync(plist).isFile(), true, 'Info.plist 還原為一般檔案');
+    assert.equal(fs.readFileSync(plist, 'utf8'), original);
+});
+
+test('as root, re-signing updates Info.plist only inside the checked Contents and runs xattr and codesign as the App owner from inside the App', { skip: process.platform !== 'darwin' }, async t => {
+    const { resignAppOnMac } = require('../localization_engine');
+    const f = await fakeMacApp(t, 'ag-engine-sign-');
+    const plist = path.join(f.contents, 'Info.plist');
+    const victim = path.join(f.root, 'system.plist');
+    const victimContent = INTEGRITY_PLIST('1'.repeat(64));
+    fs.writeFileSync(victim, victimContent);
+    fs.renameSync(plist, plist + '.orig');
+    fs.symlinkSync(victim, plist);
+    const calls = [];
+    const exec = (file, args, options) => {
+        calls.push({ argv: [file, ...args], uid: options.uid, gid: options.gid, cwd: process.cwd() });
+        return '';
+    };
+    const ok = resignAppOnMac(f.resources, { careful: true, exec });
+    assert.equal(fs.readFileSync(victim, 'utf8'), victimContent, '不得經由連結改寫 Info.plist 指向的檔案');
+    assert.equal(ok, true);
+    assert.deepEqual(calls.map(c => c.argv), [
+        ['/usr/bin/xattr', '-c', '-r', '-s', '.'],
+        ['/usr/bin/codesign', '--force', '--deep', '--sign', '-', '.']
+    ]);
+    const uid = fs.statSync(f.app).uid;
+    for (const c of calls) {
+        assert.equal(c.cwd, f.app, '在核對過的 App 資料夾裡執行');
+        assert.deepEqual({ uid: c.uid, gid: c.gid }, { uid, gid: primaryGid(uid) }, '以 App 擁有者的帳號與主要群組執行');
+    }
+});
+
+test('re-signing clears extended attributes without following links inside the App to files outside it', { skip: process.platform !== 'darwin' }, async t => {
+    const { resignAppOnMac } = require('../localization_engine');
+    const f = await fakeMacApp(t, 'ag-engine-xattr-');
+    const outside = path.join(f.root, 'outside.txt');
+    fs.writeFileSync(outside, 'x');
+    spawnSync('/usr/bin/xattr', ['-w', 'com.apple.quarantine', '0081;00000000;test;', outside]);
+    fs.symlinkSync(outside, path.join(f.resources, 'link.txt'));
+    // xattr 實際執行，codesign 略過
+    const exec = (file, args, options) => (file === '/usr/bin/xattr' ? require('node:child_process').execFileSync(file, args, options) : '');
+    resignAppOnMac(f.resources, { careful: false, exec });
+    assert.equal(spawnSync('/usr/bin/xattr', ['-p', 'com.apple.quarantine', outside]).status, 0, '套件外的檔案保留擴充屬性');
+});
+
+test('as root, the installer keeps the incoming system PATH instead of putting user-writable directories first', { skip: process.platform !== 'darwin' }, () => {
+    const probe = 'process.getuid = () => 0;' +
+        `require(${JSON.stringify(path.join(repo, 'localization_engine.js'))});` +
+        'process.stdout.write("\\nPATH=" + process.env.PATH);';
+    const systemPath = '/usr/bin:/bin:/usr/sbin:/sbin';
+    const res = spawnSync(process.execPath, ['-e', probe], { encoding: 'utf8', env: { ...process.env, PATH: systemPath } });
+    assert.equal(res.status, 0, res.stderr);
+    assert.equal(res.stdout.split('\n').pop(), 'PATH=' + systemPath);
+});
