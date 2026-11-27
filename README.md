@@ -10,7 +10,7 @@
 
 👉 **[上游簡體中文專案 (Upstream Project)](https://github.com/qqxpee/antigravity2-cn)**
 
-目前套件版本：**3.8.2**。適配 Antigravity **v2.35.1**；台灣用語與背景守護由本分支持續維護。
+目前套件版本：**3.8.2**。適配 Antigravity **v2.35.2**；台灣用語與背景守護由本分支持續維護。
 
 ---
 
@@ -116,7 +116,7 @@ Google Antigravity 發展歷程中包含不同產品形態，本專案的支援�
 
 | 版本／形態 | 架構類型 | 應用程式路徑／識別名稱 | 繁體中文支援狀態 | 說明與建議 |
 | :--- | :--- | :--- | :---: | :--- |
-| **Antigravity 2.0 桌面端** | 獨立 Electron 客戶端 | `/Applications/Antigravity.app`<br>`Programs\Antigravity` | **主要支援** | 依字典翻譯介面並提供背景守護；已適配至 v2.35.1，並通過本機隔離重建測試。 |
+| **Antigravity 2.0 桌面端** | 獨立 Electron 客戶端 | `/Applications/Antigravity.app`<br>`Programs\Antigravity` | **主要支援** | 依字典翻譯介面並提供背景守護；已適配至 v2.35.2，並通過本機隔離重建測試。 |
 | **Antigravity 1.0 桌面端** | 舊版 VS Code Fork 客製 IDE | `/Applications/Antigravity IDE.app`<br>`Programs\Antigravity` | **基礎相容（建議升級）** | 早期 HTML 腳本注入架構。本專案保留相容偵測邏輯，但因 Google 官方已停止維護 1.0 且全線轉移至 2.0，強烈建議使用者升級至 2.0 取得完整繁中體驗。 |
 | **VS Code 官方外掛** | VS Code 擴充套件（`google.google-antigravity`） | `~/.vscode/extensions/google.google-antigravity-*` | **已停止支援** | 核心設定與對話側邊欄由本地閉源二進位檔（`agy`）動態透過 iframe 輸出，無法全介面繁中化，且背景連線易受干擾。專案已全面終止支援。 |
 
